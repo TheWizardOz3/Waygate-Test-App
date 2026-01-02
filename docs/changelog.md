@@ -14,6 +14,7 @@
 
 | Version | Date       | Type       | Summary                                                  |
 | ------- | ---------- | ---------- | -------------------------------------------------------- |
+| 0.2.0   | 2026-01-02 | prerelease | AI Documentation Scraper complete                        |
 | 0.1.0   | 2026-01-02 | prerelease | Core infrastructure (Auth + DB + Execution)              |
 | 0.0.0   | 2026-01-01 | prerelease | Pre-build baseline with documentation and workflow setup |
 
@@ -58,6 +59,29 @@
 ## [Unreleased]
 
 ### Added
+
+- **AI Documentation Scraper (Feature #5)** - Complete
+  - Firecrawl SDK integration for web scraping (`@mendable/firecrawl-js`)
+  - Google Generative AI SDK integration (`@google/generative-ai`)
+  - OpenAPI Parser (`@readme/openapi-parser`) for direct Swagger/OpenAPI spec parsing
+  - YAML support (`yaml`) for OpenAPI v3 specs
+  - Extensible LLM abstraction layer with provider/model registry
+  - GeminiProvider implementation with structured JSON output
+  - ScrapeJob database model with status tracking (PENDING → CRAWLING → PARSING → GENERATING → COMPLETED/FAILED)
+  - Scrape job repository with full CRUD operations and tenant isolation
+  - RLS policies for scrape_jobs table
+  - Doc scraper with single-page and multi-page crawling
+  - AI extraction prompts with few-shot examples for endpoints, auth, rate limits
+  - Document parser with chunking for large docs, deduplication, confidence scoring
+  - OpenAPI parser for direct spec-to-ParsedApiDoc conversion
+  - Scrape API endpoints (POST /api/v1/scrape, GET /api/v1/scrape/:jobId)
+  - Async job processing with status updates at each stage
+  - Supabase Storage integration for caching scraped content (gzip compressed)
+  - Action definition generator transforming endpoints to typed Actions
+  - JSON Schema generation for action input/output validation
+  - Wishlist prioritization for matching actions to user requirements
+  - Main orchestrator: `processDocumentation()` end-to-end URL → Integration workflow
+  - Automatic Integration and Action creation from parsed docs
 
 - **Retry Logic & Error Handling (Feature #4)** - Complete execution infrastructure with resilience patterns
   - Exponential backoff with configurable jitter (default: 1s base, 2x multiplier, 10% jitter)

@@ -62,6 +62,16 @@ enum MappingDirection {
   output
 }
 
+/// Status of a documentation scrape job
+enum ScrapeJobStatus {
+  PENDING
+  CRAWLING
+  PARSING
+  GENERATING
+  COMPLETED
+  FAILED
+}
+
 // =============================================================================
 // MODELS
 // =============================================================================
@@ -81,6 +91,7 @@ model Tenant {
   integrationCredentials IntegrationCredential[]
   fieldMappings          FieldMapping[]
   requestLogs            RequestLog[]
+  scrapeJobs             ScrapeJob[]
 
   @@map("tenants")
 }
@@ -213,4 +224,29 @@ model RequestLog {
   @@index([integrationId, createdAt(sort: Desc)], name: "logs_integration_created_idx")
   @@index([actionId, createdAt(sort: Desc)], name: "logs_action_created_idx")
   @@map("request_logs")
+}
+
+/// Documentation scraping job for creating integrations from API docs
+model ScrapeJob {
+  id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String          @map("tenant_id") @db.Uuid
+  status           ScrapeJobStatus @default(PENDING)
+  documentationUrl String          @map("documentation_url") @db.Text
+  wishlist         String[]        @default([])
+  progress         Int             @default(0)
+  result           Json?           // Parsed API structure
+  error            Json?           // Error details if failed
+  cachedContentKey String?         @map("cached_content_key") @db.VarChar(255)
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+  completedAt      DateTime?       @map("completed_at")
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([tenantId], name: "scrape_jobs_tenant_id_idx")
+  @@index([status], name: "scrape_jobs_status_idx")
+  @@index([tenantId, createdAt(sort: Desc)], name: "scrape_jobs_tenant_created_idx")
+  @@map("scrape_jobs")
 }

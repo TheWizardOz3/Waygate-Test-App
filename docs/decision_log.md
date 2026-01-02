@@ -20,6 +20,7 @@
 | ADR-004 | 2026-01-01 | arch     | active | Dual encryption strategy for credentials              |
 | ADR-005 | 2026-01-02 | arch     | active | In-memory circuit breaker with per-circuit tracking   |
 | ADR-006 | 2026-01-02 | arch     | active | Result pattern for execution service                  |
+| ADR-007 | 2026-01-02 | arch     | active | LLM abstraction layer for future multi-model support  |
 
 **Categories:** `arch` | `data` | `api` | `ui` | `test` | `infra` | `error`
 
@@ -301,6 +302,69 @@ When working with circuit breaker:
 - Use `getStatus(circuitId)` to inspect circuit state for debugging
 - For MVP, accept that cold starts reset circuit state
 - When migrating to Redis, implement same interface in `circuit-breaker.ts`
+
+---
+
+### ADR-007: LLM Abstraction Layer for Multi-Model Support
+
+**Date:** 2026-01-02 | **Category:** arch | **Status:** active
+
+#### Trigger
+
+The AI Documentation Scraper requires LLM integration for extracting structured data from documentation. Future requirements include supporting multiple AI models (GPT-4, Claude, etc.) and providers, with easy switching between them.
+
+#### Decision
+
+Implemented an LLM abstraction layer in `src/lib/modules/ai/llm/`:
+
+1. **LLMProvider interface** (`types.ts`)
+   - `generateContent<T>()` - General text generation
+   - `generateStructured<T>()` - JSON output with schema validation
+   - Model and provider metadata properties
+
+2. **Model registry** (`registry.ts`)
+   - Central registry of available models with metadata
+   - Default model selection per use case
+   - Model capability flags (structured output, vision, etc.)
+
+3. **GeminiProvider** (`gemini-provider.ts`)
+   - Google Gemini implementation of LLMProvider
+   - Handles structured JSON output via `responseMimeType: "application/json"`
+   - Schema conversion for Gemini's strict type requirements
+
+4. **Future-ready pattern**:
+   - New providers implement `LLMProvider` interface
+   - Register models in registry with capabilities
+   - Consumers request by capability, not specific provider
+
+#### Rationale
+
+- **Interface-first**: Allows swapping providers without changing consumer code
+- **Registry pattern**: Centralizes model configuration, enables A/B testing
+- **Capability-based selection**: Consumer asks for "model with structured output" not "gemini-1.5-pro"
+- **Gemini first**: Google offers generous free tier, good structured output support
+- **Minimal overhead**: For MVP, direct function exports; full provider system adds one indirection layer
+
+#### Supersedes
+
+N/A (new feature)
+
+#### Migration
+
+- **Affected files:** All AI service code using LLM
+- **Find:** Direct `@google/generative-ai` imports
+- **Replace with:** Import from `@/lib/modules/ai/llm`
+- **Verify:** LLM calls work through abstraction
+
+#### AI Instructions
+
+When working with LLM integration:
+
+- Do NOT import directly from `@google/generative-ai` - use the abstraction layer
+- When adding new models, implement `LLMProvider` interface and register in registry
+- Use `generateStructured()` for reliable JSON extraction with schemas
+- The Gemini provider handles schema conversion automatically
+- For new capabilities, extend `LLMProvider` interface (all providers must implement)
 
 ---
 

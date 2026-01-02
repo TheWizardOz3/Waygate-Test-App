@@ -4,12 +4,13 @@ import dotenv from 'dotenv';
 import path from 'node:path';
 
 // Load .env first (defaults), then .env.local (secrets) to override
-dotenv.config({ path: path.join(__dirname, '..', '.env') });
-dotenv.config({ path: path.join(__dirname, '..', '.env.local'), override: true });
+dotenv.config({ path: path.join(__dirname, '.env') });
+dotenv.config({ path: path.join(__dirname, '.env.local'), override: true });
+
 import { defineConfig, env } from 'prisma/config';
 
 export default defineConfig({
-  schema: path.join(__dirname, 'schema.prisma'),
+  schema: path.join(__dirname, 'prisma', 'schema.prisma'),
 
   // Database connection for Prisma CLI operations (migrate, db pull, etc.)
   datasource: {

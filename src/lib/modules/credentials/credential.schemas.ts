@@ -54,11 +54,9 @@ export type BearerCredentialData = z.infer<typeof BearerCredentialSchema>;
  * Custom Header credential data (decrypted)
  */
 export const CustomHeaderCredentialSchema = z.object({
-  headers: z
-    .record(z.string(), z.string())
-    .refine((headers) => Object.keys(headers).length > 0, {
-      message: 'At least one header is required',
-    }),
+  headers: z.record(z.string(), z.string()).refine((headers) => Object.keys(headers).length > 0, {
+    message: 'At least one header is required',
+  }),
 });
 
 export type CustomHeaderCredentialData = z.infer<typeof CustomHeaderCredentialSchema>;

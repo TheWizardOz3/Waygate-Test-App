@@ -1,0 +1,520 @@
+# Feature: AI Documentation Scraper
+
+**Status:** Complete  
+**Priority:** P0  
+**Complexity:** HIGH  
+**Dependencies:** Database Setup (completed)  
+**Milestone:** MVP
+
+---
+
+## Overview
+
+The AI Documentation Scraper is the entry point for creating new integrations. It accepts API documentation URLs, crawls the relevant pages using Firecrawl, and uses Google Gemini to extract structured API specifications including endpoints, authentication methods, request/response schemas, and rate limits.
+
+This feature enables the core value proposition: **"Drop in documentation, get production-ready integrations."**
+
+---
+
+## User Story
+
+> As a developer, I want to provide an API documentation URL and a wishlist of desired actions, so that Waygate can automatically understand and map the API's capabilities.
+
+---
+
+## Requirements
+
+### Functional Requirements
+
+- [x] Accept documentation URL(s) as input
+- [x] Optionally accept OpenAPI/Swagger spec files directly (bypass scraping)
+- [x] Crawl and extract relevant pages from documentation sites
+- [x] Detect authentication methods (OAuth2, API Key, Basic Auth, Bearer, Custom Headers)
+- [x] Extract endpoint definitions (method, path, parameters, body schema)
+- [x] Identify rate limit information from docs or headers
+- [x] Generate structured API capability map
+- [x] Allow user to provide a "wishlist" of desired actions to prioritize
+- [x] Track scraping job status (pending, in_progress, completed, failed)
+- [x] Cache scraped content to avoid repeated fetches
+
+### Non-Functional Requirements
+
+- Scraping timeout: 5 minutes maximum
+- Support for JavaScript-rendered documentation sites (via Firecrawl)
+- AI extraction must handle partial/incomplete documentation gracefully
+- Results should be editable/correctable by users post-scrape
+
+---
+
+## Acceptance Criteria
+
+1. **Given** a Slack API docs URL, **when** scraped, **then** system identifies OAuth2 auth and key endpoints like `chat.postMessage`, `users.list`
+2. **Given** an OpenAPI spec file, **when** uploaded, **then** system parses it without needing to crawl
+3. **Given** a wishlist of "send message, list users, create channel", **when** scraped, **then** those actions are prioritized in the generated registry
+4. **Given** a scrape job is initiated, **when** checking status, **then** accurate progress is returned
+5. **Given** documentation that was previously scraped, **when** re-scraping, **then** cached content can be reused
+
+---
+
+## Technical Design
+
+### Architecture
+
+```
+User provides URL + Wishlist
+         │
+         ▼
+┌─────────────────────────────┐
+│   Scrape API Endpoint       │
+│   POST /api/v1/scrape       │
+└─────────────┬───────────────┘
+              │
+              ▼
+┌─────────────────────────────┐
+│   Scrape Job Service        │
+│   Creates job, manages state│
+└─────────────┬───────────────┘
+              │
+    ┌─────────┴─────────┐
+    ▼                   ▼
+┌───────────┐     ┌───────────┐
+│ Firecrawl │     │  OpenAPI  │
+│  Scraper  │     │  Parser   │
+│ (for URLs)│     │(for specs)│
+└─────┬─────┘     └─────┬─────┘
+      │                 │
+      └────────┬────────┘
+               ▼
+┌─────────────────────────────┐
+│   AI Document Parser        │
+│   (Google Gemini)           │
+│   - Extract endpoints       │
+│   - Detect auth methods     │
+│   - Generate schemas        │
+└─────────────┬───────────────┘
+              │
+              ▼
+┌─────────────────────────────┐
+│   Action Generator          │
+│   - Create Action defs      │
+│   - Apply wishlist priority │
+└─────────────┬───────────────┘
+              │
+              ▼
+┌─────────────────────────────┐
+│   Store Results             │
+│   - Cache in Supabase       │
+│   - Return to user          │
+└─────────────────────────────┘
+```
+
+### Database Schema Additions
+
+```prisma
+model ScrapeJob {
+  id              String          @id @default(uuid())
+  tenantId        String          @map("tenant_id")
+  status          ScrapeJobStatus @default(PENDING)
+  documentationUrl String         @map("documentation_url")
+  wishlist        String[]        @default([])
+  progress        Int             @default(0)
+  result          Json?           // Parsed API structure
+  error           Json?           // Error details if failed
+  cachedContentKey String?        @map("cached_content_key") // Supabase Storage key
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  completedAt     DateTime?       @map("completed_at")
+
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("scrape_jobs")
+}
+
+enum ScrapeJobStatus {
+  PENDING
+  CRAWLING
+  PARSING
+  GENERATING
+  COMPLETED
+  FAILED
+}
+```
+
+### Key Files
+
+| File                                          | Purpose                                                                |
+| --------------------------------------------- | ---------------------------------------------------------------------- |
+| `src/lib/modules/ai/index.ts`                 | Module exports                                                         |
+| `src/lib/modules/ai/ai.service.ts`            | Main orchestrator for documentation processing to integration creation |
+| `src/lib/modules/ai/doc-scraper.ts`           | Firecrawl integration for URL scraping and multi-page crawling         |
+| `src/lib/modules/ai/openapi-parser.ts`        | Direct OpenAPI/Swagger specification parsing                           |
+| `src/lib/modules/ai/document-parser.ts`       | AI-powered content extraction using chunking and parallel processing   |
+| `src/lib/modules/ai/action-generator.ts`      | Transforms ParsedApiDoc into ActionDefinitions with JSON Schema        |
+| `src/lib/modules/ai/scrape-job.service.ts`    | Job lifecycle, async processing, and status management                 |
+| `src/lib/modules/ai/scrape-job.repository.ts` | Database CRUD operations for ScrapeJob                                 |
+| `src/lib/modules/ai/scrape-job.schemas.ts`    | Zod schemas for API validation and ParsedApiDoc structure              |
+| `src/lib/modules/ai/prompts/extract-api.ts`   | Specialized prompts for endpoint, auth, and rate limit extraction      |
+| `src/lib/modules/ai/storage.ts`               | Supabase Storage integration with gzip compression                     |
+| `src/lib/modules/ai/llm/gemini-provider.ts`   | Google Gemini client with structured output support                    |
+| `src/lib/modules/ai/llm/types.ts`             | LLM provider interface for future extensibility                        |
+| `src/app/api/v1/scrape/route.ts`              | POST /scrape (create job) + GET /scrape (list jobs)                    |
+| `src/app/api/v1/scrape/[jobId]/route.ts`      | GET /scrape/:jobId (job status)                                        |
+
+### API Endpoints
+
+**POST `/api/v1/scrape`**
+
+```typescript
+// Request
+{
+  "documentationUrl": "https://api.slack.com/methods",
+  "wishlist": ["send message", "list users", "create channel"],
+  "options": {
+    "maxPages": 20,
+    "maxDepth": 3,
+    "useCache": true
+  }
+}
+
+// Response
+{
+  "success": true,
+  "data": {
+    "jobId": "job_abc123",
+    "status": "PENDING",
+    "estimatedDuration": 60000
+  }
+}
+```
+
+**GET `/api/v1/scrape/:jobId`**
+
+```typescript
+// Response (in progress)
+{
+  "success": true,
+  "data": {
+    "jobId": "job_abc123",
+    "status": "PARSING",
+    "progress": 65,
+    "currentStep": "Extracting endpoints from documentation..."
+  }
+}
+
+// Response (completed)
+{
+  "success": true,
+  "data": {
+    "jobId": "job_abc123",
+    "status": "COMPLETED",
+    "progress": 100,
+    "result": {
+      "name": "Slack API",
+      "baseUrl": "https://slack.com/api",
+      "authMethods": [
+        { "type": "oauth2", "config": { ... } },
+        { "type": "bearer", "config": { ... } }
+      ],
+      "endpoints": [
+        {
+          "name": "Send Message",
+          "method": "POST",
+          "path": "/chat.postMessage",
+          "description": "Sends a message to a channel",
+          "parameters": [...],
+          "requestBody": {...},
+          "responses": {...}
+        }
+      ],
+      "rateLimits": {
+        "default": { "requests": 50, "window": 60 }
+      }
+    }
+  }
+}
+```
+
+### Parsed API Structure Schema
+
+```typescript
+interface ParsedApiDoc {
+  name: string;
+  description?: string;
+  baseUrl: string;
+  version?: string;
+
+  authMethods: Array<{
+    type: 'oauth2' | 'api_key' | 'basic' | 'bearer' | 'custom_header';
+    config: Record<string, unknown>;
+    location?: 'header' | 'query' | 'body';
+    paramName?: string;
+  }>;
+
+  endpoints: Array<{
+    name: string;
+    slug: string;
+    description?: string;
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+    path: string;
+    pathParameters?: Array<{
+      name: string;
+      type: string;
+      required: boolean;
+      description?: string;
+    }>;
+    queryParameters?: Array<{
+      name: string;
+      type: string;
+      required: boolean;
+      description?: string;
+    }>;
+    requestBody?: {
+      contentType: string;
+      schema: object; // JSON Schema
+      required: boolean;
+    };
+    responses: Record<
+      string,
+      {
+        description: string;
+        schema?: object; // JSON Schema
+      }
+    >;
+    tags?: string[];
+    deprecated?: boolean;
+  }>;
+
+  rateLimits?: {
+    default?: { requests: number; window: number };
+    perEndpoint?: Record<string, { requests: number; window: number }>;
+  };
+
+  metadata?: {
+    scrapedAt: string;
+    sourceUrls: string[];
+    aiConfidence: number; // 0-1 score
+    warnings: string[];
+  };
+}
+```
+
+---
+
+## Implementation Tasks
+
+### Task 1: Firecrawl SDK Setup (~30 min)
+
+**Files:** `package.json`, `.env.example`, `src/lib/modules/ai/doc-scraper.ts`
+
+- Install Firecrawl SDK: `npm install @mendable/firecrawl-js`
+- Add `FIRECRAWL_API_KEY` to environment variables
+- Create basic Firecrawl client wrapper with initialization and error handling
+- Export `scrapeUrl()` function that returns raw markdown content
+
+### Task 2: Google Gemini Setup (~30 min)
+
+**Files:** `package.json`, `.env.example`, `src/lib/modules/ai/gemini-client.ts`
+
+- Install Google Generative AI SDK: `npm install @google/generative-ai`
+- Add `GOOGLE_API_KEY` to environment variables
+- Create Gemini client wrapper with model configuration (gemini-1.5-pro)
+- Export `generateContent()` function with structured output support
+
+### Task 3: Scrape Job Database Model (~30 min)
+
+**Files:** `prisma/schema.prisma`, `src/lib/modules/ai/scrape-job.repository.ts`
+
+- Add `ScrapeJob` model and `ScrapeJobStatus` enum to Prisma schema
+- Run migration: `npx prisma migrate dev --name add_scrape_jobs`
+- Create `scrapeJobRepository` with `create()`, `findById()`, `update()` methods
+- Add RLS policies for tenant isolation
+
+### Task 4: Scrape Job Service & Schemas (~45 min)
+
+**Files:** `src/lib/modules/ai/scrape-job.service.ts`, `src/lib/modules/ai/scrape-job.schemas.ts`
+
+- Create Zod schemas for scrape job creation and responses
+- Implement `createScrapeJob()` - creates job with PENDING status
+- Implement `getScrapeJob()` - retrieves job with status
+- Implement `updateJobStatus()` - updates progress and status
+
+### Task 5: Basic Doc Scraper Implementation (~45 min)
+
+**Files:** `src/lib/modules/ai/doc-scraper.ts`
+
+- Implement `scrapeDocumentation()` using Firecrawl
+- Handle single URL scraping with proper error handling
+- Return structured result: `{ url, content, contentType, scrapedAt }`
+- Implement timeout handling (5 min max)
+
+### Task 6: Multi-page Crawling (~45 min)
+
+**Files:** `src/lib/modules/ai/doc-scraper.ts`
+
+- Extend `scrapeDocumentation()` with `crawlMode` option
+- Implement depth-limited crawling (max 3 levels)
+- Implement page limit (max 20 pages)
+- Filter for relevant API documentation pages only
+- Aggregate content from multiple pages
+
+### Task 7: AI Extraction Prompts (~45 min)
+
+**Files:** `src/lib/modules/ai/prompts/extract-api.ts`
+
+- Create system prompt for API documentation extraction
+- Create structured output prompt for endpoints extraction
+- Create prompt for authentication method detection
+- Create prompt for rate limit detection
+- Include few-shot examples for better accuracy
+
+### Task 8: AI Document Parser (~60 min)
+
+**Files:** `src/lib/modules/ai/document-parser.ts`
+
+- Implement `parseApiDocumentation(content: string)` using Gemini
+- Parse scraped content to extract structured API data
+- Use Gemini's structured output (JSON mode) for reliability
+- Handle partial documentation gracefully (fill gaps with defaults)
+- Return `ParsedApiDoc` structure
+- Include confidence scores for AI-extracted data
+
+### Task 9: OpenAPI Direct Parser (~45 min)
+
+**Files:** `src/lib/modules/ai/openapi-parser.ts`
+
+- Install OpenAPI parser: `npm install @readme/openapi-parser` or similar
+- Implement `parseOpenApiSpec(content: string | object)`
+- Support both JSON and YAML formats
+- Convert OpenAPI structure to `ParsedApiDoc` format
+- Handle OpenAPI 2.0 (Swagger) and OpenAPI 3.x
+- No AI needed for this path
+
+### Task 10: Scrape API Endpoints (~45 min)
+
+**Files:** `src/app/api/v1/scrape/route.ts`, `src/app/api/v1/scrape/[jobId]/route.ts`
+
+- Implement POST `/api/v1/scrape` - Initiate scraping job
+- Implement GET `/api/v1/scrape/:jobId` - Get job status
+- Add request validation using Zod schemas
+- Use existing auth middleware
+- Return standard API response format
+
+### Task 11: Async Job Processing (~60 min)
+
+**Files:** `src/lib/modules/ai/scrape-job.service.ts`, `src/app/api/v1/scrape/route.ts`
+
+- Implement async job execution (non-blocking)
+- Use `waitUntil` for Vercel background execution, OR
+- Process synchronously for MVP (simpler, ~60s timeout)
+- Update job status at each stage (CRAWLING → PARSING → GENERATING)
+- Handle errors and update job with error details
+
+### Task 12: Scraped Content Storage (~30 min)
+
+**Files:** `src/lib/modules/ai/storage.ts`
+
+- Create Supabase Storage bucket for scraped content
+- Implement `storeScrapedContent(jobId, content)`
+- Implement `getScrapedContent(storageKey)`
+- Use for caching previously scraped documentation
+- Set appropriate retention policy (30 days)
+
+### Task 13: Action Definition Generator (~60 min)
+
+**Files:** `src/lib/modules/ai/action-generator.ts`
+
+- Implement `generateActions(parsedDoc: ParsedApiDoc, wishlist: string[])`
+- Transform parsed endpoints into Action definitions
+- Generate JSON Schema for input/output from extracted parameters
+- Apply wishlist prioritization (matched actions first)
+- Generate action slugs following convention
+
+### Task 14: Integration Creation from Scrape (~45 min)
+
+**Files:** `src/lib/modules/ai/ai.service.ts`, integration with `integrations` module
+
+- Create main `processDocumentation(url, options)` orchestrator
+- Connect scrape results to Integration creation flow
+- Create integration + actions from parsed docs
+- Update scrape job with resulting integration ID
+- Handle partial failures (integration created but some actions failed)
+
+---
+
+## Edge Cases
+
+| Scenario                   | Handling                                                     |
+| -------------------------- | ------------------------------------------------------------ |
+| Docs behind authentication | Return error with message to use OpenAPI spec upload instead |
+| Incomplete documentation   | Extract what's available, add warnings to metadata           |
+| Multiple API versions      | Detect and include version info, let user select (future)    |
+| Very large documentation   | Limit pages crawled, prioritize based on wishlist            |
+| Non-English documentation  | Attempt extraction, may have lower accuracy                  |
+| Rate limited during scrape | Retry with backoff, respect Retry-After                      |
+| Timeout during scrape      | Partial results with error, allow retry                      |
+
+---
+
+## Success Metrics
+
+- Can successfully scrape and parse 5+ different API documentation sites (Slack, GitHub, Stripe, etc.)
+- OpenAPI spec upload works for valid specs
+- Endpoint extraction accuracy > 80% on test documentation
+- Auth method detection accuracy > 90%
+- Scrape job completes in < 2 minutes for typical documentation
+
+---
+
+## Future Enhancements (Out of Scope for MVP)
+
+- Incremental re-scraping to detect API changes
+- Custom selectors for complex documentation sites
+- Multiple documentation source aggregation
+- User corrections fed back to improve AI extraction
+- Integration with documentation change monitoring
+
+---
+
+## Test Plan
+
+### Unit Tests
+
+| Component              | Test Cases                                                                                                                       |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| **Firecrawl Client**   | Successful scrape returns markdown; Timeout handling; Error response handling; Rate limit handling                               |
+| **Gemini Client**      | Successful generation; Structured output parsing; Error handling; Token limit handling                                           |
+| **OpenAPI Parser**     | Valid OpenAPI 3.x parsing; Valid Swagger 2.0 parsing; YAML format support; Invalid spec handling; Conversion to ParsedApiDoc     |
+| **Document Parser**    | Endpoint extraction from markdown; Auth method detection; Rate limit extraction; Partial doc handling; Confidence scoring        |
+| **Action Generator**   | Endpoint to Action conversion; JSON Schema generation; Wishlist prioritization; Slug generation                                  |
+| **Scrape Job Service** | Job creation; Status transitions (PENDING → CRAWLING → PARSING → GENERATING → COMPLETED); Error state handling; Progress updates |
+
+### Integration Tests
+
+| Endpoint                      | Test Cases                                                                                                                    |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **POST /api/v1/scrape**       | Valid request creates job; Invalid URL rejected; Missing auth returns 401; Wishlist validation; Options validation            |
+| **GET /api/v1/scrape/:jobId** | Returns job status; 404 for invalid jobId; Tenant isolation (can't access other tenant's jobs); Completed job includes result |
+
+### E2E Test Scenarios
+
+| Scenario                        | Description                                                                        |
+| ------------------------------- | ---------------------------------------------------------------------------------- |
+| **Happy Path - URL Scrape**     | Submit URL → Job created → Poll status → Job completes → Result contains endpoints |
+| **Happy Path - OpenAPI Upload** | Submit OpenAPI spec → Immediate parsing → Actions generated                        |
+| **Error Recovery**              | Submit invalid URL → Job fails → Error details returned                            |
+| **Wishlist Prioritization**     | Submit with wishlist → Matched actions appear first in results                     |
+
+### Mock Requirements
+
+- **Firecrawl**: Mock API responses with sample documentation HTML/markdown
+- **Google Gemini**: Mock structured output responses with sample parsed data
+- **Supabase Storage**: Mock storage operations for content caching
+
+---
+
+## References
+
+- [Firecrawl Documentation](https://docs.firecrawl.dev/)
+- [Google Gemini API](https://ai.google.dev/docs)
+- [OpenAPI Specification](https://swagger.io/specification/)
+- [Product Spec - AI Documentation Scraper](../product_spec.md#feature-ai-documentation-scraper)
