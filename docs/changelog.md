@@ -60,7 +60,70 @@
 
 ## [Unreleased]
 
-_No unreleased changes_
+### Added
+
+- **Gateway API (Feature #8)** - Tasks 1-7 Complete
+  - **Task 1: Logging Service & Repository**
+    - Request log schemas (`RequestSummary`, `ResponseSummary`, `LogError`)
+    - Log repository with paginated queries, filtering, and stats
+    - Logging service with automatic sanitization (headers, body fields)
+    - Body truncation for large payloads (configurable max size)
+    - Retention management for old logs
+  - **Task 2: Integration Service (Basic)**
+    - Integration schemas and repository layer
+    - Service layer with tenant verification
+    - CRUD operations, slug-based lookups
+    - Status management (active, disabled, error)
+  - **Task 3: Gateway Schemas & Types**
+    - `GatewayInvokeRequestSchema` for action input
+    - `GatewaySuccessResponseSchema` with execution metrics
+    - `GatewayErrorResponseSchema` with LLM-friendly suggested resolutions
+    - Error codes mapped to HTTP statuses and suggested actions
+    - Health check schemas for integration status
+    - Type-safe response builders and helpers
+  - **Task 4: Gateway Service (Core Pipeline)**
+    - `invokeAction()` orchestrates full invocation pipeline:
+      - Resolves integration and action by slugs
+      - Validates input against action's JSON Schema (Ajv)
+      - Retrieves and applies credentials (OAuth2, API Key, Basic, Bearer)
+      - Builds HTTP request with path parameter substitution
+      - Executes via execution engine (retry + circuit breaker)
+      - Logs request/response with sanitization
+      - Returns standardized success/error response
+    - `GatewayError` class with error code mapping
+    - Support for all credential types in request building
+    - `getHttpStatusForError()` helper for API routes
+  - **Task 5: Action Invocation Endpoint**
+    - `POST /api/v1/actions/{integration}/{action}` - Main Gateway API endpoint
+    - Extracts integration and action slugs from URL path
+    - Parses JSON body as action input (validates object format)
+    - Optional invocation headers: `X-Waygate-Skip-Validation`, `X-Waygate-Timeout`, `X-Idempotency-Key`
+    - Returns `GatewaySuccessResponse` (200) or `GatewayErrorResponse` with mapped HTTP status
+    - Execution metrics included in response (latency, retry count, cached flag)
+  - **Task 6: Integration Health Endpoint**
+    - `GET /api/v1/integrations/{id}/health` - Returns integration health status
+    - `checkHealth()` method added to integration service
+    - Health status levels: `healthy`, `degraded`, `unhealthy`
+    - Checks credential validity (not expired, not revoked, needs refresh)
+    - Returns circuit breaker status (closed, open, half_open) with failure count
+    - Includes last successful request time from request logs
+    - `determineHealthStatus()` logic evaluates all health factors
+  - **Task 7: Request Logs Endpoint**
+    - `GET /api/v1/logs` - Paginated request logs for tenant
+    - Query filters: `integrationId`, `actionId`, `startDate`, `endDate`, `cursor`, `limit`
+    - Tenant-scoped - only returns logs for authenticated tenant
+    - Standard pagination format with `cursor`, `hasMore`, `totalCount`
+  - **Feature Tests Added (87 new tests)**
+    - `tests/unit/gateway/gateway-schemas.test.ts` - 36 tests for schema validation
+    - `tests/unit/logging/logging-service.test.ts` - 36 tests for sanitization/truncation
+    - `tests/integration/gateway/gateway-api.test.ts` - 15 integration tests
+
+### Technical Notes
+
+- Path parameters: `{param}` syntax in endpoint templates substituted from input
+- Credentials applied based on type: headers (OAuth2, Bearer, Basic), query/body (API Key)
+- All responses include request ID for debugging and suggested resolution for errors
+- 505 tests passing
 
 ---
 

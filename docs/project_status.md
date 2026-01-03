@@ -1,6 +1,6 @@
 # Project Status: Waygate
 
-**Last Updated**: 2026-01-02
+**Last Updated**: 2026-01-02 (Gateway API feature complete with tests)
 
 ---
 
@@ -62,19 +62,17 @@
 | AI Documentation Scraper     | 2026-01-02      | Firecrawl, LLM abstraction, job processing, OpenAPI parser, AI extraction, action generator - [Feature Doc](Features/ai-documentation-scraper.md) |
 | Action Registry & Schema     | 2026-01-02      | Zod schemas, repository, service, JSON Schema validator (Ajv), REST APIs, 472 total tests - [Feature Doc](Features/action-registry-schema.md)     |
 | Token Refresh Management     | 2026-01-02      | Advisory locks, retry logic, cron job, manual refresh API, 505 total tests - [Feature Doc](Features/token-refresh-management.md)                  |
+| Gateway API                  | 2026-01-02      | Unified REST API, action invocation pipeline, health endpoint, request logs, 592 total tests - [Feature Doc](Features/gateway-api.md)             |
 
 ### In Progress
 
-| Feature/Task | Started | Notes |
-| ------------ | ------- | ----- |
-| —            | —       | —     |
+_No features currently in progress_
 
 ### Not Started
 
-| Feature/Task           | Priority | Dependencies | Estimated Complexity |
-| ---------------------- | -------- | ------------ | -------------------- |
-| Gateway API            | P0       | All above    | MED                  |
-| Basic Configuration UI | P0       | Gateway API  | MED                  |
+| Feature/Task           | Priority | Dependencies    | Estimated Complexity |
+| ---------------------- | -------- | --------------- | -------------------- |
+| Basic Configuration UI | P0       | ~~Gateway API~~ | MED                  |
 
 ---
 
@@ -91,13 +89,13 @@ The following sequence reflects dependency analysis and optimal implementation o
 | 5   | ~~AI Documentation Scraper~~     | #2           | HIGH       | ✅ Complete - Firecrawl + LLM + OpenAPI parser + action generator        |
 | 6   | ~~Action Registry & Schema~~     | #5           | HIGH       | ✅ Complete - Zod schemas, repository, service, Ajv validator, REST APIs |
 | 7   | ~~Token Refresh Management~~     | #3           | MED        | ✅ Complete - Advisory locks, retry, cron, manual refresh API            |
-| 8   | **Gateway API**                  | #3, #4, #6   | MED        | Unified REST API tying all modules together                              |
+| 8   | ~~Gateway API~~                  | #3, #4, #6   | MED        | ✅ Complete - Unified REST API, invocation pipeline, health, logs        |
 | 9   | **Basic Configuration UI**       | #8           | MED        | Web dashboard for integration setup and testing                          |
 
 ### Upcoming Work
 
-**Current:** #8 Gateway API  
-**Next Up:** #9 Basic Configuration UI
+**Current:** #9 Basic Configuration UI (Not Started)  
+**Next Up:** Complete MVP!
 
 ---
 

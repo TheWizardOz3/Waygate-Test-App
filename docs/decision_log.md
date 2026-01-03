@@ -12,17 +12,18 @@
 
 ## Quick Reference Index
 
-| ID      | Date       | Category | Status | Summary                                               |
-| ------- | ---------- | -------- | ------ | ----------------------------------------------------- |
-| ADR-001 | 2026-01-01 | infra    | active | Prisma 7 requires pg adapter instead of URL in schema |
-| ADR-002 | 2026-01-02 | infra    | active | Prisma 7 config file requires explicit env loading    |
-| ADR-003 | 2026-01-02 | infra    | active | Environment variable file strategy for secrets        |
-| ADR-004 | 2026-01-01 | arch     | active | Dual encryption strategy for credentials              |
-| ADR-005 | 2026-01-02 | arch     | active | In-memory circuit breaker with per-circuit tracking   |
-| ADR-006 | 2026-01-02 | arch     | active | Result pattern for execution service                  |
-| ADR-007 | 2026-01-02 | arch     | active | LLM abstraction layer for future multi-model support  |
-| ADR-008 | 2026-01-02 | arch     | active | JSON Schema validation with Ajv and caching           |
-| ADR-009 | 2026-01-02 | arch     | active | PostgreSQL advisory locks for token refresh           |
+| ID      | Date       | Category | Status | Summary                                                 |
+| ------- | ---------- | -------- | ------ | ------------------------------------------------------- |
+| ADR-001 | 2026-01-01 | infra    | active | Prisma 7 requires pg adapter instead of URL in schema   |
+| ADR-002 | 2026-01-02 | infra    | active | Prisma 7 config file requires explicit env loading      |
+| ADR-003 | 2026-01-02 | infra    | active | Environment variable file strategy for secrets          |
+| ADR-004 | 2026-01-01 | arch     | active | Dual encryption strategy for credentials                |
+| ADR-005 | 2026-01-02 | arch     | active | In-memory circuit breaker with per-circuit tracking     |
+| ADR-006 | 2026-01-02 | arch     | active | Result pattern for execution service                    |
+| ADR-007 | 2026-01-02 | arch     | active | LLM abstraction layer for future multi-model support    |
+| ADR-008 | 2026-01-02 | arch     | active | JSON Schema validation with Ajv and caching             |
+| ADR-009 | 2026-01-02 | arch     | active | PostgreSQL advisory locks for token refresh             |
+| ADR-010 | 2026-01-02 | api      | active | Unified dynamic gateway endpoint over per-action routes |
 
 **Categories:** `arch` | `data` | `api` | `ui` | `test` | `infra` | `error`
 
@@ -530,5 +531,69 @@ When working with token refresh locking:
 - Do NOT use blocking `pg_advisory_lock()` - it can cause job timeouts
 - The lock is session-scoped; connection pool returns connections to pool with locks released
 - For future scaling: can migrate to Redis-based distributed locks without changing service interface
+
+---
+
+### ADR-010: Unified Dynamic Gateway Endpoint
+
+**Date:** 2026-01-02 | **Category:** api | **Status:** active
+
+#### Trigger
+
+Designing the Gateway API required choosing between two architectures:
+
+1. **Unified dynamic endpoint**: Single `POST /api/v1/actions/{integrationSlug}/{actionSlug}` handler
+2. **Per-action endpoints**: Generate dedicated route files for each action (e.g., `/api/v1/actions/slack/send-message`)
+
+#### Decision
+
+Implemented a unified dynamic endpoint at `POST /api/v1/actions/{integration}/{action}`:
+
+```
+src/app/api/v1/actions/[integration]/[action]/route.ts
+```
+
+The route handler:
+
+1. Extracts integration and action slugs from URL path parameters
+2. Calls `invokeAction()` service with tenant context from auth middleware
+3. Returns standardized `GatewaySuccessResponse` or `GatewayErrorResponse`
+
+#### Rationale
+
+- **AI-generated actions**: Actions are dynamically created by AI from API documentation; generating route files per action adds complexity with no benefit
+- **Simpler architecture**: Single handler, single code path for all action invocations
+- **Instant new actions**: New actions work immediately without code generation or deployment
+- **Consistent behavior**: Retry logic, circuit breakers, logging applied uniformly
+- **LLM-friendly**: Universal endpoint easier for AI agents to discover and use
+
+**Tradeoffs accepted:**
+
+- Less REST-pure than dedicated endpoints
+- No compile-time type checking per action (mitigated by JSON Schema validation at runtime)
+- Single error format for all actions (acceptable for unified gateway pattern)
+
+#### Supersedes
+
+N/A (new feature)
+
+#### Migration
+
+- **New files:**
+  - `src/app/api/v1/actions/[integration]/[action]/route.ts` - Main handler
+  - `src/lib/modules/gateway/gateway.service.ts` - Pipeline orchestration
+  - `src/lib/modules/gateway/gateway.schemas.ts` - Request/response schemas
+  - `src/app/api/v1/integrations/[id]/health/route.ts` - Health endpoint
+  - `src/app/api/v1/logs/route.ts` - Request logs endpoint
+
+#### AI Instructions
+
+When working with the Gateway API:
+
+- ALL action invocations go through `POST /api/v1/actions/{integration}/{action}`
+- Use `invokeAction()` from gateway service for programmatic invocation
+- Error responses ALWAYS include `suggestedResolution` with `action`, `description`, `retryable`
+- Request ID is generated for every request and included in all responses
+- All requests are logged via the logging service with automatic sanitization
 
 ---
