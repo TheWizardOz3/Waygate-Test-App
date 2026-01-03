@@ -1,6 +1,6 @@
 # Project Status: Waygate
 
-**Last Updated**: 2026-01-03 (v0.1.7 - Template-Based Integration Creation)
+**Last Updated**: 2026-01-03 (v0.1.8 - Credential Saving & UI Fixes)
 
 ---
 
@@ -74,6 +74,7 @@ _None - MVP is complete!_
 
 | Enhancement               | Completion Date | Notes                                                                                               |
 | ------------------------- | --------------- | --------------------------------------------------------------------------------------------------- |
+| Credential Saving & UI    | 2026-01-03      | Credentials POST endpoint, wizard saves creds, API key guidance, param descriptions, copy URL fixes |
 | Template Auto-Detection   | 2026-01-03      | AI auto-detects PostgREST/Supabase patterns, offers to add template actions in Review step          |
 | Smart Cache Invalidation  | 2026-01-03      | Wishlist-aware cache validation, force fresh scrape option in wizard, better cache decision logging |
 | Action Tester & Auth-less | 2026-01-03      | Improved tester UI layout, auth-less API support, AI-assisted action discovery with wishlist        |

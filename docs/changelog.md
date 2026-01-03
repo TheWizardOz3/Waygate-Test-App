@@ -14,6 +14,7 @@
 
 | Version | Date       | Type       | Summary                                                         |
 | ------- | ---------- | ---------- | --------------------------------------------------------------- |
+| 0.1.8   | 2026-01-03 | patch      | Credential saving, endpoint copy, parameter descriptions fixes  |
 | 0.1.7   | 2026-01-03 | minor      | Template-based integration creation for schema-driven APIs      |
 | 0.1.6   | 2026-01-03 | patch      | Smart cache invalidation with wishlist coverage check           |
 | 0.1.5   | 2026-01-03 | patch      | Action tester improvements, auth-less APIs, AI action discovery |
@@ -66,6 +67,47 @@
 ## Releases
 
 <!-- Add new versions below this line, newest first -->
+
+## [0.1.8] - 2026-01-03
+
+### Added
+
+- **POST `/api/v1/integrations/:id/credentials` Endpoint**
+  - New endpoint to create credentials for an integration
+  - Supports API key, bearer token, and OAuth2 credential types
+  - Enables proper credential saving from the integration wizard
+
+- **Context-Specific API Key Guidance**
+  - API key form now shows helpful hints based on detected API name
+  - Supabase: "Find your API key in Project Settings → API → anon/public key or service_role key"
+  - Stripe: "Find your API key in Dashboard → Developers → API keys"
+  - OpenAI: "Find your API key at platform.openai.com → API keys"
+  - GitHub: "Create a Personal Access Token at Settings → Developer settings → Tokens"
+  - Slack: "Find your Bot Token at api.slack.com → Your Apps → OAuth & Permissions"
+
+### Fixed
+
+- **Credentials Not Saving from Integration Wizard**
+  - Previously: API keys entered in wizard were not being saved to credentials table
+  - Now: Wizard saves credentials to credentials endpoint after integration creation
+  - Integration shows as "Connected" when credentials are properly saved
+
+- **Endpoint URL Copy Button Showing Slug Instead of Full URL**
+  - ActionTester now copies full Waygate Gateway URL: `/api/v1/actions/{integration}/{action}`
+  - Previously was copying just the endpoint template path
+
+- **Parameter Descriptions Hidden in Compact Mode**
+  - DynamicSchemaForm now shows field descriptions even in compact mode
+  - Helps users understand what each parameter does when testing actions
+
+### Technical Notes
+
+- `ApiKeyConnectForm` now accepts `apiKeyHint` prop for context-specific guidance
+- `StepConfigureAuth` generates hints based on `data.detectedApiName`
+- Credentials POST endpoint validates with discriminated union schema for type safety
+- Fixed flaky test: `database.test.ts` now uses `toBeGreaterThanOrEqual(5)` instead of exact count
+
+---
 
 ## [0.1.7] - 2026-01-03
 
