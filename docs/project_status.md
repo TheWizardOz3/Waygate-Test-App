@@ -1,6 +1,6 @@
 # Project Status: Waygate
 
-**Last Updated**: 2026-01-03 (v0.1.5 - Action Tester + Auth-less APIs + AI Action Discovery)
+**Last Updated**: 2026-01-03 (v0.1.7 - Template-Based Integration Creation)
 
 ---
 
@@ -27,10 +27,11 @@
 | Pagination Handler             | Polish feature, not required for core loop | V0.5              |
 | Response Validation            | Polish feature, not required for core loop | V0.5              |
 | Basic Field Mapping            | Enhancement to core functionality          | V0.5              |
-| Integration Tagging System     | Organization feature, not core             | V0.5              |
+| Integration & Action Tagging   | Organization feature, not core             | V0.5              |
+| Dashboard & Logs Polish        | UX refinement, not core                    | V0.5              |
+| Continuous Integration Testing | Reliability feature                        | V0.5              |
 | Smart Data Caching Layer       | Performance optimization                   | V1                |
 | Async Job System               | Scale feature                              | V1                |
-| Continuous Integration Testing | Reliability feature                        | V1                |
 | Auto-Maintenance System        | Advanced automation                        | V2                |
 | Versioning & Rollbacks         | Production safety feature                  | V2                |
 | Full No-Code UI                | Non-technical user enablement              | V2                |
@@ -73,6 +74,8 @@ _None - MVP is complete!_
 
 | Enhancement               | Completion Date | Notes                                                                                               |
 | ------------------------- | --------------- | --------------------------------------------------------------------------------------------------- |
+| Template Auto-Detection   | 2026-01-03      | AI auto-detects PostgREST/Supabase patterns, offers to add template actions in Review step          |
+| Smart Cache Invalidation  | 2026-01-03      | Wishlist-aware cache validation, force fresh scrape option in wizard, better cache decision logging |
 | Action Tester & Auth-less | 2026-01-03      | Improved tester UI layout, auth-less API support, AI-assisted action discovery with wishlist        |
 | Specific Pages Mode       | 2026-01-03      | Skip site mapping, provide exact URLs to scrape. Job cancellation. Better error UI.                 |
 | UI Polish & Bug Fixes     | 2026-01-03      | Actions save correctly, credentials panel uses real API, action test endpoints fixed, list view     |
@@ -118,33 +121,36 @@ All 9 features for the MVP milestone have been implemented. Next steps:
 
 ### V0.5: Polish & Robustness
 
-**Functionality Summary**: Add robustness features that make integrations production-ready. Pagination, response validation, field mapping, and organization features.
+**Functionality Summary**: Add robustness features that make integrations production-ready. Pagination, response validation, field mapping, tagging, continuous testing, and dashboard/logs improvements.
 
 **Key Features:**
 
 - Pagination Handler (cursor, offset, page number, Link header)
 - Response Validation (Zod-based schema validation)
 - Basic Field Mapping (configure field transformations)
-- Integration Tagging System (lightweight categorization)
+- Integration & Action Tagging System (lightweight categorization with filtering)
+- Dashboard & Logs Display Polish (ensure data displays properly, consistent UX)
+- Continuous Integration Testing (scheduled health checks on all integrations)
 
 **Technical Scope:**
 
 - Pagination detection and handling logic
 - Zod-based response validation
 - Field mapping configuration storage and runtime application
-- Tag CRUD and filtering
+- Tag CRUD for both integrations and actions
+- Filterable tags in dashboard and logs views
+- Cron-based health check scheduler with alerting
 
 ---
 
 ### V1: Scale & Reliability
 
-**Functionality Summary**: Add intelligent data caching, asynchronous operations, continuous testing, and enhanced configuration flexibility. System becomes suitable for production applications with moderate scale.
+**Functionality Summary**: Add intelligent data caching, asynchronous operations, and enhanced configuration flexibility. System becomes suitable for production applications with moderate scale.
 
 **Key Features:**
 
 - Smart Data Caching Layer (configurable caching for slow-changing data)
 - Async Job System (background processing for long operations, batch imports)
-- Continuous Integration Testing (scheduled health checks on all integrations)
 - Complex Nested Data Handling
 - Per-App Custom Mappings
 - Batch Operations Support
@@ -154,7 +160,6 @@ All 9 features for the MVP milestone have been implemented. Next steps:
 
 - Upstash Redis for caching layer
 - Trigger.dev for background job queue
-- Cron-based health check scheduler
 - Per-tenant configuration storage
 - Basic metrics collection and display
 

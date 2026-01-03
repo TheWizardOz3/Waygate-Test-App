@@ -321,6 +321,10 @@ export function StepConfigureAuth() {
     }));
 
     try {
+      // Only include baseUrl if it's a valid URL (not empty)
+      const baseUrl = data.detectedBaseUrl?.trim();
+      const isValidUrl = baseUrl && /^https?:\/\/.+/.test(baseUrl);
+
       const integration = await createIntegration.mutateAsync({
         name: data.detectedApiName || 'New Integration',
         slug: slug || `integration-${Date.now()}`,
@@ -328,7 +332,7 @@ export function StepConfigureAuth() {
         documentationUrl: data.documentationUrl,
         authType,
         authConfig: {
-          baseUrl: data.detectedBaseUrl,
+          ...(isValidUrl && { baseUrl }),
           ...authConfig,
         },
         tags: [],

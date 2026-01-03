@@ -79,6 +79,7 @@ export function StepScraping() {
     setDetectedActions,
     setDetectedAuthMethods,
     setDetectedApiInfo,
+    setDetectedTemplate,
     goToStep,
     goBack,
   } = useWizardStore();
@@ -100,6 +101,11 @@ export function StepScraping() {
       setDetectedAuthMethods(result.authMethods);
       setDetectedActions(result.endpoints);
 
+      // Store detected template if found
+      if (result.metadata?.detectedTemplate) {
+        setDetectedTemplate(result.metadata.detectedTemplate);
+      }
+
       // Move to review step
       goToStep('review-actions');
     }
@@ -109,6 +115,7 @@ export function StepScraping() {
     setDetectedApiInfo,
     setDetectedAuthMethods,
     setDetectedActions,
+    setDetectedTemplate,
     goToStep,
   ]);
 

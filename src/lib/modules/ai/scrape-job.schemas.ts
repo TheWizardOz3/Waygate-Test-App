@@ -118,6 +118,24 @@ export const RateLimitsConfigSchema = z.object({
 export type RateLimitsConfig = z.infer<typeof RateLimitsConfigSchema>;
 
 /**
+ * Detected template information
+ */
+export const DetectedTemplateSchema = z.object({
+  /** Template ID that was detected */
+  templateId: z.string(),
+  /** Template name for display */
+  templateName: z.string(),
+  /** Detection confidence 0-1 */
+  confidence: z.number().min(0).max(1),
+  /** Signals that led to detection */
+  signals: z.array(z.string()),
+  /** Suggested base URL for the template */
+  suggestedBaseUrl: z.string().optional(),
+});
+
+export type DetectedTemplate = z.infer<typeof DetectedTemplateSchema>;
+
+/**
  * Scrape metadata
  */
 export const ScrapeMetadataSchema = z.object({
@@ -125,6 +143,8 @@ export const ScrapeMetadataSchema = z.object({
   sourceUrls: z.array(z.string().url()),
   aiConfidence: z.number().min(0).max(1),
   warnings: z.array(z.string()),
+  /** Auto-detected template (if any) */
+  detectedTemplate: DetectedTemplateSchema.optional(),
 });
 
 export type ScrapeMetadata = z.infer<typeof ScrapeMetadataSchema>;

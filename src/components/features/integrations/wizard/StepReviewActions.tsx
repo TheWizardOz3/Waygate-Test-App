@@ -1,14 +1,26 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { ArrowRight, Search, Star, Sparkles, CheckSquare, Square } from 'lucide-react';
+import {
+  ArrowRight,
+  Search,
+  Star,
+  Sparkles,
+  CheckSquare,
+  Square,
+  LayoutTemplate,
+  Plus,
+  Info,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useWizardStore, type SelectedAction } from '@/stores/wizard.store';
 import { cn } from '@/lib/utils';
+import { generateFromTemplate, getTemplateById } from '@/lib/modules/ai/templates';
 
 // Method badge colors
 const METHOD_COLORS: Record<string, string> = {
@@ -22,9 +34,10 @@ const METHOD_COLORS: Record<string, string> = {
 interface ActionReviewCardProps {
   action: SelectedAction;
   onToggle: () => void;
+  isTemplateAction?: boolean;
 }
 
-function ActionReviewCard({ action, onToggle }: ActionReviewCardProps) {
+function ActionReviewCard({ action, onToggle, isTemplateAction }: ActionReviewCardProps) {
   // Confidence rating (1-3 stars)
   const confidenceStars = Math.ceil(action.confidence * 3);
   const confidenceLabel = confidenceStars >= 3 ? 'High' : confidenceStars >= 2 ? 'Medium' : 'Low';
@@ -33,7 +46,8 @@ function ActionReviewCard({ action, onToggle }: ActionReviewCardProps) {
     <div
       className={cn(
         'flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50',
-        action.selected ? 'border-secondary/50 bg-secondary/5' : 'border-border/50 bg-background'
+        action.selected ? 'border-secondary/50 bg-secondary/5' : 'border-border/50 bg-background',
+        isTemplateAction && 'border-l-4 border-l-violet-500'
       )}
       onClick={onToggle}
     >
@@ -53,6 +67,14 @@ function ActionReviewCard({ action, onToggle }: ActionReviewCardProps) {
           >
             {action.method}
           </Badge>
+          {isTemplateAction && (
+            <Badge
+              variant="outline"
+              className="border-violet-300 bg-violet-50 text-xs text-violet-700"
+            >
+              Template
+            </Badge>
+          )}
         </div>
 
         <p className="truncate font-mono text-xs text-muted-foreground">{action.path}</p>
@@ -80,8 +102,50 @@ function ActionReviewCard({ action, onToggle }: ActionReviewCardProps) {
 
 export function StepReviewActions() {
   const [searchQuery, setSearchQuery] = useState('');
-  const { data, toggleActionSelection, selectAllActions, deselectAllActions, goToStep } =
-    useWizardStore();
+  const [templateActionsAdded, setTemplateActionsAdded] = useState(false);
+
+  const {
+    data,
+    toggleActionSelection,
+    selectAllActions,
+    deselectAllActions,
+    setDetectedActions,
+    goToStep,
+  } = useWizardStore();
+
+  // Check for auto-detected template
+  const detectedTemplate = data.detectedTemplate;
+  const template = detectedTemplate ? getTemplateById(detectedTemplate.templateId) : null;
+
+  // Handler to add template actions
+  const handleAddTemplateActions = () => {
+    if (!template || !data.detectedBaseUrl) return;
+
+    const result = generateFromTemplate({
+      templateId: template.id,
+      baseUrl: data.detectedBaseUrl,
+    });
+
+    if (result.success) {
+      // Merge template actions with existing, avoiding duplicates
+      const existingPaths = new Set(data.detectedActions.map((a) => `${a.method}:${a.path}`));
+      const newTemplateActions = result.data.endpoints.filter(
+        (ep) => !existingPaths.has(`${ep.method}:${ep.path}`)
+      );
+
+      // Mark template actions and add them
+      const templateActionsWithMeta = newTemplateActions.map((endpoint) => ({
+        ...endpoint,
+        selected: true,
+        confidence: 1.0, // 100% confidence for templates
+        tags: [...(endpoint.tags || []), 'from-template'],
+      }));
+
+      // Prepend template actions to the list
+      setDetectedActions([...templateActionsWithMeta, ...data.detectedActions], undefined);
+      setTemplateActionsAdded(true);
+    }
+  };
 
   // Filter actions by search query
   const filteredActions = useMemo(() => {
@@ -117,6 +181,41 @@ export function StepReviewActions() {
 
   return (
     <div className="space-y-4">
+      {/* Template detected banner */}
+      {detectedTemplate && template && !templateActionsAdded && (
+        <Alert className="border-violet-200 bg-violet-50">
+          <LayoutTemplate className="h-4 w-4 text-violet-600" />
+          <AlertTitle className="text-violet-900">{template.name} pattern detected</AlertTitle>
+          <AlertDescription className="text-violet-700">
+            <p className="mb-2">
+              This looks like a <strong>{template.name}</strong> API. We can add{' '}
+              {template.actions.length} pre-built actions for common operations like query, insert,
+              update, and delete.
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-violet-300 bg-white text-violet-700 hover:bg-violet-100"
+              onClick={handleAddTemplateActions}
+            >
+              <Plus className="mr-1 h-3 w-3" />
+              Add {template.actions.length} template actions
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Template actions added confirmation */}
+      {templateActionsAdded && template && (
+        <Alert className="border-emerald-200 bg-emerald-50">
+          <Info className="h-4 w-4 text-emerald-600" />
+          <AlertDescription className="text-emerald-700">
+            Added {template.actions.length} {template.name} template actions. They&apos;re marked
+            with a purple border below.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Header with stats */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm">
@@ -171,6 +270,7 @@ export function StepReviewActions() {
                 key={action.slug}
                 action={action}
                 onToggle={() => toggleActionSelection(action.slug)}
+                isTemplateAction={action.tags?.includes('from-template')}
               />
             ))
           )}

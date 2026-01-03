@@ -14,6 +14,8 @@
 
 | Version | Date       | Type       | Summary                                                         |
 | ------- | ---------- | ---------- | --------------------------------------------------------------- |
+| 0.1.7   | 2026-01-03 | minor      | Template-based integration creation for schema-driven APIs      |
+| 0.1.6   | 2026-01-03 | patch      | Smart cache invalidation with wishlist coverage check           |
 | 0.1.5   | 2026-01-03 | patch      | Action tester improvements, auth-less APIs, AI action discovery |
 | 0.1.4   | 2026-01-03 | patch      | UI polish, specific pages mode, action saves fix                |
 | 0.1.3   | 2026-01-03 | patch      | Intelligent crawling with LLM-guided page selection             |
@@ -64,6 +66,80 @@
 ## Releases
 
 <!-- Add new versions below this line, newest first -->
+
+## [0.1.7] - 2026-01-03
+
+### Added
+
+- **Auto-Detected Template Integration**
+  - AI now auto-detects if scraped API matches known patterns (PostgREST/Supabase, REST CRUD)
+  - When detected, shows banner in Review Actions offering to add template actions
+  - Template actions can be added alongside AI-extracted actions (not replacing them)
+  - PostgREST/Supabase template with 7 actions (query, get, insert, update, upsert, delete, RPC)
+  - Generic REST CRUD template with 6 actions (list, get, create, update, patch, delete)
+
+- **Template System Architecture**
+  - `src/lib/modules/ai/templates/` - New template module
+  - `detector.ts` - Pattern matching for PostgREST URLs, content keywords, endpoint patterns
+  - `generator.ts` - Converts templates to ParsedApiDoc format
+  - Template registry with category and featured flags
+  - Detection result stored in `metadata.detectedTemplate`
+
+### Changed
+
+- **Wizard Review Actions Step**
+  - Shows detection banner when template pattern found (with confidence %)
+  - "Add template actions" button merges template actions with AI-extracted
+  - Template actions visually distinguished with purple border and badge
+  - No upfront template selection required - AI handles detection
+
+### Technical Notes
+
+- Template detection happens in `finalizeDocument()` during scrape job processing
+- Detection signals: URL patterns, content keywords (PostgREST, Supabase), endpoint paths
+- Confidence threshold: 30% minimum for detection
+- Template actions tagged with `from-template` for identification
+- UX improvement: Users don't need to know if API is "templated" - AI figures it out
+
+---
+
+## [0.1.6] - 2026-01-03
+
+### Added
+
+- **Force Fresh Scrape Option in Wizard**
+  - New checkbox in StepUrlInput: "Force fresh scrape"
+  - Bypasses cache entirely when checked
+  - Useful when recreating integrations or wanting updated documentation
+
+### Changed
+
+- **Smart Cache Invalidation with Wishlist Coverage Check**
+  - Cache lookup now validates that cached result covers the requested wishlist items
+  - If new wishlist has items not found in cached endpoints, creates a fresh scrape job
+  - Implemented `getUncoveredWishlistItems()` helper to compare wishlist vs cached endpoints
+  - Logs cache decisions for debugging: shows whether cache was used, skipped, or had uncovered items
+
+### Fixed
+
+- **Stale Cache After Integration Deletion**
+  - Previously: deleting an integration and recreating with same URL returned old cached actions
+  - Now: new wishlist items trigger fresh scrape automatically
+  - Force fresh option provides explicit bypass when needed
+
+- **Invalid URL Error When Saving Integration**
+  - Fixed: `authConfig.baseUrl` validation failed when AI extracted empty/invalid base URL
+  - Now: only includes `baseUrl` in authConfig if it's a valid URL (not empty, starts with http/https)
+  - Affects: Supabase docs and other sites where base URL couldn't be inferred
+
+### Technical Notes
+
+- Added `getUncoveredWishlistItems()` in `scrape-job.service.ts` for wishlist coverage detection
+- Cache is only used when: (1) has enough endpoints AND (2) all wishlist items are covered
+- Word-based matching: wishlist item words (>2 chars) checked against endpoint name/slug/path/description
+- Related: ADR-014 (dual scraping modes)
+
+---
 
 ## [0.1.5] - 2026-01-03
 

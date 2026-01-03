@@ -23,6 +23,17 @@ export interface SelectedAction extends ApiEndpoint {
   confidence: number; // 0-1 scale
 }
 
+/**
+ * Auto-detected template info from AI parsing
+ */
+export interface DetectedTemplateInfo {
+  templateId: string;
+  templateName: string;
+  confidence: number;
+  signals: string[];
+  suggestedBaseUrl?: string;
+}
+
 export interface WizardData {
   // Step 1: URL Input
   documentationUrl: string;
@@ -39,6 +50,8 @@ export interface WizardData {
   detectedAuthMethods: ApiAuthMethod[];
   detectedBaseUrl: string;
   detectedApiName: string;
+  /** Auto-detected template (if AI found a pattern match) */
+  detectedTemplate: DetectedTemplateInfo | null;
 
   // Step 4: Configure Auth
   selectedAuthType: AuthType | null;
@@ -75,6 +88,7 @@ interface WizardState {
   setDocumentationUrl: (url: string) => void;
   setWishlist: (wishlist: string[]) => void;
   setScrapeJob: (jobId: string, status: ScrapeJobStatusType) => void;
+  setDetectedTemplate: (template: DetectedTemplateInfo | null) => void;
   updateScrapeProgress: (
     progress: number,
     currentStep: string,
@@ -109,6 +123,7 @@ const initialData: WizardData = {
   detectedAuthMethods: [],
   detectedBaseUrl: '',
   detectedApiName: '',
+  detectedTemplate: null,
   selectedAuthType: null,
   authConfig: {},
   createdIntegrationId: null,
@@ -232,6 +247,14 @@ export const useWizardStore = create<WizardState>((set, get) => ({
         ...state.data,
         detectedApiName: name,
         detectedBaseUrl: baseUrl,
+      },
+    })),
+
+  setDetectedTemplate: (template) =>
+    set((state) => ({
+      data: {
+        ...state.data,
+        detectedTemplate: template,
       },
     })),
 

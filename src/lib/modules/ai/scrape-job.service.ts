@@ -27,6 +27,7 @@ import {
   type ScrapeJobErrorDetails,
   type ParsedApiDoc,
   type ScrapeJobStatusType,
+  type DetectedTemplate,
   isJobInProgress,
 } from './scrape-job.schemas';
 import { scrapeDocumentation, crawlDocumentation, isScrapeError } from './doc-scraper';
@@ -35,6 +36,7 @@ import type { IntelligentCrawlProgress } from './intelligent-crawler';
 import { parseApiDocumentation, isParseError } from './document-parser';
 import { parseOpenApiSpec, isOpenApiSpec, isOpenApiParseError } from './openapi-parser';
 import { storeScrapedContent, getScrapedContentByJobId, isStorageError } from './storage';
+import { detectTemplate } from './templates/detector';
 
 import type { ScrapeJob } from '@prisma/client';
 
@@ -90,6 +92,44 @@ export interface CreateScrapeJobOptions {
 }
 
 /**
+ * Checks if the cached result covers the requested wishlist items
+ * Returns the uncovered items that would require a fresh scrape
+ */
+function getUncoveredWishlistItems(
+  cachedResult: ParsedApiDoc | null,
+  newWishlist: string[] | undefined
+): string[] {
+  if (!newWishlist || newWishlist.length === 0) {
+    return []; // No wishlist = nothing to check
+  }
+
+  if (!cachedResult?.endpoints || cachedResult.endpoints.length === 0) {
+    return newWishlist; // No cached endpoints = all items uncovered
+  }
+
+  // Build a searchable text from all cached endpoints
+  const cachedEndpointsText = cachedResult.endpoints
+    .map((ep) =>
+      [ep.name, ep.slug, ep.path, ep.description || '', ...(ep.tags || [])].join(' ').toLowerCase()
+    )
+    .join(' ');
+
+  // Check which wishlist items are NOT covered by cached endpoints
+  const uncovered: string[] = [];
+  for (const item of newWishlist) {
+    const itemLower = item.toLowerCase();
+    // Check if any word from the wishlist item appears in cached endpoints
+    const words = itemLower.split(/\s+/).filter((w) => w.length > 2);
+    const isCovered = words.some((word) => cachedEndpointsText.includes(word));
+    if (!isCovered) {
+      uncovered.push(item);
+    }
+  }
+
+  return uncovered;
+}
+
+/**
  * Creates a new scrape job with PENDING status
  *
  * @param tenantId - The tenant creating the job
@@ -132,8 +172,16 @@ export async function createScrapeJob(
       const hasEnoughEndpoints =
         result?.endpoints && result.endpoints.length >= minEndpointsForCache;
 
-      // Only use cache if it has valid results
-      if (hasEnoughEndpoints) {
+      // Check if wishlist items are covered by the cached result
+      const uncoveredItems = getUncoveredWishlistItems(result, wishlist);
+      const wishlistCovered = uncoveredItems.length === 0;
+
+      // Only use cache if it has valid results AND covers the wishlist
+      if (hasEnoughEndpoints && wishlistCovered) {
+        console.log(
+          `[Scrape Job] Using cached job ${existingJob.id} with ${result?.endpoints?.length} endpoints ` +
+            `(wishlist fully covered)`
+        );
         return {
           jobId: existingJob.id,
           status: existingJob.status as CreateScrapeJobResponse['status'],
@@ -141,11 +189,18 @@ export async function createScrapeJob(
         };
       }
 
-      // Cache exists but has 0/few endpoints - log and create new job
-      console.log(
-        `[Scrape Job] Found cached job ${existingJob.id} with ${result?.endpoints?.length ?? 0} endpoints ` +
-          `(min required: ${minEndpointsForCache}). Creating fresh job.`
-      );
+      // Cache exists but doesn't meet requirements - log reason and create new job
+      if (!hasEnoughEndpoints) {
+        console.log(
+          `[Scrape Job] Found cached job ${existingJob.id} with ${result?.endpoints?.length ?? 0} endpoints ` +
+            `(min required: ${minEndpointsForCache}). Creating fresh job.`
+        );
+      } else if (uncoveredItems.length > 0) {
+        console.log(
+          `[Scrape Job] Found cached job ${existingJob.id} but wishlist items not covered: ` +
+            `[${uncoveredItems.join(', ')}]. Creating fresh job with expanded wishlist.`
+        );
+      }
     }
   }
 
@@ -670,9 +725,17 @@ export async function processJob(
       onProgress?.('GENERATING', `Applied wishlist prioritization (${job.wishlist.length} items)`);
     }
 
-    // Validate and finalize the document
-    parsedDoc = finalizeDocument(parsedDoc, sourceUrls);
+    // Validate and finalize the document (includes template detection)
+    parsedDoc = finalizeDocument(parsedDoc, sourceUrls, scrapedContent);
     await updateJobProgress(jobId, 95);
+
+    // Log template detection result
+    if (parsedDoc.metadata?.detectedTemplate) {
+      onProgress?.(
+        'GENERATING',
+        `Detected ${parsedDoc.metadata.detectedTemplate.templateName} template pattern`
+      );
+    }
 
     // ==========================================================================
     // Stage 4: COMPLETED - Mark job as done
@@ -757,7 +820,30 @@ function applyWishlistPrioritization(doc: ParsedApiDoc, wishlist: string[]): Par
 /**
  * Finalize the document with metadata and defaults
  */
-function finalizeDocument(doc: ParsedApiDoc, sourceUrls: string[]): ParsedApiDoc {
+function finalizeDocument(
+  doc: ParsedApiDoc,
+  sourceUrls: string[],
+  scrapedContent?: string
+): ParsedApiDoc {
+  // Run template detection if we have content
+  let detectedTemplate: DetectedTemplate | undefined;
+  if (scrapedContent) {
+    const detection = detectTemplate(doc, scrapedContent, sourceUrls);
+    if (detection.detected && detection.template) {
+      console.log(
+        `[Template Detection] Detected ${detection.template.name} template with ${Math.round(detection.confidence * 100)}% confidence`
+      );
+      console.log(`[Template Detection] Signals: ${detection.signals.slice(0, 3).join(', ')}`);
+      detectedTemplate = {
+        templateId: detection.template.id,
+        templateName: detection.template.name,
+        confidence: detection.confidence,
+        signals: detection.signals,
+        suggestedBaseUrl: detection.suggestedBaseUrl,
+      };
+    }
+  }
+
   return {
     ...doc,
     // Ensure required fields have values
@@ -772,6 +858,7 @@ function finalizeDocument(doc: ParsedApiDoc, sourceUrls: string[]): ParsedApiDoc
       sourceUrls,
       aiConfidence: doc.metadata?.aiConfidence ?? 0.8,
       warnings: doc.metadata?.warnings ?? [],
+      detectedTemplate,
     },
   };
 }
@@ -956,8 +1043,8 @@ export async function reanalyzeJob(
       onProgress?.('GENERATING', `Applied wishlist prioritization (${job.wishlist.length} items)`);
     }
 
-    // Finalize the document
-    parsedDoc = finalizeDocument(parsedDoc, sourceUrls);
+    // Finalize the document (includes template detection)
+    parsedDoc = finalizeDocument(parsedDoc, sourceUrls, cachedContent);
 
     // Add metadata about re-analysis
     parsedDoc.metadata = {

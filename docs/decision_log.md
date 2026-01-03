@@ -29,6 +29,8 @@
 | ADR-013 | 2026-01-02 | arch     | active  | Gemini 3.0 as default LLM, crawl-first scraping         |
 | ADR-014 | 2026-01-03 | arch     | active  | Dual scraping modes: auto-discover vs specific pages    |
 | ADR-015 | 2026-01-03 | arch     | planned | Hybrid auth model: platform-owned + user-owned creds    |
+| ADR-016 | 2026-01-03 | arch     | active  | Wishlist-aware cache validation for scrape jobs         |
+| ADR-017 | 2026-01-03 | arch     | active  | Template auto-detection for schema-driven APIs          |
 
 **Categories:** `arch` | `data` | `api` | `ui` | `test` | `infra` | `error`
 
@@ -69,6 +71,140 @@
 ## Log Entries
 
 <!-- Add new entries below this line, newest first -->
+
+### ADR-017: Template Auto-Detection for Schema-Driven APIs
+
+**Date:** 2026-01-03 | **Category:** arch | **Status:** active
+
+#### Trigger
+
+Some APIs have dynamically-generated endpoints based on user schemas (database tables, collections, content types). Examples: Supabase/PostgREST, Airtable, Notion databases, Headless CMS platforms. These APIs can't be effectively scraped because endpoints are determined at runtime by the user's data model.
+
+Initial implementation required users to manually select "Use Template" mode upfront, but this was poor UX:
+
+- Non-technical users don't know if an API follows PostgREST conventions
+- Adds cognitive load before even starting
+- Creates a "wrong path" anxiety
+
+#### Decision
+
+Implemented **auto-detection** of template patterns during AI parsing:
+
+1. **Detection happens during scraping**: `detectTemplate()` runs in `finalizeDocument()` after AI parsing
+2. **Pattern matching**: Checks URL patterns, content keywords, endpoint paths for known patterns
+3. **Detection stored in metadata**: Results go in `metadata.detectedTemplate` with confidence score
+4. **UI shows detection banner**: In Review Actions step, shows "PostgREST pattern detected" with option to add template actions
+5. **Non-destructive**: Template actions are added alongside AI-extracted, not replacing them
+
+```typescript
+// Detection patterns check for:
+// - Supabase URLs (*.supabase.co, /rest/v1/)
+// - PostgREST keywords (RLS, apikey, .select(), etc.)
+// - REST CRUD endpoint patterns (GET /{resource}, POST /{resource}/{id})
+
+function detectTemplate(
+  parsedDoc: ParsedApiDoc,
+  scrapedContent: string,
+  sourceUrls: string[]
+): TemplateDetectionResult;
+```
+
+#### Rationale
+
+- **AI does the work**: Users don't need to know if API is "templated"
+- **Non-destructive**: Users see both AI-extracted AND template actions
+- **Progressive disclosure**: Detection banner only appears when confident (>30%)
+- **Visual distinction**: Template actions marked with purple border for clarity
+
+#### Supersedes
+
+Initial manual template selection mode (never released)
+
+#### Migration
+
+- **Affected files:** `src/lib/modules/ai/templates/detector.ts` (new), `src/lib/modules/ai/scrape-job.service.ts`
+- **Find:** Template detection in `finalizeDocument()`
+- **Verify:** Scrape a Supabase docs URL and verify detection banner appears
+
+#### AI Instructions
+
+- Template detection runs automatically during scraping - no user selection needed
+- If user asks about "templated APIs" or "schema-driven APIs", explain auto-detection
+- PostgREST template includes 7 actions: query, get, insert, update, upsert, delete, RPC
+- Generic REST CRUD template includes 6 actions: list, get, create, update, patch, delete
+- Detection confidence threshold is 30% minimum
+
+---
+
+### ADR-016: Wishlist-Aware Cache Validation for Scrape Jobs
+
+**Date:** 2026-01-03 | **Category:** arch | **Status:** active
+
+#### Trigger
+
+Users reported that after deleting an integration and recreating it from scratch, the scrape job cache returned stale actions. The cache lookup only matched on `tenantId + documentationUrl + COMPLETED status` and didn't consider:
+
+1. Whether the wishlist had changed
+2. Whether cached results covered the new wishlist items
+3. Whether users explicitly wanted a fresh scrape
+
+This caused confusion: "I added new wishlist items but got the same cached actions."
+
+#### Decision
+
+Implemented smart cache validation with wishlist coverage checking:
+
+1. **Wishlist Coverage Check**: New `getUncoveredWishlistItems()` helper compares new wishlist against cached endpoint names, slugs, paths, and descriptions using word-based matching
+
+2. **Cache Decision Logic**:
+   - Cache HIT only when: (a) enough endpoints exist AND (b) all wishlist items are covered
+   - Cache MISS triggers fresh scrape when: wishlist has uncovered items OR fewer endpoints than threshold
+
+3. **Force Fresh Option**: Added `force: true` option and UI checkbox to explicitly bypass cache
+
+4. **Logging**: Added detailed logging showing cache decisions (used, skipped, uncovered items)
+
+```typescript
+function getUncoveredWishlistItems(
+  cachedResult: ParsedApiDoc | null,
+  newWishlist: string[] | undefined
+): string[] {
+  // Returns wishlist items not found in cached endpoints
+}
+```
+
+#### Rationale
+
+- **User expectation**: Different wishlist = different scrape intent
+- **Progressive disclosure**: Smart defaults with explicit override option
+- **Transparency**: Logging shows why cache was used/skipped
+- **Non-breaking**: Existing behavior preserved when no wishlist provided
+
+Trade-offs:
+
+- Word-based matching is fuzzy (may false-negative on synonyms)
+- Still uses cache if no wishlist provided, even after integration deletion
+
+#### Supersedes
+
+N/A (enhancement to existing cache logic)
+
+#### Migration
+
+- **Affected files:** `src/lib/modules/ai/scrape-job.service.ts`, `src/components/features/integrations/wizard/StepUrlInput.tsx`
+- **No breaking changes**: Cache behavior is stricter but backward-compatible
+
+#### AI Instructions
+
+When working with scrape job caching:
+
+- Cache is only used when wishlist items are covered by cached endpoints
+- Use `force: true` to bypass cache entirely
+- The coverage check uses word-based matching (words > 2 chars)
+- Check server logs for cache decision explanations
+- UI checkbox "Force fresh scrape" maps to `force: true` API option
+
+---
 
 ### ADR-015: Hybrid Authentication Model (Platform-Owned + User-Owned Credentials)
 

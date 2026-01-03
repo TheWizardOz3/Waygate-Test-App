@@ -4,13 +4,24 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Globe, Sparkles, Plus, X, ArrowRight, Loader2, FileText, Search } from 'lucide-react';
+import {
+  Globe,
+  Sparkles,
+  Plus,
+  X,
+  ArrowRight,
+  Loader2,
+  FileText,
+  Search,
+  RefreshCw,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Form,
   FormControl,
@@ -36,6 +47,7 @@ type UrlInputFormData = z.infer<typeof urlInputSchema>;
 export function StepUrlInput() {
   const [scrapeMode, setScrapeMode] = useState<ScrapeMode>('auto');
   const [wishlistItems, setWishlistItems] = useState<string[]>([]);
+  const [forceFresh, setForceFresh] = useState(false);
   const { setDocumentationUrl, setWishlist, setScrapeJob, goToStep } = useWizardStore();
   const { startScraping, isPending } = useScrapeJob();
 
@@ -94,11 +106,14 @@ export function StepUrlInput() {
 
     try {
       // Start the scraping job
-      const result = await startScraping({
-        documentationUrl: scrapeMode === 'auto' ? data.documentationUrl : undefined,
-        specificUrls: scrapeMode === 'specific' ? specificUrls : undefined,
-        wishlist: wishlistItems,
-      });
+      const result = await startScraping(
+        {
+          documentationUrl: scrapeMode === 'auto' ? data.documentationUrl : undefined,
+          specificUrls: scrapeMode === 'specific' ? specificUrls : undefined,
+          wishlist: wishlistItems,
+        },
+        { force: forceFresh }
+      );
 
       // Store job ID and move to scraping step
       setScrapeJob(result.jobId, result.status);
@@ -275,6 +290,28 @@ export function StepUrlInput() {
               ))}
             </div>
           )}
+        </div>
+
+        {/* Force Fresh Scrape Option */}
+        <div className="flex items-start space-x-3 rounded-lg border border-border/50 bg-muted/30 p-4">
+          <Checkbox
+            id="force-fresh"
+            checked={forceFresh}
+            onCheckedChange={(checked) => setForceFresh(checked === true)}
+          />
+          <div className="space-y-1">
+            <Label
+              htmlFor="force-fresh"
+              className="flex cursor-pointer items-center gap-2 text-sm font-medium"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Force fresh scrape
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Bypass cached results and re-scrape the documentation from scratch. Use this if
+              you&apos;ve previously scraped this URL and want updated results.
+            </p>
+          </div>
         </div>
 
         {/* Example URLs - only show in auto mode */}

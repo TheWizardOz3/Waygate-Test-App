@@ -180,6 +180,12 @@ enum ScrapeJobStatus {
 | `src/lib/modules/ai/llm/types.ts`             | LLM provider interface for future extensibility                        |
 | `src/app/api/v1/scrape/route.ts`              | POST /scrape (create job) + GET /scrape (list jobs)                    |
 | `src/app/api/v1/scrape/[jobId]/route.ts`      | GET /scrape/:jobId (job status)                                        |
+| `src/lib/modules/ai/templates/index.ts`       | **Template registry and exports (v0.1.7)**                             |
+| `src/lib/modules/ai/templates/types.ts`       | **TypeScript types for templates (v0.1.7)**                            |
+| `src/lib/modules/ai/templates/postgrest.ts`   | **PostgREST/Supabase template with 7 actions (v0.1.7)**                |
+| `src/lib/modules/ai/templates/rest-crud.ts`   | **Generic REST CRUD template with 6 actions (v0.1.7)**                 |
+| `src/lib/modules/ai/templates/detector.ts`    | **Auto-detection of template patterns from scraped content (v0.1.7)**  |
+| `src/lib/modules/ai/templates/generator.ts`   | **Converts templates to ParsedApiDoc format (v0.1.7)**                 |
 
 ### API Endpoints
 
@@ -522,6 +528,146 @@ interface ParsedApiDoc {
 - ~~LLM-guided link prioritization~~ ✅ Implemented in v0.1.3
 - ~~Wishlist-aware crawling~~ ✅ Implemented in v0.1.3
 - ~~Smarter URL pattern detection~~ ✅ Implemented in v0.1.3
+- ~~Template-based integration creation~~ ✅ Implemented in v0.1.7
+
+---
+
+## Template-Based Integration Creation (v0.1.7)
+
+### Overview
+
+Some APIs have dynamically-generated endpoints based on user schemas (database tables, collections, content types). These APIs can't be effectively scraped because endpoints are determined at runtime by the user's data model:
+
+- **Supabase/PostgREST** - Endpoints based on database tables
+- **Airtable** - Endpoints based on bases and tables
+- **Notion** - Database endpoints based on workspace content
+- **Firebase/Firestore** - Collection-based endpoints
+- **Headless CMS** (Strapi, Contentful) - Content-type driven endpoints
+
+For these APIs, Waygate offers **Template-Based Integration Creation**: pre-built action templates with parameterized resources.
+
+### User Story
+
+> As a developer, I want to create an integration for a schema-driven API like Supabase by selecting a template and providing my base URL, so that I can quickly set up parameterized actions without needing AI to scrape non-existent documentation.
+
+### How It Works
+
+1. **User enters documentation URL as normal** (no special selection required)
+2. **AI scrapes and parses the documentation**
+3. **During parsing, AI auto-detects if API matches a known template pattern** (e.g., PostgREST/Supabase)
+4. **If template detected → shows banner in Review Actions step** offering to add template actions
+5. **User can accept template actions** which are added alongside AI-extracted actions
+6. **Template actions are visually marked** with a purple border for easy identification
+
+### Available Templates
+
+#### PostgREST Template (Supabase-compatible)
+
+For APIs following the PostgREST convention (auto-generated REST from PostgreSQL):
+
+| Action            | Method | Path                             | Parameters                                                                     |
+| ----------------- | ------ | -------------------------------- | ------------------------------------------------------------------------------ |
+| `query-resource`  | GET    | `/rest/v1/{resource}`            | `resource` (string), `select` (string, optional), `filters` (object, optional) |
+| `get-by-id`       | GET    | `/rest/v1/{resource}?id=eq.{id}` | `resource`, `id`                                                               |
+| `insert-resource` | POST   | `/rest/v1/{resource}`            | `resource`, `data` (object)                                                    |
+| `update-resource` | PATCH  | `/rest/v1/{resource}?id=eq.{id}` | `resource`, `id`, `data` (object)                                              |
+| `upsert-resource` | POST   | `/rest/v1/{resource}`            | `resource`, `data` (object), headers: `Prefer: resolution=merge-duplicates`    |
+| `delete-resource` | DELETE | `/rest/v1/{resource}?id=eq.{id}` | `resource`, `id`                                                               |
+| `call-rpc`        | POST   | `/rest/v1/rpc/{function}`        | `function`, `args` (object)                                                    |
+
+#### Generic REST CRUD Template
+
+For standard REST APIs with resource-based endpoints:
+
+| Action            | Method | Path               | Parameters                                          |
+| ----------------- | ------ | ------------------ | --------------------------------------------------- |
+| `list-resources`  | GET    | `/{resource}`      | `resource`, `limit` (optional), `offset` (optional) |
+| `get-resource`    | GET    | `/{resource}/{id}` | `resource`, `id`                                    |
+| `create-resource` | POST   | `/{resource}`      | `resource`, `data` (object)                         |
+| `update-resource` | PUT    | `/{resource}/{id}` | `resource`, `id`, `data` (object)                   |
+| `patch-resource`  | PATCH  | `/{resource}/{id}` | `resource`, `id`, `data` (object)                   |
+| `delete-resource` | DELETE | `/{resource}/{id}` | `resource`, `id`                                    |
+
+### Implementation Tasks
+
+#### Task 15: Template Definitions & Schema (~45 min) ✅
+
+**Files:** `src/lib/modules/ai/templates/index.ts`, `src/lib/modules/ai/templates/types.ts`, `src/lib/modules/ai/templates/postgrest.ts`, `src/lib/modules/ai/templates/rest-crud.ts`
+
+- Create TypeScript types for action templates
+- Define PostgREST template with all 7 actions
+- Define Generic REST CRUD template with 6 actions
+- Include JSON Schema definitions for each action's input/output
+- Export template registry with metadata (name, description, icon, auth hints)
+
+#### Task 16: Template Auto-Detection (~45 min) ✅
+
+**Files:** `src/lib/modules/ai/templates/detector.ts`, `src/lib/modules/ai/scrape-job.service.ts`
+
+- Implement `detectTemplate(parsedDoc, scrapedContent, sourceUrls)` function
+- Pattern matching for PostgREST (Supabase URLs, `/rest/v1/` paths, PostgREST keywords)
+- Pattern matching for Generic REST CRUD (standard resource patterns)
+- Return confidence score and detection signals
+- Integrate into `finalizeDocument()` in scrape job processing
+
+#### Task 17: Template-to-Actions Generator (~45 min) ✅
+
+**Files:** `src/lib/modules/ai/templates/generator.ts`
+
+- Implement `generateFromTemplate(templateId, baseUrl, options)`
+- Transform template definitions into proper ActionDefinition objects
+- Generate unique slugs per integration
+- Apply base URL to all action paths
+- Return ParsedApiDoc-compatible structure
+
+#### Task 18: Review Actions Template Banner (~30 min) ✅
+
+**Files:** `src/stores/wizard.store.ts`, `src/components/features/integrations/wizard/StepReviewActions.tsx`
+
+- Add `detectedTemplate` to wizard state (auto-populated from scrape result)
+- Show template detection banner when pattern is found
+- "Add template actions" button merges template actions with AI-extracted ones
+- Template actions marked with purple border and "Template" badge
+
+### Template Schema
+
+```typescript
+interface ActionTemplate {
+  id: string;
+  name: string;
+  description: string;
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  pathTemplate: string; // e.g., "/rest/v1/{resource}"
+  pathParameters: ParameterDef[];
+  queryParameters?: ParameterDef[];
+  requestBody?: {
+    contentType: string;
+    schema: JSONSchema;
+  };
+  responseSchema?: JSONSchema;
+  headers?: Record<string, string>;
+}
+
+interface IntegrationTemplate {
+  id: string;
+  name: string;
+  description: string;
+  icon: string; // Lucide icon name
+  suggestedAuthType: AuthType;
+  suggestedAuthConfig?: Partial<AuthConfig>;
+  baseUrlPlaceholder: string; // e.g., "https://YOUR-PROJECT.supabase.co"
+  baseUrlHint: string;
+  actions: ActionTemplate[];
+}
+```
+
+### Test Cases
+
+| Component                | Test Cases                                                                                   |
+| ------------------------ | -------------------------------------------------------------------------------------------- |
+| **Template Registry**    | Templates load correctly; All templates have required fields; Actions have valid JSON Schema |
+| **Template Generator**   | Generates correct action count; Applies base URL correctly; Creates valid slugs              |
+| **Wizard Template Mode** | Template selection shows cards; Skips scraping; Creates integration successfully             |
 
 ---
 
