@@ -59,15 +59,15 @@ export function QuickTestModal({ action, integrationSlug, trigger }: QuickTestMo
       const startTime = Date.now();
 
       try {
-        // Build the request preview
+        // Build the request preview - show the correct Waygate Gateway URL
         const requestPreview = {
           method: action.httpMethod,
-          url: `/api/v1/gateway/${integrationSlug}${action.endpointTemplate}`,
+          url: `/api/v1/actions/${integrationSlug}/${action.slug}`,
           headers: {
             'Content-Type': 'application/json',
-            'X-Waygate-Integration': integrationSlug,
+            'X-Waygate-Api-Key': '<your-waygate-api-key>',
           },
-          body: action.httpMethod !== 'GET' ? input : undefined,
+          body: input,
         };
 
         setResult({ request: requestPreview });

@@ -14,6 +14,7 @@
 
 | Version | Date       | Type       | Summary                                                         |
 | ------- | ---------- | ---------- | --------------------------------------------------------------- |
+| 0.1.12  | 2026-01-03 | patch      | Fix endpoint URL copy and logging UUID issues                   |
 | 0.1.11  | 2026-01-03 | patch      | Fix empty query params causing PostgREST parse errors           |
 | 0.1.10  | 2026-01-03 | patch      | Intelligent API key defaults for Supabase (apikey header, etc.) |
 | 0.1.9   | 2026-01-03 | minor      | Per-credential baseUrl for user-specific APIs (Supabase, etc.)  |
@@ -70,6 +71,26 @@
 ## Releases
 
 <!-- Add new versions below this line, newest first -->
+
+## [0.1.12] - 2026-01-03
+
+### Fixed
+
+- **QuickTestModal Endpoint URL**
+  - Fixed incorrect URL format: was `/api/v1/gateway/{slug}{template}`, now `/api/v1/actions/{slug}/{action}`
+  - Updated headers to match ActionTester format (X-Waygate-Api-Key placeholder)
+
+- **Logging UUID Validation Error**
+  - Gateway was passing integration slug to logger, but schema expects UUID
+  - Now passes `integration.id` (UUID) instead of `context.integrationSlug`
+  - Fixes "Invalid UUID" error that was causing log failures
+
+### Changed
+
+- `logInvocation()` now accepts `integrationId` (UUID) as separate parameter
+- QuickTestModal request preview now shows correct Waygate Gateway URL format
+
+---
 
 ## [0.1.11] - 2026-01-03
 

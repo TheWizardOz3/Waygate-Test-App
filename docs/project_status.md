@@ -1,6 +1,6 @@
 # Project Status: Waygate
 
-**Last Updated**: 2026-01-03 (v0.1.11 - Empty Query Params Fix)
+**Last Updated**: 2026-01-03 (v0.1.12 - Endpoint URL & Logging UUID Fixes)
 
 ---
 

@@ -187,7 +187,7 @@ export async function invokeAction(
     const executionResult = await executeRequest(request, integration.id, options);
 
     // 6. Log the request/response
-    await logInvocation(context, action.id, request, url, executionResult);
+    await logInvocation(context, integration.id, action.id, request, url, executionResult);
 
     // 7. Format and return response
     if (executionResult.success) {
@@ -606,6 +606,7 @@ async function executeRequest(
  */
 async function logInvocation(
   context: InvocationContext,
+  integrationId: string,
   actionId: string,
   request: HttpClientRequest,
   url: string,
@@ -614,7 +615,7 @@ async function logInvocation(
   try {
     await logRequestResponse({
       tenantId: context.tenantId,
-      integrationId: context.integrationSlug, // Use slug for readability in logs
+      integrationId, // Must be UUID for database FK constraint
       actionId,
       request: {
         method: request.method,
