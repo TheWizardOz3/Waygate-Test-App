@@ -22,6 +22,7 @@
 | ADR-006 | 2026-01-02 | arch     | active | Result pattern for execution service                  |
 | ADR-007 | 2026-01-02 | arch     | active | LLM abstraction layer for future multi-model support  |
 | ADR-008 | 2026-01-02 | arch     | active | JSON Schema validation with Ajv and caching           |
+| ADR-009 | 2026-01-02 | arch     | active | PostgreSQL advisory locks for token refresh           |
 
 **Categories:** `arch` | `data` | `api` | `ui` | `test` | `infra` | `error`
 
@@ -470,5 +471,64 @@ When working with JSON Schema validation:
 - The validator cache is in-memory and resets on server restart - this is intentional for simplicity
 - Schema hashing uses SHA-256 for collision resistance
 - Always prefer Zod for TypeScript-defined schemas; use Ajv only for dynamic/stored JSON Schemas
+
+---
+
+### ADR-009: PostgreSQL Advisory Locks for Token Refresh
+
+**Date:** 2026-01-02 | **Category:** arch | **Status:** active
+
+#### Trigger
+
+The Token Refresh Management feature needs to prevent concurrent refresh attempts on the same credential. Multiple cron invocations or manual refreshes could otherwise race, potentially causing token invalidation or duplicate requests to OAuth providers.
+
+#### Decision
+
+Implemented PostgreSQL advisory locks for credential refresh synchronization:
+
+1. **Non-blocking advisory locks**: Use `pg_try_advisory_lock()` (non-blocking) instead of `pg_advisory_lock()` (blocking)
+2. **UUID to integer conversion**: Convert UUID credential IDs to 64-bit lock keys using BigInt from first 16 hex chars
+3. **Lock-per-credential**: Each credential gets its own lock, allowing parallel refresh of different credentials
+4. **Always-release pattern**: Lock released in `finally` block regardless of refresh success/failure
+5. **Skip on lock failure**: If lock can't be acquired, skip credential (another process is refreshing it)
+
+```typescript
+// Convert UUID to lock key
+function uuidToLockKey(uuid: string): bigint {
+  const cleanUuid = uuid.replace(/-/g, '');
+  return BigInt('0x' + cleanUuid.substring(0, 16));
+}
+
+// Non-blocking lock acquisition
+const result = await prisma.$queryRaw`SELECT pg_try_advisory_lock(${lockKey})`;
+```
+
+#### Rationale
+
+- **Advisory locks over row locks**: Row locks would require database transactions spanning the entire refresh (including external HTTP calls), causing connection pool exhaustion
+- **Non-blocking over blocking**: Prevents job timeouts waiting for locks; better to skip and retry next cycle
+- **Session-level locks**: Advisory locks are session-scoped, automatically released if connection drops
+- **In-database vs distributed lock**: PostgreSQL native, no Redis dependency needed for MVP
+- **BigInt lock keys**: PostgreSQL advisory locks take `bigint` keys; truncating UUID to 64-bit provides sufficient uniqueness
+
+#### Supersedes
+
+N/A (new feature)
+
+#### Migration
+
+- **Affected files:** `src/lib/modules/credentials/credential.repository.ts`, `src/lib/modules/credentials/token-refresh.service.ts`
+- **New functions:** `tryAcquireRefreshLock()`, `releaseRefreshLock()`, `uuidToLockKey()`
+- **Pattern:** Always use in try/finally to ensure release
+
+#### AI Instructions
+
+When working with token refresh locking:
+
+- ALWAYS use `tryAcquireRefreshLock()` before refresh, `releaseRefreshLock()` in finally block
+- If lock not acquired, return `{ success: false, error: { code: 'LOCK_NOT_ACQUIRED' } }`
+- Do NOT use blocking `pg_advisory_lock()` - it can cause job timeouts
+- The lock is session-scoped; connection pool returns connections to pool with locks released
+- For future scaling: can migrate to Redis-based distributed locks without changing service interface
 
 ---

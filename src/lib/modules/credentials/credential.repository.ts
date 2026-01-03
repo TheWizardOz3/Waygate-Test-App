@@ -182,6 +182,182 @@ export async function findExpiringCredentials(
 }
 
 /**
+ * Credential with integration relationship for token refresh
+ */
+export interface CredentialWithIntegration extends IntegrationCredential {
+  integration: {
+    id: string;
+    name: string;
+    slug: string;
+    authType: string;
+    authConfig: Prisma.JsonValue;
+  };
+}
+
+/**
+ * Finds OAuth2 credentials that are expiring soon, with integration info
+ * Used by the token refresh background job to know which provider to use
+ *
+ * @param bufferMinutes - Minutes before expiration to consider "expiring"
+ * @returns Credentials expiring within the buffer, with their integration data
+ */
+export async function findExpiringOAuth2Credentials(
+  bufferMinutes: number = 10
+): Promise<CredentialWithIntegration[]> {
+  const expiringBefore = new Date(Date.now() + bufferMinutes * 60 * 1000);
+
+  return prisma.integrationCredential.findMany({
+    where: {
+      status: CredentialStatus.active,
+      credentialType: CredentialType.oauth2_tokens,
+      expiresAt: {
+        lte: expiringBefore,
+        not: null,
+      },
+      // Only include credentials that have a refresh token
+      encryptedRefreshToken: {
+        not: null,
+      },
+    },
+    include: {
+      integration: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          authType: true,
+          authConfig: true,
+        },
+      },
+    },
+    orderBy: {
+      expiresAt: 'asc',
+    },
+  });
+}
+
+// =============================================================================
+// ADVISORY LOCKING FOR TOKEN REFRESH
+// =============================================================================
+
+/**
+ * Converts a UUID string to a numeric hash for PostgreSQL advisory locks
+ * Advisory locks require bigint keys, so we hash the UUID
+ */
+function uuidToLockKey(uuid: string): bigint {
+  // Simple hash: sum character codes with position weighting
+  let hash = BigInt(0);
+  for (let i = 0; i < uuid.length; i++) {
+    hash = (hash * BigInt(31) + BigInt(uuid.charCodeAt(i))) % BigInt(Number.MAX_SAFE_INTEGER);
+  }
+  return hash;
+}
+
+/**
+ * Attempts to acquire an advisory lock for token refresh
+ * Uses pg_try_advisory_lock to avoid blocking - returns immediately
+ *
+ * @param credentialId - The credential ID to lock
+ * @returns true if lock acquired, false if already locked by another process
+ */
+export async function tryAcquireRefreshLock(credentialId: string): Promise<boolean> {
+  const lockKey = uuidToLockKey(credentialId);
+
+  const result = await prisma.$queryRaw<[{ pg_try_advisory_lock: boolean }]>`
+    SELECT pg_try_advisory_lock(${lockKey})
+  `;
+
+  return result[0].pg_try_advisory_lock;
+}
+
+/**
+ * Releases an advisory lock for token refresh
+ *
+ * @param credentialId - The credential ID to unlock
+ * @returns true if lock was released, false if lock wasn't held
+ */
+export async function releaseRefreshLock(credentialId: string): Promise<boolean> {
+  const lockKey = uuidToLockKey(credentialId);
+
+  const result = await prisma.$queryRaw<[{ pg_advisory_unlock: boolean }]>`
+    SELECT pg_advisory_unlock(${lockKey})
+  `;
+
+  return result[0].pg_advisory_unlock;
+}
+
+// =============================================================================
+// OPTIMISTIC LOCKING FOR TOKEN REFRESH
+// =============================================================================
+
+/**
+ * Result of an optimistic lock update attempt
+ */
+export interface OptimisticUpdateResult {
+  success: boolean;
+  credential: IntegrationCredential | null;
+  reason?: 'not_found' | 'concurrent_modification';
+}
+
+/**
+ * Updates a credential with optimistic locking
+ * Only updates if the credential's updatedAt matches the expected value
+ * This prevents race conditions when multiple processes try to refresh the same token
+ *
+ * @param credentialId - The credential ID to update
+ * @param expectedUpdatedAt - The expected updatedAt timestamp (from when we read the credential)
+ * @param input - The update data
+ * @returns Result indicating success or failure reason
+ */
+export async function updateCredentialWithOptimisticLock(
+  credentialId: string,
+  expectedUpdatedAt: Date,
+  input: UpdateCredentialInput
+): Promise<OptimisticUpdateResult> {
+  // Use updateMany with a condition on updatedAt - returns count of updated rows
+  const updateData: Prisma.IntegrationCredentialUpdateManyMutationInput = {};
+
+  if (input.encryptedData !== undefined) {
+    updateData.encryptedData = new Uint8Array(input.encryptedData);
+  }
+  if (input.encryptedRefreshToken !== undefined) {
+    updateData.encryptedRefreshToken = input.encryptedRefreshToken
+      ? new Uint8Array(input.encryptedRefreshToken)
+      : null;
+  }
+  if (input.expiresAt !== undefined) {
+    updateData.expiresAt = input.expiresAt;
+  }
+  if (input.scopes !== undefined) {
+    updateData.scopes = input.scopes;
+  }
+  if (input.status !== undefined) {
+    updateData.status = input.status;
+  }
+
+  const result = await prisma.integrationCredential.updateMany({
+    where: {
+      id: credentialId,
+      updatedAt: expectedUpdatedAt,
+    },
+    data: updateData,
+  });
+
+  if (result.count === 0) {
+    // Check if credential exists to determine failure reason
+    const existing = await findCredentialById(credentialId);
+    if (!existing) {
+      return { success: false, credential: null, reason: 'not_found' };
+    }
+    return { success: false, credential: existing, reason: 'concurrent_modification' };
+  }
+
+  // Fetch and return the updated credential
+  const updated = await findCredentialById(credentialId);
+  return { success: true, credential: updated };
+}
+
+/**
  * Updates a credential
  */
 export async function updateCredential(

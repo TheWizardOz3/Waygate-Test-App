@@ -14,6 +14,7 @@
 
 | Version | Date       | Type       | Summary                                                  |
 | ------- | ---------- | ---------- | -------------------------------------------------------- |
+| 0.0.7   | 2026-01-02 | prerelease | Token Refresh Management complete                        |
 | 0.0.6   | 2026-01-02 | prerelease | Action Registry & Schema complete                        |
 | 0.2.0   | 2026-01-02 | prerelease | AI Documentation Scraper complete                        |
 | 0.1.0   | 2026-01-02 | prerelease | Core infrastructure (Auth + DB + Execution)              |
@@ -60,6 +61,38 @@
 ## [Unreleased]
 
 _No unreleased changes_
+
+---
+
+## [0.0.7] - 2026-01-02
+
+### Added
+
+- **Token Refresh Management (Feature #7)** - Complete
+  - Proactive background token refresh system for OAuth2 credentials
+  - Repository methods for finding expiring credentials with configurable buffer window
+  - PostgreSQL advisory locks (`pg_try_advisory_lock`/`pg_advisory_unlock`) for concurrent refresh prevention
+  - Token refresh service with retry logic (3 attempts) and exponential backoff (1s, 2s, 4s)
+  - Refresh token rotation handling (stores new refresh token if provider rotates)
+  - Dynamic OAuth provider creation from integration `authConfig`
+  - Structured JSON logging for refresh events (credential ID, integration ID, tenant ID, status, duration)
+  - Internal cron endpoint: `POST /api/v1/internal/token-refresh` (protected by `CRON_SECRET`)
+  - Cron status endpoint: `GET /api/v1/internal/token-refresh` (returns job configuration)
+  - Manual refresh endpoint: `POST /api/v1/integrations/:id/refresh` (API key authenticated)
+  - Refresh info endpoint: `GET /api/v1/integrations/:id/refresh` (token expiration status)
+  - Vercel Cron configuration (`vercel.json`) with 5-minute schedule
+  - Credentials marked `needs_reauth` after max retries exhausted
+  - 17 new unit tests for token refresh service
+  - 12 new integration tests for token refresh API endpoints
+  - 505 total tests passing
+
+### Technical Notes
+
+- Buffer time: 10 minutes (configurable via query param)
+- Cron frequency: Every 5 minutes via Vercel Cron
+- Max retries: 3 attempts with exponential backoff
+- Locking: PostgreSQL advisory locks (non-blocking `pg_try_advisory_lock`)
+- Error handling: Non-retryable errors (invalid_grant, invalid_token) immediately mark `needs_reauth`
 
 ---
 

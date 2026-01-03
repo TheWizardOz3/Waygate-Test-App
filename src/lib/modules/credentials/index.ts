@@ -20,20 +20,26 @@ export {
   findCredentialsByIntegration,
   findCredentialsByTenant,
   findExpiringCredentials,
+  findExpiringOAuth2Credentials,
   updateCredential,
   updateCredentialForTenant,
+  updateCredentialWithOptimisticLock,
   revokeCredential,
   markCredentialNeedsReauth,
   markCredentialExpired,
   deleteCredential,
   deleteCredentialsByIntegration,
   countCredentialsByStatus,
+  tryAcquireRefreshLock,
+  releaseRefreshLock,
 } from './credential.repository';
 
 export type {
   CreateCredentialInput,
   UpdateCredentialInput,
   CredentialFilters,
+  CredentialWithIntegration,
+  OptimisticUpdateResult,
 } from './credential.repository';
 
 // Service (business logic)
@@ -91,3 +97,18 @@ export type {
   StoreBearerCredentialInput,
   StoreCustomHeaderCredentialInput,
 } from './credential.schemas';
+
+// Token Refresh Service
+export {
+  refreshExpiringTokens,
+  refreshSingleCredential,
+  refreshCredentialManually,
+  getOAuthProviderForIntegration,
+  handleRefreshResult,
+  logBatchRefreshSummary,
+  DEFAULT_BUFFER_MINUTES,
+  MAX_RETRY_ATTEMPTS,
+  BASE_BACKOFF_MS,
+} from './token-refresh.service';
+
+export type { RefreshResult, RefreshBatchResult, TokenRefreshEvent } from './token-refresh.service';

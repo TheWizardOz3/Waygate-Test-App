@@ -61,6 +61,7 @@
 | Retry Logic & Error Handling | 2026-01-02      | Exponential backoff, circuit breaker, HTTP client, 252 total tests - [Feature Doc](Features/retry-error-handling.md)                              |
 | AI Documentation Scraper     | 2026-01-02      | Firecrawl, LLM abstraction, job processing, OpenAPI parser, AI extraction, action generator - [Feature Doc](Features/ai-documentation-scraper.md) |
 | Action Registry & Schema     | 2026-01-02      | Zod schemas, repository, service, JSON Schema validator (Ajv), REST APIs, 472 total tests - [Feature Doc](Features/action-registry-schema.md)     |
+| Token Refresh Management     | 2026-01-02      | Advisory locks, retry logic, cron job, manual refresh API, 505 total tests - [Feature Doc](Features/token-refresh-management.md)                  |
 
 ### In Progress
 
@@ -70,11 +71,10 @@
 
 ### Not Started
 
-| Feature/Task             | Priority | Dependencies   | Estimated Complexity |
-| ------------------------ | -------- | -------------- | -------------------- |
-| Token Refresh Management | P0       | Auth Framework | MED                  |
-| Gateway API              | P0       | All above      | MED                  |
-| Basic Configuration UI   | P0       | Gateway API    | MED                  |
+| Feature/Task           | Priority | Dependencies | Estimated Complexity |
+| ---------------------- | -------- | ------------ | -------------------- |
+| Gateway API            | P0       | All above    | MED                  |
+| Basic Configuration UI | P0       | Gateway API  | MED                  |
 
 ---
 
@@ -90,14 +90,14 @@ The following sequence reflects dependency analysis and optimal implementation o
 | 4   | ~~Retry Logic & Error Handling~~ | #2           | MED        | ✅ Complete - Exponential backoff, circuit breaker, HTTP client          |
 | 5   | ~~AI Documentation Scraper~~     | #2           | HIGH       | ✅ Complete - Firecrawl + LLM + OpenAPI parser + action generator        |
 | 6   | ~~Action Registry & Schema~~     | #5           | HIGH       | ✅ Complete - Zod schemas, repository, service, Ajv validator, REST APIs |
-| 7   | **Token Refresh Management**     | #3           | MED        | Background token refresh before expiration                               |
+| 7   | ~~Token Refresh Management~~     | #3           | MED        | ✅ Complete - Advisory locks, retry, cron, manual refresh API            |
 | 8   | **Gateway API**                  | #3, #4, #6   | MED        | Unified REST API tying all modules together                              |
 | 9   | **Basic Configuration UI**       | #8           | MED        | Web dashboard for integration setup and testing                          |
 
 ### Upcoming Work
 
-**Current:** #7 Token Refresh Management  
-**Next Up:** #8 Gateway API
+**Current:** #8 Gateway API  
+**Next Up:** #9 Basic Configuration UI
 
 ---
 
