@@ -26,6 +26,7 @@
 | ADR-010 | 2026-01-02 | api      | active | Unified dynamic gateway endpoint over per-action routes |
 | ADR-011 | 2026-01-02 | ui       | active | CSS variable-based design system for global theming     |
 | ADR-012 | 2026-01-02 | ui       | active | Zustand for wizard state, React Query for server state  |
+| ADR-013 | 2026-01-02 | arch     | active | Gemini 3.0 as default LLM, crawl-first scraping         |
 
 **Categories:** `arch` | `data` | `api` | `ui` | `test` | `infra` | `error`
 
@@ -66,6 +67,63 @@
 ## Log Entries
 
 <!-- Add new entries below this line, newest first -->
+
+### ADR-013: Gemini 3.0 Default and Crawl-First Scraping Strategy
+
+**Date:** 2026-01-02 | **Category:** arch | **Status:** active
+
+#### Trigger
+
+During MVP testing, two issues were identified:
+
+1. The AI was using outdated Gemini 1.5 models, which provided suboptimal action extraction from API documentation
+2. Default scraping behavior was single-page, causing the scraper to miss actions on sub-pages of API documentation sites
+
+#### Decision
+
+Made two significant changes to improve documentation processing:
+
+1. **Upgraded default LLM to Gemini 3**
+   - Changed `DEFAULT_MODEL` from `gemini-1.5-pro` to `gemini-3-pro` (maps to `gemini-3-pro-preview`)
+   - Document parser now uses `gemini-3-flash` (maps to `gemini-3-flash-preview`)
+   - Added Gemini 2.5 models (`gemini-2.5-flash`, `gemini-2.5-pro`) to registry
+   - Model codes sourced from [Google AI documentation](https://ai.google.dev/gemini-api/docs/models)
+   - Legacy models remain available for backward compatibility
+
+2. **Changed default scraping mode to crawl**
+   - `crawlMode` now defaults to `true` in all scrape-related services
+   - API endpoint defaults: `crawl=true`, `maxPages=20`, `maxDepth=3`
+   - Scraper now traverses from top-level docs page through linked sub-pages
+   - Single-page mode still available via `crawl=false` for speed when appropriate
+
+#### Rationale
+
+- **Gemini 3**: Released November-December 2025, offers significantly improved reasoning capabilities and 1M token context window, leading to better endpoint extraction accuracy. Model codes are `gemini-3-pro-preview` and `gemini-3-flash-preview`
+- **Crawl-first**: API documentation is typically spread across multiple pages (endpoints listed on index, details on sub-pages). Crawling ensures comprehensive action discovery rather than only parsing the landing page
+- **Backward compatible**: Existing integrations continue working; new scrapes benefit from improved defaults
+
+#### Supersedes
+
+N/A (improvements to existing features)
+
+#### Migration
+
+- **Affected files:** `src/lib/modules/ai/llm/types.ts`, `client.ts`, `providers/gemini.ts`, `document-parser.ts`, `scrape-job.service.ts`, `ai.service.ts`, `src/app/api/v1/scrape/route.ts`
+- **Find:** `crawlMode = false` or `gemini-1.5` references
+- **Replace with:** New defaults are automatic, no changes needed for consuming code
+- **Verify:** `npm run test -- --run tests/unit/ai` passes
+
+#### AI Instructions
+
+When working with documentation scraping:
+
+- Default to crawl mode unless user explicitly requests single-page scraping
+- Use `gemini-3-pro` for critical AI tasks, `gemini-3-flash` for high-volume parsing
+- If scraping finds zero endpoints, suggest the user try with a different starting URL or increase `maxPages`
+- Legacy models are deprecated but supported for compatibility; prefer Gemini 3 models for all new work
+- Model codes follow the pattern `gemini-X-variant-preview` (e.g., `gemini-3-pro-preview`)
+
+---
 
 ### ADR-001: Prisma 7 PostgreSQL Adapter Configuration
 

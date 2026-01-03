@@ -1,17 +1,7 @@
 'use client';
 
-import { useState } from 'react';
 import { format } from 'date-fns';
-import {
-  CheckCircle2,
-  XCircle,
-  Clock,
-  Copy,
-  Check,
-  ExternalLink,
-  Zap,
-  RefreshCw,
-} from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, ExternalLink, Zap, RefreshCw } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -20,9 +10,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { CopyButton } from '@/components/ui/copy-button';
 import { MethodBadge } from '@/components/features/actions/MethodBadge';
 import { cn } from '@/lib/utils';
 import type { LogEntry } from '@/hooks/useLogs';
@@ -124,7 +114,10 @@ export function LogDetailDialog({ log, open, onOpenChange }: LogDetailDialogProp
               <div className="space-y-4 pr-4">
                 <div>
                   <h4 className="mb-2 text-sm font-medium">Endpoint</h4>
-                  <code className="rounded bg-muted px-2 py-1 text-sm">{log.endpoint}</code>
+                  <div className="flex items-center gap-2">
+                    <code className="rounded bg-muted px-2 py-1 text-sm">{log.endpoint}</code>
+                    <CopyButton value={log.endpoint} label="Endpoint copied" />
+                  </div>
                 </div>
 
                 {log.requestHeaders && Object.keys(log.requestHeaders).length > 0 && (
@@ -176,29 +169,18 @@ export function LogDetailDialog({ log, open, onOpenChange }: LogDetailDialogProp
 }
 
 function JsonViewer({ data }: { data: unknown }) {
-  const [copied, setCopied] = useState(false);
-
   const jsonString = typeof data === 'string' ? data : JSON.stringify(data, null, 2) || '';
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(jsonString);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   return (
     <div className="group relative">
       <pre className="max-h-[300px] overflow-x-auto rounded-md bg-muted/50 p-4 text-sm">
         <code className="text-foreground">{jsonString}</code>
       </pre>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="absolute right-2 top-2 h-8 w-8 opacity-0 transition-opacity group-hover:opacity-100"
-        onClick={handleCopy}
-      >
-        {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
-      </Button>
+      <CopyButton
+        value={jsonString}
+        label="JSON copied"
+        className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100"
+      />
     </div>
   );
 }

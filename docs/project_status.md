@@ -1,6 +1,6 @@
 # Project Status: Waygate
 
-**Last Updated**: 2026-01-02 (MVP Complete! 🎉)
+**Last Updated**: 2026-01-03 (MVP Complete! 🎉 + UX Polish)
 
 ---
 
@@ -68,6 +68,13 @@
 ### In Progress
 
 _None - MVP is complete!_
+
+### Recent Enhancements (Post-MVP)
+
+| Enhancement          | Completion Date | Notes                                                                                               |
+| -------------------- | --------------- | --------------------------------------------------------------------------------------------------- |
+| Intelligent Crawling | 2026-01-03      | LLM-guided page selection using Firecrawl map + URL triage, wishlist awareness, auth prioritization |
+| UX Navigation Polish | 2026-01-03      | Clickable logo, clickable cards, copy buttons for endpoints, clickable wizard steps                 |
 
 ### Not Started
 

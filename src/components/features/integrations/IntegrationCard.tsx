@@ -2,7 +2,16 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { MoreHorizontal, ExternalLink, Settings, Trash2, Play, Puzzle } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import {
+  MoreHorizontal,
+  ExternalLink,
+  Settings,
+  Trash2,
+  Play,
+  Puzzle,
+  ArrowRight,
+} from 'lucide-react';
 
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -26,14 +35,26 @@ interface IntegrationCardProps {
 /**
  * Card component for displaying an integration in a list/grid view.
  * Shows integration name, status, action count, and quick actions.
+ * The entire card is clickable to navigate to the integration detail.
  */
 export function IntegrationCard({ integration, onDelete, className }: IntegrationCardProps) {
+  const router = useRouter();
   const { id, name, slug, description, status, authType, tags, actionCount } = integration;
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    // Only navigate if we didn't click on an interactive element
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('a') || target.closest('[role="menuitem"]')) {
+      return;
+    }
+    router.push(`/integrations/${id}`);
+  };
 
   return (
     <Card
+      onClick={handleCardClick}
       className={cn(
-        'group relative transition-all hover:border-primary/50 hover:shadow-md',
+        'group relative cursor-pointer transition-all hover:border-primary/50 hover:shadow-md',
         className
       )}
     >
@@ -41,22 +62,22 @@ export function IntegrationCard({ integration, onDelete, className }: Integratio
         <div className="flex items-start justify-between gap-4">
           {/* Icon and Title */}
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 transition-colors group-hover:bg-primary/20">
               <Puzzle className="h-5 w-5 text-primary" />
             </div>
             <div className="min-w-0 flex-1">
-              <Link
-                href={`/integrations/${id}`}
-                className="block truncate font-semibold hover:text-primary"
-              >
+              <span className="block truncate font-semibold transition-colors group-hover:text-primary">
                 {name}
-              </Link>
+              </span>
               <p className="text-xs text-muted-foreground">{slug}</p>
             </div>
           </div>
 
-          {/* Status Badge */}
-          <IntegrationStatusBadge status={status} size="sm" />
+          {/* Status Badge & Arrow */}
+          <div className="flex items-center gap-2">
+            <IntegrationStatusBadge status={status} size="sm" />
+            <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+          </div>
         </div>
       </CardHeader>
 

@@ -9,7 +9,8 @@
  * Processing modes:
  * - sync=true (default for MVP): Process synchronously, return when complete (~60s max)
  * - sync=false: Start background processing, return immediately with job ID
- * - crawl=true: Enable multi-page crawling (slower but more complete)
+ * - crawl=true (default): Enable multi-page crawling for comprehensive action discovery
+ * - crawl=false: Single page scraping only (faster but may miss actions on sub-pages)
  */
 
 import { NextRequest } from 'next/server';
@@ -32,11 +33,11 @@ import {
 const CreateScrapeJobRequestSchema = CreateScrapeJobInputSchema.extend({
   /** Process synchronously (default: true for MVP) */
   sync: z.boolean().optional().default(true),
-  /** Enable multi-page crawling (default: false) */
-  crawl: z.boolean().optional().default(false),
-  /** Max pages to crawl if crawl=true (default: 20) */
+  /** Enable multi-page crawling (default: true - crawls from top-level page to find all actions) */
+  crawl: z.boolean().optional().default(true),
+  /** Max pages to crawl (default: 20) */
   maxPages: z.number().min(1).max(100).optional().default(20),
-  /** Max depth to crawl if crawl=true (default: 3) */
+  /** Max depth to crawl (default: 3) */
   maxDepth: z.number().min(1).max(5).optional().default(3),
 });
 

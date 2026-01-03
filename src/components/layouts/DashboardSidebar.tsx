@@ -76,9 +76,10 @@ export function DashboardSidebar({ collapsed = false, onToggleCollapse }: Dashbo
         )}
       >
         {/* Logo / Brand */}
-        <div
+        <Link
+          href="/"
           className={cn(
-            'flex h-16 items-center border-b border-sidebar-border px-4',
+            'flex h-16 items-center border-b border-sidebar-border px-4 transition-colors hover:bg-sidebar-accent',
             collapsed ? 'justify-center' : 'gap-3'
           )}
         >
@@ -88,7 +89,7 @@ export function DashboardSidebar({ collapsed = false, onToggleCollapse }: Dashbo
           {!collapsed && (
             <span className="font-heading text-xl font-bold text-sidebar-foreground">Waygate</span>
           )}
-        </div>
+        </Link>
 
         {/* Navigation */}
         <nav className="flex-1 space-y-1 px-2 py-4">

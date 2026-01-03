@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, ExternalLink, Code2 } from 'lucide-react';
+import { CopyButton } from '@/components/ui/copy-button';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -191,7 +192,12 @@ export function ActionTester({ integrationId, actionId }: ActionTesterProps) {
               <h1 className="font-heading text-2xl font-bold">{action.name}</h1>
               <MethodBadge method={action.httpMethod} />
             </div>
-            <p className="font-mono text-sm text-muted-foreground">{action.endpointTemplate}</p>
+            <div className="flex items-center gap-1">
+              <code className="font-mono text-sm text-muted-foreground">
+                {action.endpointTemplate}
+              </code>
+              <CopyButton value={action.endpointTemplate} label="Endpoint copied" size="sm" />
+            </div>
           </div>
         </div>
         <div className="flex gap-2">

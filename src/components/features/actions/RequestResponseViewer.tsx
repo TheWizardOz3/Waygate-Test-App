@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Check, Copy, ChevronDown, ChevronRight } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { ChevronDown, ChevronRight } from 'lucide-react';
+import { CopyButton } from '@/components/ui/copy-button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { MethodBadge } from './MethodBadge';
@@ -68,7 +68,10 @@ function RequestPanel({
           {/* URL */}
           <div>
             <h4 className="mb-2 text-sm font-medium">URL</h4>
-            <code className="break-all text-sm">{request.url}</code>
+            <div className="flex items-start gap-2">
+              <code className="flex-1 break-all text-sm">{request.url}</code>
+              <CopyButton value={request.url} label="URL copied" />
+            </div>
           </div>
 
           {/* Headers */}
@@ -178,29 +181,18 @@ function ErrorPanel({ error }: { error: NonNullable<RequestResponseViewerProps['
 }
 
 function JsonViewer({ data }: { data: unknown }) {
-  const [copied, setCopied] = useState(false);
-
   const jsonString = typeof data === 'string' ? data : JSON.stringify(data, null, 2) || '';
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(jsonString);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   return (
     <div className="group relative">
       <pre className="overflow-x-auto rounded-md bg-muted/50 p-4 text-sm">
         <code className="text-foreground">{jsonString}</code>
       </pre>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="absolute right-2 top-2 h-8 w-8 opacity-0 transition-opacity group-hover:opacity-100"
-        onClick={handleCopy}
-      >
-        {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
-      </Button>
+      <CopyButton
+        value={jsonString}
+        label="JSON copied"
+        className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100"
+      />
     </div>
   );
 }

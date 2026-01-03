@@ -127,10 +127,41 @@ export const useWizardStore = create<WizardState>((set, get) => ({
 
   // Navigation
   goToStep: (step) =>
-    set((state) => ({
-      currentStep: step,
-      stepHistory: [...state.stepHistory, state.currentStep],
-    })),
+    set((state) => {
+      const STEP_ORDER: WizardStep[] = [
+        'url-input',
+        'scraping',
+        'review-actions',
+        'configure-auth',
+        'success',
+      ];
+      const currentIndex = STEP_ORDER.indexOf(state.currentStep);
+      const targetIndex = STEP_ORDER.indexOf(step);
+
+      // If navigating backwards, truncate history to that point
+      if (targetIndex < currentIndex) {
+        // Find the index in history where we were at the target step
+        const historyIndex = state.stepHistory.findIndex((s) => s === step);
+        if (historyIndex >= 0) {
+          // Truncate history to before the target step
+          return {
+            currentStep: step,
+            stepHistory: state.stepHistory.slice(0, historyIndex),
+          };
+        }
+        // If step isn't in history, just go there with empty history
+        return {
+          currentStep: step,
+          stepHistory: [],
+        };
+      }
+
+      // Normal forward navigation - add current step to history
+      return {
+        currentStep: step,
+        stepHistory: [...state.stepHistory, state.currentStep],
+      };
+    }),
 
   goBack: () =>
     set((state) => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import { StepScraping } from './StepScraping';
 import { StepReviewActions } from './StepReviewActions';
 import { StepConfigureAuth } from './StepConfigureAuth';
 import { StepSuccess } from './StepSuccess';
-import { useWizardStore } from '@/stores/wizard.store';
+import { useWizardStore, type WizardStep } from '@/stores/wizard.store';
 
 const STEP_TITLES: Record<string, { title: string; description: string }> = {
   'url-input': {
@@ -38,7 +38,7 @@ const STEP_TITLES: Record<string, { title: string; description: string }> = {
 
 export function CreateIntegrationWizard() {
   const router = useRouter();
-  const { currentStep, canGoBack, goBack, reset } = useWizardStore();
+  const { currentStep, canGoBack, goBack, goToStep, reset } = useWizardStore();
 
   // Reset wizard state when component mounts
   useEffect(() => {
@@ -56,14 +56,31 @@ export function CreateIntegrationWizard() {
     }
   };
 
+  // Handle clicking on a completed step in the progress indicator
+  const handleStepClick = useCallback(
+    (step: WizardStep) => {
+      // Navigate directly to the clicked step (only works for completed steps)
+      goToStep(step);
+    },
+    [goToStep]
+  );
+
   const stepInfo = STEP_TITLES[currentStep];
   const showBackButton = canGoBack() && currentStep !== 'scraping' && currentStep !== 'success';
   const showCancelButton = currentStep !== 'success';
 
+  // Disable clicking on scraping step (it's an async process) and success step
+  const disabledSteps: WizardStep[] = ['scraping', 'success'];
+
   return (
     <div className="mx-auto max-w-4xl space-y-8">
       {/* Progress indicator */}
-      <WizardProgress currentStep={currentStep} className="px-4" />
+      <WizardProgress
+        currentStep={currentStep}
+        onStepClick={handleStepClick}
+        disabledSteps={disabledSteps}
+        className="px-4"
+      />
 
       {/* Main card */}
       <Card className="border-border/50 shadow-lg">

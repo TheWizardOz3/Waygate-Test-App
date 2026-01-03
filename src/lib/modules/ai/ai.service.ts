@@ -42,7 +42,7 @@ export interface ProcessDocumentationOptions {
   integrationSlug?: string;
   /** Tags to apply to the integration */
   tags?: string[];
-  /** Whether to use multi-page crawling */
+  /** Whether to use multi-page crawling (default: true for comprehensive action discovery) */
   crawlMode?: boolean;
   /** Max pages to crawl */
   maxPages?: number;
@@ -144,7 +144,7 @@ export async function processDocumentation(
     integrationName,
     integrationSlug,
     tags = [],
-    crawlMode = false,
+    crawlMode = true,
     maxPages = 20,
     maxDepth = 3,
     onProgress,

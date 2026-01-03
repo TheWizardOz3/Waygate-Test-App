@@ -37,6 +37,26 @@ export {
   type CrawledPage,
 } from './doc-scraper';
 
+// Intelligent Crawler (LLM-guided page selection)
+export {
+  // Main intelligent crawl function
+  intelligentCrawl,
+  // Firecrawl map function
+  mapWebsite,
+  // LLM-guided URL triage
+  triageUrls,
+  // URL pattern detection
+  detectUrlCategory,
+  preFilterUrls,
+  // Types
+  type MapResult,
+  type PrioritizedUrl,
+  type UrlCategory,
+  type IntelligentCrawlOptions,
+  type IntelligentCrawlProgress,
+  type IntelligentCrawlResult,
+} from './intelligent-crawler';
+
 // LLM (Centralized model management)
 export {
   // Client

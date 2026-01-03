@@ -10,9 +10,18 @@
 
 ## Overview
 
-The AI Documentation Scraper is the entry point for creating new integrations. It accepts API documentation URLs, crawls the relevant pages using Firecrawl, and uses Google Gemini to extract structured API specifications including endpoints, authentication methods, request/response schemas, and rate limits.
+The AI Documentation Scraper is the entry point for creating new integrations. It accepts API documentation URLs, intelligently discovers and selects the most relevant pages using Firecrawl's map function and LLM-guided prioritization, then uses Google Gemini to extract structured API specifications including endpoints, authentication methods, request/response schemas, and rate limits.
 
 This feature enables the core value proposition: **"Drop in documentation, get production-ready integrations."**
+
+### Intelligent Crawling (v0.1.3+)
+
+Instead of blindly crawling pages breadth-first, the system now:
+
+1. **Maps the entire site** using Firecrawl's `/map` endpoint (discovers up to 5000 URLs in seconds)
+2. **Pre-filters URLs** using regex patterns to exclude non-documentation pages
+3. **LLM triages remaining URLs** - assigns priority scores and categories
+4. **Selects the best pages** ensuring coverage of auth docs, wishlist matches, and API endpoints
 
 ---
 
@@ -53,6 +62,7 @@ This feature enables the core value proposition: **"Drop in documentation, get p
 3. **Given** a wishlist of "send message, list users, create channel", **when** scraped, **then** those actions are prioritized in the generated registry
 4. **Given** a scrape job is initiated, **when** checking status, **then** accurate progress is returned
 5. **Given** documentation that was previously scraped, **when** re-scraping, **then** cached content can be reused
+6. **Given** a documentation URL with hundreds of pages, **when** intelligent crawl is enabled, **then** system maps all URLs and selects the most relevant API documentation pages (including auth)
 
 ---
 
@@ -75,16 +85,25 @@ User provides URL + Wishlist
 │   Creates job, manages state│
 └─────────────┬───────────────┘
               │
-    ┌─────────┴─────────┐
-    ▼                   ▼
-┌───────────┐     ┌───────────┐
-│ Firecrawl │     │  OpenAPI  │
-│  Scraper  │     │  Parser   │
-│ (for URLs)│     │(for specs)│
-└─────┬─────┘     └─────┬─────┘
-      │                 │
-      └────────┬────────┘
-               ▼
+    ┌─────────┴─────────────────────┐
+    ▼                               ▼
+┌───────────────────────┐     ┌───────────┐
+│  Intelligent Crawler  │     │  OpenAPI  │
+│  (Default for URLs)   │     │  Parser   │
+│  ┌─────────────────┐  │     │(for specs)│
+│  │ 1. Firecrawl    │  │     └─────┬─────┘
+│  │    Map Site     │  │           │
+│  ├─────────────────┤  │           │
+│  │ 2. LLM Triage   │  │           │
+│  │    URLs         │  │           │
+│  ├─────────────────┤  │           │
+│  │ 3. Scrape Top   │  │           │
+│  │    Priority     │  │           │
+│  └─────────────────┘  │           │
+└───────────┬───────────┘           │
+            │                       │
+            └───────────┬───────────┘
+                        ▼
 ┌─────────────────────────────┐
 │   AI Document Parser        │
 │   (Google Gemini)           │
@@ -146,7 +165,8 @@ enum ScrapeJobStatus {
 | --------------------------------------------- | ---------------------------------------------------------------------- |
 | `src/lib/modules/ai/index.ts`                 | Module exports                                                         |
 | `src/lib/modules/ai/ai.service.ts`            | Main orchestrator for documentation processing to integration creation |
-| `src/lib/modules/ai/doc-scraper.ts`           | Firecrawl integration for URL scraping and multi-page crawling         |
+| `src/lib/modules/ai/intelligent-crawler.ts`   | **LLM-guided page selection: Map → Triage → Scrape (default mode)**    |
+| `src/lib/modules/ai/doc-scraper.ts`           | Firecrawl integration for URL scraping and basic BFS crawling          |
 | `src/lib/modules/ai/openapi-parser.ts`        | Direct OpenAPI/Swagger specification parsing                           |
 | `src/lib/modules/ai/document-parser.ts`       | AI-powered content extraction using chunking and parallel processing   |
 | `src/lib/modules/ai/action-generator.ts`      | Transforms ParsedApiDoc into ActionDefinitions with JSON Schema        |
@@ -155,7 +175,8 @@ enum ScrapeJobStatus {
 | `src/lib/modules/ai/scrape-job.schemas.ts`    | Zod schemas for API validation and ParsedApiDoc structure              |
 | `src/lib/modules/ai/prompts/extract-api.ts`   | Specialized prompts for endpoint, auth, and rate limit extraction      |
 | `src/lib/modules/ai/storage.ts`               | Supabase Storage integration with gzip compression                     |
-| `src/lib/modules/ai/llm/gemini-provider.ts`   | Google Gemini client with structured output support                    |
+| `src/lib/modules/ai/llm/client.ts`            | Centralized LLM model management and provider factory                  |
+| `src/lib/modules/ai/llm/providers/gemini.ts`  | Google Gemini client with structured output support                    |
 | `src/lib/modules/ai/llm/types.ts`             | LLM provider interface for future extensibility                        |
 | `src/app/api/v1/scrape/route.ts`              | POST /scrape (create job) + GET /scrape (list jobs)                    |
 | `src/app/api/v1/scrape/[jobId]/route.ts`      | GET /scrape/:jobId (job status)                                        |
@@ -169,11 +190,9 @@ enum ScrapeJobStatus {
 {
   "documentationUrl": "https://api.slack.com/methods",
   "wishlist": ["send message", "list users", "create channel"],
-  "options": {
-    "maxPages": 20,
-    "maxDepth": 3,
-    "useCache": true
-  }
+  "crawl": true,           // Default: true (multi-page mode)
+  "intelligentCrawl": true, // Default: true (LLM-guided page selection)
+  "maxPages": 30           // Default: 30 (increased for better coverage)
 }
 
 // Response
@@ -186,6 +205,13 @@ enum ScrapeJobStatus {
   }
 }
 ```
+
+**Crawl Mode Options:**
+| `crawl` | `intelligentCrawl` | Behavior |
+|---------|-------------------|----------|
+| `true` | `true` (default) | Map entire site → LLM prioritizes URLs → Scrape top pages |
+| `true` | `false` | Basic breadth-first crawling (legacy mode) |
+| `false` | N/A | Single page scrape only (fastest) |
 
 **GET `/api/v1/scrape/:jobId`**
 
@@ -317,7 +343,7 @@ interface ParsedApiDoc {
 
 - Install Google Generative AI SDK: `npm install @google/generative-ai`
 - Add `GOOGLE_API_KEY` to environment variables
-- Create Gemini client wrapper with model configuration (gemini-1.5-pro)
+- Create Gemini client wrapper with model configuration (gemini-3.0-pro)
 - Export `generateContent()` function with structured output support
 
 ### Task 3: Scrape Job Database Model (~30 min)
@@ -347,7 +373,7 @@ interface ParsedApiDoc {
 - Return structured result: `{ url, content, contentType, scrapedAt }`
 - Implement timeout handling (5 min max)
 
-### Task 6: Multi-page Crawling (~45 min)
+### Task 6: Multi-page Crawling (~45 min) ✅
 
 **Files:** `src/lib/modules/ai/doc-scraper.ts`
 
@@ -356,6 +382,20 @@ interface ParsedApiDoc {
 - Implement page limit (max 20 pages)
 - Filter for relevant API documentation pages only
 - Aggregate content from multiple pages
+
+### Task 6b: Intelligent Crawling with LLM-Guided Page Selection (~2 hours) ✅ NEW
+
+**Files:** `src/lib/modules/ai/intelligent-crawler.ts`
+
+- **Firecrawl Map Integration**: `mapWebsite()` discovers all site URLs via `/map` endpoint (up to 5000 URLs)
+- **URL Pattern Detection**: `detectUrlCategory()` classifies URLs into categories: `api_endpoint`, `api_reference`, `authentication`, `getting_started`, `rate_limits`, etc.
+- **Pre-filtering**: `preFilterUrls()` excludes obvious non-doc pages (blog, pricing, careers, images) before LLM
+- **LLM Triage**: `triageUrls()` uses Gemini to assign priority scores (0-100) with batching for large URL lists
+- **Wishlist Awareness**: Boosts URLs matching wishlist items but doesn't exclude other valuable pages
+- **Auth Priority**: Authentication pages always get high priority (95+)
+- **Smart Selection**: `selectUrlsToScrape()` ensures balanced coverage of auth, endpoints, and reference
+- **Organized Output**: Content aggregated by category (Auth → Overview → Endpoints) for better AI parsing
+- **ProcessJobOptions**: Added `intelligentCrawl` option (defaults to `true`)
 
 ### Task 7: AI Extraction Prompts (~45 min)
 
@@ -443,15 +483,17 @@ interface ParsedApiDoc {
 
 ## Edge Cases
 
-| Scenario                   | Handling                                                     |
-| -------------------------- | ------------------------------------------------------------ |
-| Docs behind authentication | Return error with message to use OpenAPI spec upload instead |
-| Incomplete documentation   | Extract what's available, add warnings to metadata           |
-| Multiple API versions      | Detect and include version info, let user select (future)    |
-| Very large documentation   | Limit pages crawled, prioritize based on wishlist            |
-| Non-English documentation  | Attempt extraction, may have lower accuracy                  |
-| Rate limited during scrape | Retry with backoff, respect Retry-After                      |
-| Timeout during scrape      | Partial results with error, allow retry                      |
+| Scenario                   | Handling                                                             |
+| -------------------------- | -------------------------------------------------------------------- |
+| Docs behind authentication | Return error with message to use OpenAPI spec upload instead         |
+| Incomplete documentation   | Extract what's available, add warnings to metadata                   |
+| Multiple API versions      | Detect and include version info, let user select (future)            |
+| Very large documentation   | **Intelligent crawl maps all URLs, LLM selects best 30 pages**       |
+| Non-English documentation  | Attempt extraction, may have lower accuracy                          |
+| Rate limited during scrape | Retry with backoff, respect Retry-After                              |
+| Timeout during scrape      | Partial results with error, allow retry                              |
+| Missing auth documentation | **Intelligent crawl prioritizes auth pages (score 95+)**             |
+| Wishlist items not found   | **LLM searches for related pages, returns other valuable endpoints** |
 
 ---
 
@@ -462,6 +504,11 @@ interface ParsedApiDoc {
 - Endpoint extraction accuracy > 80% on test documentation
 - Auth method detection accuracy > 90%
 - Scrape job completes in < 2 minutes for typical documentation
+- **Intelligent Crawling (v0.1.3+):**
+  - URL mapping discovers 90%+ of documentation pages
+  - LLM triage correctly prioritizes API endpoint pages
+  - Authentication documentation is always included
+  - Wishlist items are found when present in documentation
 
 ---
 
@@ -472,6 +519,9 @@ interface ParsedApiDoc {
 - Multiple documentation source aggregation
 - User corrections fed back to improve AI extraction
 - Integration with documentation change monitoring
+- ~~LLM-guided link prioritization~~ ✅ Implemented in v0.1.3
+- ~~Wishlist-aware crawling~~ ✅ Implemented in v0.1.3
+- ~~Smarter URL pattern detection~~ ✅ Implemented in v0.1.3
 
 ---
 
@@ -479,14 +529,15 @@ interface ParsedApiDoc {
 
 ### Unit Tests
 
-| Component              | Test Cases                                                                                                                       |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| **Firecrawl Client**   | Successful scrape returns markdown; Timeout handling; Error response handling; Rate limit handling                               |
-| **Gemini Client**      | Successful generation; Structured output parsing; Error handling; Token limit handling                                           |
-| **OpenAPI Parser**     | Valid OpenAPI 3.x parsing; Valid Swagger 2.0 parsing; YAML format support; Invalid spec handling; Conversion to ParsedApiDoc     |
-| **Document Parser**    | Endpoint extraction from markdown; Auth method detection; Rate limit extraction; Partial doc handling; Confidence scoring        |
-| **Action Generator**   | Endpoint to Action conversion; JSON Schema generation; Wishlist prioritization; Slug generation                                  |
-| **Scrape Job Service** | Job creation; Status transitions (PENDING → CRAWLING → PARSING → GENERATING → COMPLETED); Error state handling; Progress updates |
+| Component               | Test Cases                                                                                                                                                                          |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Firecrawl Client**    | Successful scrape returns markdown; Timeout handling; Error response handling; Rate limit handling                                                                                  |
+| **Gemini Client**       | Successful generation; Structured output parsing; Error handling; Token limit handling                                                                                              |
+| **OpenAPI Parser**      | Valid OpenAPI 3.x parsing; Valid Swagger 2.0 parsing; YAML format support; Invalid spec handling; Conversion to ParsedApiDoc                                                        |
+| **Document Parser**     | Endpoint extraction from markdown; Auth method detection; Rate limit extraction; Partial doc handling; Confidence scoring                                                           |
+| **Action Generator**    | Endpoint to Action conversion; JSON Schema generation; Wishlist prioritization; Slug generation                                                                                     |
+| **Scrape Job Service**  | Job creation; Status transitions (PENDING → CRAWLING → PARSING → GENERATING → COMPLETED); Error state handling; Progress updates                                                    |
+| **Intelligent Crawler** | URL category detection (api_endpoint, authentication, etc.); Pre-filter excludes non-doc URLs; Pattern matching for exclusions; Host filtering; Auth page prioritization (45 tests) |
 
 ### Integration Tests
 

@@ -6,6 +6,10 @@ import type { WizardStep } from '@/stores/wizard.store';
 
 interface WizardProgressProps {
   currentStep: WizardStep;
+  /** Callback when a step is clicked. Only completed steps are clickable. */
+  onStepClick?: (step: WizardStep) => void;
+  /** Steps that should not be clickable (e.g., 'scraping' during async operation) */
+  disabledSteps?: WizardStep[];
   className?: string;
 }
 
@@ -21,7 +25,12 @@ function getStepIndex(step: WizardStep): number {
   return STEPS.findIndex((s) => s.id === step);
 }
 
-export function WizardProgress({ currentStep, className }: WizardProgressProps) {
+export function WizardProgress({
+  currentStep,
+  onStepClick,
+  disabledSteps = [],
+  className,
+}: WizardProgressProps) {
   const currentIndex = getStepIndex(currentStep);
 
   return (
@@ -31,6 +40,14 @@ export function WizardProgress({ currentStep, className }: WizardProgressProps) 
           const isCompleted = index < currentIndex;
           const isCurrent = index === currentIndex;
           const isUpcoming = index > currentIndex;
+          const isDisabled = disabledSteps.includes(step.id);
+          const isClickable = isCompleted && !isDisabled && onStepClick;
+
+          const handleClick = () => {
+            if (isClickable) {
+              onStepClick(step.id);
+            }
+          };
 
           return (
             <li key={step.id} className="relative flex-1">
@@ -45,14 +62,25 @@ export function WizardProgress({ currentStep, className }: WizardProgressProps) 
                 />
               )}
 
-              <div className="group relative flex flex-col items-center">
+              <button
+                type="button"
+                onClick={handleClick}
+                disabled={!isClickable}
+                className={cn(
+                  'group relative flex w-full flex-col items-center',
+                  isClickable && 'cursor-pointer'
+                )}
+                aria-current={isCurrent ? 'step' : undefined}
+              >
                 {/* Step circle */}
                 <span
                   className={cn(
-                    'flex h-8 w-8 items-center justify-center rounded-full border-2 transition-colors',
+                    'flex h-8 w-8 items-center justify-center rounded-full border-2 transition-all',
                     isCompleted && 'border-secondary bg-secondary text-secondary-foreground',
                     isCurrent && 'border-secondary bg-background text-secondary',
-                    isUpcoming && 'border-border bg-background text-muted-foreground'
+                    isUpcoming && 'border-border bg-background text-muted-foreground',
+                    isClickable &&
+                      'hover:scale-110 hover:ring-2 hover:ring-secondary/50 hover:ring-offset-2'
                   )}
                 >
                   {isCompleted ? (
@@ -68,14 +96,15 @@ export function WizardProgress({ currentStep, className }: WizardProgressProps) 
                     'mt-2 text-xs font-medium transition-colors',
                     isCurrent && 'text-secondary',
                     isCompleted && 'text-foreground',
-                    isUpcoming && 'text-muted-foreground'
+                    isUpcoming && 'text-muted-foreground',
+                    isClickable && 'group-hover:text-secondary'
                   )}
                 >
                   {/* Show short label on mobile, full label on desktop */}
                   <span className="hidden sm:inline">{step.label}</span>
                   <span className="sm:hidden">{step.shortLabel}</span>
                 </span>
-              </div>
+              </button>
             </li>
           );
         })}

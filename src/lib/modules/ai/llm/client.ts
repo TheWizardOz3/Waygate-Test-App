@@ -38,7 +38,7 @@ function getDefaultModelId(): LLMModelId {
   if (envModel && envModel in LLM_MODELS) {
     return envModel;
   }
-  return 'gemini-1.5-pro';
+  return 'gemini-3-pro';
 }
 
 // =============================================================================
@@ -108,7 +108,7 @@ function createProvider(modelId: LLMModelId): LLMProvider {
  * Each use case should call this to get a client, then use their
  * own prompts and schemas with it.
  *
- * @param modelId - Model to use. Defaults to LLM_DEFAULT_MODEL env var or 'gemini-1.5-pro'
+ * @param modelId - Model to use. Defaults to LLM_DEFAULT_MODEL env var or 'gemini-3-pro'
  * @returns LLM provider instance
  *
  * @example

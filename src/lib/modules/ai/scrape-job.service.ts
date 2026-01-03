@@ -29,6 +29,8 @@ import {
   isJobInProgress,
 } from './scrape-job.schemas';
 import { scrapeDocumentation, crawlDocumentation, isScrapeError } from './doc-scraper';
+import { intelligentCrawl } from './intelligent-crawler';
+import type { IntelligentCrawlProgress } from './intelligent-crawler';
 import { parseApiDocumentation, isParseError } from './document-parser';
 import { parseOpenApiSpec, isOpenApiSpec, isOpenApiParseError } from './openapi-parser';
 import { storeScrapedContent, isStorageError } from './storage';
@@ -362,11 +364,17 @@ export function isJobRunning(job: ScrapeJob): boolean {
  * Options for job processing
  */
 export interface ProcessJobOptions {
-  /** Whether to use multi-page crawling (default: false for single page) */
+  /** Whether to use multi-page crawling (default: true for comprehensive action discovery) */
   crawlMode?: boolean;
-  /** Maximum pages to crawl if crawlMode is enabled */
+  /**
+   * Whether to use intelligent crawling with LLM-guided link prioritization
+   * When true (default), uses Firecrawl's map function + LLM triage to select the best pages
+   * When false, falls back to basic breadth-first crawling
+   */
+  intelligentCrawl?: boolean;
+  /** Maximum pages to crawl/scrape */
   maxPages?: number;
-  /** Maximum crawl depth if crawlMode is enabled */
+  /** Maximum crawl depth (only used when intelligentCrawl is false) */
   maxDepth?: number;
   /** Callback for progress updates */
   onProgress?: (stage: string, message: string) => void;
@@ -376,7 +384,7 @@ export interface ProcessJobOptions {
  * Process a scrape job end-to-end
  *
  * This function orchestrates the entire scraping workflow:
- * 1. CRAWLING - Scrape documentation from URL
+ * 1. CRAWLING - Scrape documentation from URL (with intelligent link selection)
  * 2. PARSING - Extract API information using AI or OpenAPI parser
  * 3. GENERATING - Finalize and validate the parsed structure
  * 4. COMPLETED/FAILED - Mark job as done
@@ -387,18 +395,30 @@ export interface ProcessJobOptions {
  *
  * @example
  * ```ts
- * // Process synchronously (MVP approach)
+ * // Process with intelligent crawling (recommended - uses LLM to select best pages)
  * const job = await processJob(jobId);
  *
- * // Process with crawling for multi-page docs
- * const job = await processJob(jobId, { crawlMode: true, maxPages: 10 });
+ * // Process with basic breadth-first crawling (fallback)
+ * const job = await processJob(jobId, { intelligentCrawl: false });
+ *
+ * // Process with single page only (fastest but may miss actions)
+ * const job = await processJob(jobId, { crawlMode: false });
+ *
+ * // Process with custom settings
+ * const job = await processJob(jobId, { maxPages: 50, intelligentCrawl: true });
  * ```
  */
 export async function processJob(
   jobId: string,
   options: ProcessJobOptions = {}
 ): Promise<ScrapeJob> {
-  const { crawlMode = false, maxPages = 20, maxDepth = 3, onProgress } = options;
+  const {
+    crawlMode = true,
+    intelligentCrawl: useIntelligentCrawl = true,
+    maxPages = 30,
+    maxDepth = 3,
+    onProgress,
+  } = options;
 
   // Get the job
   const job = await findScrapeJobById(jobId);
@@ -423,18 +443,48 @@ export async function processJob(
     await updateJobStatus(jobId, 'CRAWLING', 10);
 
     if (crawlMode) {
-      // Multi-page crawling
-      onProgress?.('CRAWLING', 'Crawling multiple documentation pages...');
-      const crawlResult = await crawlDocumentation(documentationUrl, {
-        maxPages,
-        maxDepth,
-        onProgress: (p) => {
-          onProgress?.('CRAWLING', p.message);
-        },
-      });
-      scrapedContent = crawlResult.aggregatedContent;
-      sourceUrls = crawlResult.pages.filter((p) => p.success).map((p) => p.url);
-      await updateJobProgress(jobId, 25);
+      if (useIntelligentCrawl) {
+        // Intelligent crawling: Map site → LLM triage → Scrape best pages
+        onProgress?.('CRAWLING', 'Using intelligent crawling with LLM-guided page selection...');
+        const crawlResult = await intelligentCrawl(documentationUrl, {
+          maxPages,
+          wishlist: job.wishlist ?? [],
+          onProgress: (p: IntelligentCrawlProgress) => {
+            // Map intelligent crawl stages to our progress
+            const stageMap: Record<string, string> = {
+              mapping: 'CRAWLING',
+              triaging: 'CRAWLING',
+              scraping: 'CRAWLING',
+              completed: 'CRAWLING',
+              error: 'CRAWLING',
+            };
+            onProgress?.(stageMap[p.stage] || 'CRAWLING', p.message);
+          },
+        });
+        scrapedContent = crawlResult.aggregatedContent;
+        sourceUrls = crawlResult.pages.filter((p) => p.success).map((p) => p.url);
+
+        // Log intelligent crawl stats
+        console.log(
+          `[Intelligent Crawl] Discovered ${crawlResult.totalUrlsDiscovered} URLs, ` +
+            `selected ${crawlResult.prioritizedUrls.length}, ` +
+            `scraped ${crawlResult.pagesCrawled} pages`
+        );
+        await updateJobProgress(jobId, 25);
+      } else {
+        // Fallback: Basic breadth-first crawling
+        onProgress?.('CRAWLING', 'Crawling documentation pages (breadth-first)...');
+        const crawlResult = await crawlDocumentation(documentationUrl, {
+          maxPages,
+          maxDepth,
+          onProgress: (p) => {
+            onProgress?.('CRAWLING', p.message);
+          },
+        });
+        scrapedContent = crawlResult.aggregatedContent;
+        sourceUrls = crawlResult.pages.filter((p) => p.success).map((p) => p.url);
+        await updateJobProgress(jobId, 25);
+      }
     } else {
       // Single page scraping
       onProgress?.('CRAWLING', 'Scraping documentation page...');

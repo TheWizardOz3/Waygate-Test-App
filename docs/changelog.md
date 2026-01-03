@@ -12,15 +12,18 @@
 
 ## Version Index
 
-| Version | Date       | Type       | Summary                                                  |
-| ------- | ---------- | ---------- | -------------------------------------------------------- |
-| 0.1.0   | 2026-01-02 | minor      | **MVP Complete!** Basic Configuration UI complete        |
-| 0.0.8   | 2026-01-02 | prerelease | Gateway API complete                                     |
-| 0.0.7   | 2026-01-02 | prerelease | Token Refresh Management complete                        |
-| 0.0.6   | 2026-01-02 | prerelease | Action Registry & Schema complete                        |
-| 0.2.0   | 2026-01-02 | prerelease | AI Documentation Scraper complete                        |
-| 0.0.1   | 2026-01-02 | prerelease | Core infrastructure (Auth + DB + Execution)              |
-| 0.0.0   | 2026-01-01 | prerelease | Pre-build baseline with documentation and workflow setup |
+| Version | Date       | Type       | Summary                                                         |
+| ------- | ---------- | ---------- | --------------------------------------------------------------- |
+| 0.1.3   | 2026-01-03 | patch      | Intelligent crawling with LLM-guided page selection             |
+| 0.1.2   | 2026-01-03 | patch      | UX improvements: clickable logo, cards, copy buttons            |
+| 0.1.1   | 2026-01-02 | patch      | Upgrade to Gemini 3.0, improve scraping with default crawl mode |
+| 0.1.0   | 2026-01-02 | minor      | **MVP Complete!** Basic Configuration UI complete               |
+| 0.0.8   | 2026-01-02 | prerelease | Gateway API complete                                            |
+| 0.0.7   | 2026-01-02 | prerelease | Token Refresh Management complete                               |
+| 0.0.6   | 2026-01-02 | prerelease | Action Registry & Schema complete                               |
+| 0.2.0   | 2026-01-02 | prerelease | AI Documentation Scraper complete                               |
+| 0.0.1   | 2026-01-02 | prerelease | Core infrastructure (Auth + DB + Execution)                     |
+| 0.0.0   | 2026-01-01 | prerelease | Pre-build baseline with documentation and workflow setup        |
 
 **Types:** `major` | `minor` | `patch` | `prerelease`
 
@@ -59,6 +62,103 @@
 ## Releases
 
 <!-- Add new versions below this line, newest first -->
+
+## [0.1.3] - 2026-01-03
+
+### Added
+
+- **Intelligent Crawling with LLM-Guided Page Selection**
+  - Complete rewrite of the documentation scraping approach for dramatically better results
+  - **Firecrawl Map Integration**: Uses Firecrawl's `/map` endpoint to discover ALL URLs on a documentation site in seconds (up to 5000 URLs)
+  - **LLM-Guided URL Triage**: An LLM analyzes discovered URLs and assigns priority scores (0-100) based on relevance to API documentation
+  - **URL Category Detection**: Automatic classification into categories: `api_endpoint`, `api_reference`, `authentication`, `getting_started`, `rate_limits`, `sdk_library`, etc.
+  - **Smart Pattern Detection**: Regex-based pre-filtering excludes obvious non-doc pages (blog, pricing, careers, images) before LLM triage
+  - **Wishlist-Aware Prioritization**: User-provided wishlist items (e.g., "send_message", "list_channels") boost matching URLs but don't exclude other valuable pages
+  - **Authentication Priority**: Auth documentation pages are ALWAYS included (critical for integration setup)
+  - **Balanced Page Selection**: Selection algorithm ensures a good mix of auth docs, wishlist matches, API endpoints, and reference pages
+  - **Organized Content Output**: Aggregated content is organized by category (Authentication first, then Overview, then Endpoints) for better AI parsing
+
+### Changed
+
+- **Default Scraping Mode**: `intelligentCrawl: true` is now the default (was basic breadth-first crawling)
+- **Default Max Pages**: Increased from 20 to 30 pages for better coverage
+- **ProcessJobOptions**: Added `intelligentCrawl` option (defaults to `true`); setting to `false` falls back to basic BFS crawling
+
+### Technical Notes
+
+- New module: `src/lib/modules/ai/intelligent-crawler.ts` with:
+  - `mapWebsite()` - Firecrawl map API wrapper
+  - `triageUrls()` - LLM-based URL prioritization with batching
+  - `detectUrlCategory()` - Pattern-based URL classification
+  - `preFilterUrls()` - Fast exclusion of non-doc URLs
+  - `intelligentCrawl()` - Main orchestrator function
+- Triage uses `gemini-3-flash` for speed (100 URLs per batch)
+- URL patterns cover major API documentation conventions
+- All exports added to module index for external use
+- Unit tests added for URL category detection and pre-filtering
+
+---
+
+## [0.1.2] - 2026-01-03
+
+### Changed
+
+- **UX Improvements: Navigation & Copyability**
+  - **Clickable Logo**: Waygate logo in sidebar now navigates to dashboard home
+  - **Clickable Integration Cards**: Entire integration card is now clickable (not just the title), with hover arrow indicator
+  - **Copy Buttons for Endpoints**: Added copy-to-clipboard buttons for API endpoints throughout the UI:
+    - Action table endpoint column
+    - Action tester header
+    - Log detail dialog endpoint display
+    - Request/Response viewer URL display
+  - **Clickable Wizard Steps**: Completed wizard steps in Create Integration flow are now clickable to navigate back
+    - Visual feedback on hover (scale + ring effect)
+    - "Scraping" and "Success" steps remain non-clickable as intended
+    - Proper history management when navigating backwards
+  - **Reusable CopyButton Component**: New `src/components/ui/copy-button.tsx` with:
+    - Tooltip support
+    - Visual feedback (checkmark on success)
+    - Toast notifications
+    - CopyableText variant for inline copy functionality
+
+### Fixed
+
+- Fixed Tailwind CSS compilation error with `border-border` utility in globals.css
+- Fixed Integration Actions tab showing placeholder instead of actual ActionTable with actions
+
+### Technical Notes
+
+- All 592 tests continue to pass
+- Zero lint errors, zero TypeScript errors
+- CopyButton component follows existing shadcn/ui patterns
+
+---
+
+## [0.1.1] - 2026-01-02
+
+### Changed
+
+- **LLM Model Upgrade**: Updated default LLM from Gemini 1.5 to Gemini 3 for better API documentation analysis
+  - `gemini-3-pro` (model: `gemini-3-pro-preview`) is now the default model for all AI operations
+  - `gemini-3-flash` (model: `gemini-3-flash-preview`) used for faster parsing tasks
+  - Added Gemini 2.5 models (`gemini-2.5-flash`, `gemini-2.5-pro`) to the registry
+  - Legacy models (1.5-pro, 1.5-flash, 2.0-flash) remain available for backward compatibility
+  - Model codes sourced from [Google AI documentation](https://ai.google.dev/gemini-api/docs/models)
+
+- **Scraping Behavior Improvement**: Changed default scraping behavior from single-page to multi-page crawling
+  - `crawl=true` is now the default in the scrape API endpoint
+  - Crawling starts from the provided URL and traverses linked pages (up to 20 pages, depth 3)
+  - This dramatically improves action discovery for API docs spread across multiple pages
+  - Single-page scraping still available via `crawl=false` for faster results when appropriate
+  - Tested with Claude API docs - successfully discovered 10+ endpoint pages from a single URL
+
+### Technical Notes
+
+- All 127 AI-related tests continue to pass
+- No breaking changes to the API - existing integrations work unchanged
+- Improved action extraction accuracy expected with Gemini 3's enhanced reasoning
+
+---
 
 ## [0.1.0] - 2026-01-02 - 🎉 MVP Complete!
 

@@ -100,9 +100,39 @@ export interface LLMModelConfig {
 
 /**
  * Available models registry
+ *
+ * Model codes from: https://ai.google.dev/gemini-api/docs/models
+ * Updated: Jan 2026
  */
 export const LLM_MODELS: Record<string, LLMModelConfig> = {
-  // Gemini models
+  // Gemini 3.x models (latest - recommended)
+  'gemini-3-pro': {
+    provider: 'gemini',
+    model: 'gemini-3-pro-preview',
+    displayName: 'Gemini 3 Pro',
+  },
+  'gemini-3-flash': {
+    provider: 'gemini',
+    model: 'gemini-3-flash-preview',
+    displayName: 'Gemini 3 Flash',
+  },
+  // Gemini 2.x models
+  'gemini-2.5-flash': {
+    provider: 'gemini',
+    model: 'gemini-2.5-flash',
+    displayName: 'Gemini 2.5 Flash',
+  },
+  'gemini-2.5-pro': {
+    provider: 'gemini',
+    model: 'gemini-2.5-pro',
+    displayName: 'Gemini 2.5 Pro',
+  },
+  'gemini-2.0-flash': {
+    provider: 'gemini',
+    model: 'gemini-2.0-flash-exp',
+    displayName: 'Gemini 2.0 Flash (Experimental)',
+  },
+  // Gemini 1.5 models (legacy)
   'gemini-1.5-pro': {
     provider: 'gemini',
     model: 'gemini-1.5-pro',
@@ -113,11 +143,6 @@ export const LLM_MODELS: Record<string, LLMModelConfig> = {
     model: 'gemini-1.5-flash',
     displayName: 'Gemini 1.5 Flash',
   },
-  'gemini-2.0-flash': {
-    provider: 'gemini',
-    model: 'gemini-2.0-flash-exp',
-    displayName: 'Gemini 2.0 Flash',
-  },
   // Future: OpenAI models
   // 'gpt-4o': { provider: 'openai', model: 'gpt-4o', displayName: 'GPT-4o' },
   // Future: Anthropic models
@@ -127,7 +152,14 @@ export const LLM_MODELS: Record<string, LLMModelConfig> = {
 /**
  * Valid model IDs
  */
-export type LLMModelId = 'gemini-1.5-pro' | 'gemini-1.5-flash' | 'gemini-2.0-flash';
+export type LLMModelId =
+  | 'gemini-3-pro'
+  | 'gemini-3-flash'
+  | 'gemini-2.5-flash'
+  | 'gemini-2.5-pro'
+  | 'gemini-2.0-flash'
+  | 'gemini-1.5-pro'
+  | 'gemini-1.5-flash';
 
 // =============================================================================
 // Error Types

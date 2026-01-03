@@ -52,6 +52,7 @@ import {
   ChevronRight,
   ArrowUpDown,
 } from 'lucide-react';
+import { CopyButton } from '@/components/ui/copy-button';
 import { MethodBadge } from './MethodBadge';
 import { DeleteActionDialog, BulkDeleteActionsDialog } from './DeleteActionDialog';
 import { BulkActionBar } from './BulkActionBar';
@@ -149,9 +150,21 @@ export function ActionTable({ integrationId }: ActionTableProps) {
       {
         accessorKey: 'endpointTemplate',
         header: 'Endpoint',
-        cell: ({ row }) => (
-          <code className="text-sm text-muted-foreground">{row.getValue('endpointTemplate')}</code>
-        ),
+        cell: ({ row }) => {
+          const endpoint = row.getValue('endpointTemplate') as string;
+          return (
+            <div className="group/endpoint flex items-center gap-1">
+              <code className="text-sm text-muted-foreground">{endpoint}</code>
+              <CopyButton
+                value={endpoint}
+                label="Endpoint copied"
+                size="sm"
+                className="opacity-0 transition-opacity group-hover/endpoint:opacity-100"
+                showTooltip={false}
+              />
+            </div>
+          );
+        },
       },
       {
         accessorKey: 'description',

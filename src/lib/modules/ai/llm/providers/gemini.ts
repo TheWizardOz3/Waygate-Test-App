@@ -113,7 +113,7 @@ export class GeminiProvider implements LLMProvider {
   private client: GoogleGenerativeAI;
   private modelId: string;
 
-  constructor(apiKey: string, modelId: string = 'gemini-1.5-pro') {
+  constructor(apiKey: string, modelId: string = 'gemini-3-pro-preview') {
     this.client = new GoogleGenerativeAI(apiKey);
     this.modelId = modelId;
   }
@@ -268,10 +268,10 @@ export class GeminiProvider implements LLMProvider {
 /**
  * Create a Gemini provider instance
  *
- * @param modelId - Model to use (default: gemini-1.5-pro)
+ * @param modelId - Model to use (default: gemini-3-pro-preview)
  * @throws LLMError if GOOGLE_API_KEY is not set
  */
-export function createGeminiProvider(modelId: string = 'gemini-1.5-pro'): GeminiProvider {
+export function createGeminiProvider(modelId: string = 'gemini-3-pro-preview'): GeminiProvider {
   const apiKey = process.env.GOOGLE_API_KEY;
 
   if (!apiKey) {
