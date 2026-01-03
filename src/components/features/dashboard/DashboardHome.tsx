@@ -3,7 +3,6 @@
 import { Layers, CheckCircle2, AlertCircle, Activity, Zap, Clock } from 'lucide-react';
 import { StatsCard } from './StatsCard';
 import { RecentActivity } from './RecentActivity';
-import { QuickActions } from './QuickActions';
 import { useIntegrations, useLogStats } from '@/hooks';
 
 export function DashboardHome() {
@@ -96,15 +95,8 @@ export function DashboardHome() {
         />
       </div>
 
-      {/* Activity & Quick Actions */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <RecentActivity limit={6} />
-        </div>
-        <div>
-          <QuickActions />
-        </div>
-      </div>
+      {/* Recent Activity */}
+      <RecentActivity limit={8} />
     </div>
   );
 }

@@ -47,7 +47,6 @@ import {
   Trash2,
   Play,
   Sparkles,
-  User,
   ChevronLeft,
   ChevronRight,
   ArrowUpDown,
@@ -126,16 +125,16 @@ export function ActionTable({ integrationId }: ActionTableProps) {
         ),
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
-            <span className="font-mono font-medium">{row.getValue('name')}</span>
-            {row.original.metadata?.aiConfidence ? (
+            <Link
+              href={`/integrations/${integrationId}/actions/${row.original.id}`}
+              className="font-medium text-foreground hover:text-secondary hover:underline"
+            >
+              {row.getValue('name')}
+            </Link>
+            {row.original.metadata?.aiConfidence && (
               <Badge variant="secondary" className="gap-1 text-xs">
                 <Sparkles className="h-3 w-3" />
                 AI
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="gap-1 text-xs">
-                <User className="h-3 w-3" />
-                Manual
               </Badge>
             )}
           </div>
@@ -152,11 +151,14 @@ export function ActionTable({ integrationId }: ActionTableProps) {
         header: 'Endpoint',
         cell: ({ row }) => {
           const endpoint = row.getValue('endpointTemplate') as string;
+          const method = row.original.httpMethod;
+          // Full endpoint path for copying
+          const fullEndpoint = `${method} ${endpoint}`;
           return (
             <div className="group/endpoint flex items-center gap-1">
               <code className="text-sm text-muted-foreground">{endpoint}</code>
               <CopyButton
-                value={endpoint}
+                value={fullEndpoint}
                 label="Endpoint copied"
                 size="sm"
                 className="opacity-0 transition-opacity group-hover/endpoint:opacity-100"
@@ -169,8 +171,12 @@ export function ActionTable({ integrationId }: ActionTableProps) {
       {
         accessorKey: 'description',
         header: 'Description',
+        size: 300,
         cell: ({ row }) => (
-          <span className="line-clamp-1 text-sm text-muted-foreground">
+          <span
+            className="line-clamp-2 text-sm text-muted-foreground"
+            title={row.getValue('description') || ''}
+          >
             {row.getValue('description') || '—'}
           </span>
         ),

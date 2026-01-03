@@ -16,7 +16,7 @@ interface IntegrationDetailProps {
 }
 
 export function IntegrationDetail({ integrationId }: IntegrationDetailProps) {
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('actions');
   const { data: integration, isLoading, isError, error } = useIntegration(integrationId);
 
   if (isLoading) {
@@ -43,13 +43,13 @@ export function IntegrationDetail({ integrationId }: IntegrationDetailProps) {
       {/* Tabbed content */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
-          <TabsTrigger value="overview" className="gap-2">
-            <LayoutDashboard className="h-4 w-4" />
-            Overview
-          </TabsTrigger>
           <TabsTrigger value="actions" className="gap-2">
             <Zap className="h-4 w-4" />
             Actions
+          </TabsTrigger>
+          <TabsTrigger value="overview" className="gap-2">
+            <LayoutDashboard className="h-4 w-4" />
+            Overview
           </TabsTrigger>
           <TabsTrigger value="logs" className="gap-2">
             <ScrollText className="h-4 w-4" />
@@ -57,12 +57,12 @@ export function IntegrationDetail({ integrationId }: IntegrationDetailProps) {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="space-y-4">
-          <IntegrationOverview integration={integration} />
-        </TabsContent>
-
         <TabsContent value="actions" className="space-y-4">
           <IntegrationActionsTab integrationId={integrationId} />
+        </TabsContent>
+
+        <TabsContent value="overview" className="space-y-4">
+          <IntegrationOverview integration={integration} />
         </TabsContent>
 
         <TabsContent value="logs" className="space-y-4">

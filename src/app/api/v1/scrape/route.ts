@@ -39,6 +39,8 @@ const CreateScrapeJobRequestSchema = CreateScrapeJobInputSchema.extend({
   maxPages: z.number().min(1).max(100).optional().default(20),
   /** Max depth to crawl (default: 3) */
   maxDepth: z.number().min(1).max(5).optional().default(3),
+  /** Force a new scrape even if cached result exists (default: false) */
+  force: z.boolean().optional().default(false),
 });
 
 type CreateScrapeJobRequest = z.infer<typeof CreateScrapeJobRequestSchema>;
@@ -60,13 +62,17 @@ export const POST = withApiAuth(async (request: NextRequest, { tenant }) => {
     }
 
     const input: CreateScrapeJobRequest = parseResult.data;
-    const { sync, crawl, maxPages, maxDepth, ...jobInput } = input;
+    const { sync, crawl, maxPages, maxDepth, force, ...jobInput } = input;
 
     // Create the scraping job
-    const createResult = await createScrapeJob(tenant.id, {
-      documentationUrl: jobInput.documentationUrl,
-      wishlist: jobInput.wishlist,
-    });
+    const createResult = await createScrapeJob(
+      tenant.id,
+      {
+        documentationUrl: jobInput.documentationUrl,
+        wishlist: jobInput.wishlist,
+      },
+      { force }
+    );
 
     // If job already completed (cache hit), return immediately
     if (createResult.status === 'COMPLETED') {

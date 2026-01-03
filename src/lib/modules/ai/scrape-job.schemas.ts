@@ -168,15 +168,30 @@ export type ScrapeJobErrorDetails = z.infer<typeof ScrapeJobErrorDetailsSchema>;
 
 /**
  * Input for creating a new scrape job
+ *
+ * Supports two modes:
+ * 1. Auto-discover: Provide `documentationUrl` and we'll map the site to find relevant pages
+ * 2. Specific pages: Provide `specificUrls` array and we'll skip mapping, scrape those directly
  */
-export const CreateScrapeJobInputSchema = z.object({
-  documentationUrl: z.string().url('Invalid documentation URL'),
-  wishlist: z
-    .array(z.string().min(1))
-    .optional()
-    .default([])
-    .describe('List of specific actions/endpoints to prioritize'),
-});
+export const CreateScrapeJobInputSchema = z
+  .object({
+    documentationUrl: z.string().url('Invalid documentation URL').optional(),
+    specificUrls: z
+      .array(z.string().url('Invalid URL in specificUrls'))
+      .min(1, 'At least one URL is required')
+      .max(20, 'Maximum 20 specific URLs allowed')
+      .optional()
+      .describe('Specific documentation page URLs to scrape (skips site mapping)'),
+    wishlist: z
+      .array(z.string().min(1))
+      .optional()
+      .default([])
+      .describe('List of specific actions/endpoints to prioritize'),
+  })
+  .refine((data) => data.documentationUrl || data.specificUrls, {
+    message: 'Either documentationUrl or specificUrls must be provided',
+    path: ['documentationUrl'],
+  });
 
 export type CreateScrapeJobInput = z.infer<typeof CreateScrapeJobInputSchema>;
 

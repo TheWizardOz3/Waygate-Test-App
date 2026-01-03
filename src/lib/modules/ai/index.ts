@@ -97,9 +97,18 @@ export {
   // Job processing
   processJob,
   startJobProcessing,
+  // Re-analysis (re-extraction from cached content)
+  reanalyzeJob,
+  canReanalyzeJob,
+  // Cancel job
+  cancelScrapeJob,
+  markJobCancelled,
+  isJobCancelled,
   ScrapeJobError,
   // Types
   type ProcessJobOptions,
+  type CreateScrapeJobOptions,
+  type ReanalyzeJobOptions,
 } from './scrape-job.service';
 
 // Scrape Job Schemas

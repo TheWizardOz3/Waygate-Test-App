@@ -166,12 +166,44 @@ export const client = {
    * Scrape Job API methods
    */
   scrape: {
-    create(input: CreateScrapeJobInput) {
-      return apiClient.post<CreateScrapeJobResponse>('/scrape', input);
+    create(input: CreateScrapeJobInput, options?: { force?: boolean }) {
+      // Use async mode (sync: false) to get immediate response with job ID
+      // This allows the UI to show progress while scraping happens in background
+      return apiClient.post<CreateScrapeJobResponse>('/scrape', {
+        ...input,
+        sync: false,
+        force: options?.force ?? false,
+      });
     },
 
     getStatus(jobId: string) {
       return apiClient.get<ScrapeJobResponse>(`/scrape/${jobId}`);
+    },
+
+    /**
+     * Re-analyze a completed job by re-running AI extraction on cached content
+     * Returns updated job with new extraction results
+     */
+    reanalyze(jobId: string) {
+      return apiClient.post<{
+        jobId: string;
+        status: string;
+        result?: unknown;
+        endpointCount?: number;
+        error?: unknown;
+        message: string;
+      }>(`/scrape/${jobId}/reanalyze`);
+    },
+
+    /**
+     * Cancel a running scrape job
+     */
+    cancel(jobId: string) {
+      return apiClient.post<{
+        jobId: string;
+        status: string;
+        message: string;
+      }>(`/scrape/${jobId}/cancel`);
     },
   },
 

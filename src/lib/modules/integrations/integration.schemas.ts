@@ -72,6 +72,24 @@ export type AuthConfig = z.infer<typeof AuthConfigSchema>;
 // =============================================================================
 
 /**
+ * Action definition for bulk creation during integration setup
+ */
+export const ActionDefinitionSchema = z.object({
+  name: z.string().min(1),
+  slug: z.string().min(1),
+  method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),
+  path: z.string().min(1),
+  description: z.string().optional(),
+  pathParameters: z.array(z.any()).optional(),
+  queryParameters: z.array(z.any()).optional(),
+  requestBody: z.any().optional(),
+  responses: z.record(z.string(), z.any()).optional(),
+  tags: z.array(z.string()).optional(),
+});
+
+export type ActionDefinition = z.infer<typeof ActionDefinitionSchema>;
+
+/**
  * Input for creating a new integration
  */
 export const CreateIntegrationInputSchema = z.object({
@@ -87,6 +105,8 @@ export const CreateIntegrationInputSchema = z.object({
   authConfig: AuthConfigSchema.optional().default({}),
   tags: z.array(z.string()).optional().default([]),
   metadata: z.record(z.string(), z.unknown()).optional().default({}),
+  /** Optional actions to create along with the integration */
+  actions: z.array(ActionDefinitionSchema).optional(),
 });
 
 export type CreateIntegrationInput = z.infer<typeof CreateIntegrationInputSchema>;

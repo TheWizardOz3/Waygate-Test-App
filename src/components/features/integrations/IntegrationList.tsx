@@ -1,7 +1,17 @@
 'use client';
 
 import * as React from 'react';
-import { Search, Filter, Plus, LayoutGrid, List } from 'lucide-react';
+import {
+  Search,
+  Filter,
+  Plus,
+  LayoutGrid,
+  List,
+  MoreHorizontal,
+  Trash2,
+  ExternalLink,
+  Puzzle,
+} from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
@@ -13,11 +23,32 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Skeleton } from '@/components/ui/skeleton';
 import { IntegrationCard, IntegrationCardSkeleton } from './IntegrationCard';
+import { IntegrationStatusBadge } from './IntegrationStatusBadge';
 import { IntegrationEmptyState, IntegrationNoResults } from './IntegrationEmptyState';
 import { useIntegrations, useDeleteIntegration } from '@/hooks/useIntegrations';
 import { cn } from '@/lib/utils';
-import type { IntegrationStatus, AuthType } from '@/lib/modules/integrations/integration.schemas';
+import type {
+  IntegrationStatus,
+  AuthType,
+  IntegrationSummary,
+} from '@/lib/modules/integrations/integration.schemas';
 
 // =============================================================================
 // Types
@@ -176,16 +207,15 @@ export function IntegrationList({ className }: IntegrationListProps) {
       {/* Content */}
       {isLoading ? (
         // Loading State
-        <div
-          className={cn(
-            'gap-4',
-            viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'flex flex-col'
-          )}
-        >
-          {Array.from({ length: 6 }).map((_, i) => (
-            <IntegrationCardSkeleton key={i} />
-          ))}
-        </div>
+        viewMode === 'grid' ? (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <IntegrationCardSkeleton key={i} />
+            ))}
+          </div>
+        ) : (
+          <IntegrationTableSkeleton />
+        )
       ) : error ? (
         // Error State
         <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-center">
@@ -200,14 +230,9 @@ export function IntegrationList({ className }: IntegrationListProps) {
       ) : isEmpty && hasFilters ? (
         // No Results State (filters applied but no matches)
         <IntegrationNoResults />
-      ) : (
-        // Integration Grid/List
-        <div
-          className={cn(
-            'gap-4',
-            viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'flex flex-col'
-          )}
-        >
+      ) : viewMode === 'grid' ? (
+        // Grid View
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {integrations.map((integration) => (
             <IntegrationCard
               key={integration.id}
@@ -216,7 +241,144 @@ export function IntegrationList({ className }: IntegrationListProps) {
             />
           ))}
         </div>
+      ) : (
+        // Table/List View
+        <IntegrationTable integrations={integrations} onDelete={handleDelete} />
       )}
+    </div>
+  );
+}
+
+// =============================================================================
+// Table View Component
+// =============================================================================
+
+interface IntegrationTableProps {
+  integrations: IntegrationSummary[];
+  onDelete: (id: string) => void;
+}
+
+function IntegrationTable({ integrations, onDelete }: IntegrationTableProps) {
+  return (
+    <div className="rounded-md border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-[300px]">Integration</TableHead>
+            <TableHead>Slug</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead className="w-[40px]"></TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {integrations.map((integration) => (
+            <TableRow key={integration.id} className="group">
+              <TableCell>
+                <Link
+                  href={`/integrations/${integration.id}`}
+                  className="flex items-center gap-3 hover:text-primary"
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10">
+                    <Puzzle className="h-4 w-4 text-primary" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="block truncate font-medium">{integration.name}</span>
+                    {integration.description && (
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {integration.description}
+                      </span>
+                    )}
+                  </div>
+                </Link>
+              </TableCell>
+              <TableCell>
+                <code className="text-sm text-muted-foreground">{integration.slug}</code>
+              </TableCell>
+              <TableCell>
+                <IntegrationStatusBadge status={integration.status} size="sm" />
+              </TableCell>
+              <TableCell>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 opacity-0 group-hover:opacity-100"
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                      <span className="sr-only">More actions</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem asChild>
+                      <Link href={`/integrations/${integration.id}`}>View Details</Link>
+                    </DropdownMenuItem>
+                    {integration.documentationUrl && (
+                      <DropdownMenuItem asChild>
+                        <a
+                          href={integration.documentationUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <ExternalLink className="mr-2 h-4 w-4" />
+                          View Docs
+                        </a>
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={() => onDelete(integration.id)}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+function IntegrationTableSkeleton() {
+  return (
+    <div className="rounded-md border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-[300px]">Integration</TableHead>
+            <TableHead>Slug</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead className="w-[40px]"></TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {Array.from({ length: 5 }).map((_, i) => (
+            <TableRow key={i}>
+              <TableCell>
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                  <div className="space-y-1">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-3 w-48" />
+                  </div>
+                </div>
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-24" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-5 w-16 rounded-full" />
+              </TableCell>
+              <TableCell></TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </div>
   );
 }

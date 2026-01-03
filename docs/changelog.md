@@ -14,6 +14,7 @@
 
 | Version | Date       | Type       | Summary                                                         |
 | ------- | ---------- | ---------- | --------------------------------------------------------------- |
+| 0.1.4   | 2026-01-03 | patch      | UI polish, specific pages mode, action saves fix                |
 | 0.1.3   | 2026-01-03 | patch      | Intelligent crawling with LLM-guided page selection             |
 | 0.1.2   | 2026-01-03 | patch      | UX improvements: clickable logo, cards, copy buttons            |
 | 0.1.1   | 2026-01-02 | patch      | Upgrade to Gemini 3.0, improve scraping with default crawl mode |
@@ -62,6 +63,99 @@
 ## Releases
 
 <!-- Add new versions below this line, newest first -->
+
+## [0.1.4] - 2026-01-03
+
+### Added
+
+- **Specific Pages Mode for Scraping**
+  - New UI option to provide exact documentation URLs instead of auto-discovery
+  - Radio toggle between "Auto-discover" (existing behavior) and "Specific pages" (new)
+  - Accepts up to 20 URLs, one per line, in a textarea
+  - Skips site mapping entirely — directly scrapes provided URLs
+  - Much faster for users who know exactly which pages contain API documentation
+  - Database schema updated with `specific_urls` field on `scrape_jobs` table
+  - Added `shadcn/ui radio-group` component
+
+- **Job Cancellation Support**
+  - New "Cancel Job" button appears while scraping is in progress
+  - API endpoint: `POST /api/v1/scrape/{jobId}/cancel`
+  - Jobs are marked as `FAILED` with `JOB_CANCELLED` error code
+  - Cancel hook: `useCancelScrapeJob()` in React Query
+
+- **Improved Error UI**
+  - Specific error messages displayed with error codes
+  - Contextual suggestions for rate limits and API key issues
+  - "Re-analyze" button for retryable errors when cached content exists
+
+### Fixed
+
+- **Actions Not Saving from Wizard**
+  - Actions detected during scraping now correctly save when integration is created
+  - Updated `CreateIntegrationInputSchema` to accept `actions` array
+  - Integration service maps wizard action format to database format
+  - Input/output schemas properly constructed from path/query parameters
+
+- **CredentialsPanel Using Mock Data**
+  - Replaced hardcoded mock credential status with real API calls
+  - Now fetches from `/integrations/{id}/credentials` endpoint
+  - Correctly maps API response structure to UI state
+
+- **ActionTester and QuickTestModal Wrong Endpoint**
+  - Fixed both components to call correct Gateway API path
+  - Changed from non-existent `/gateway/invoke` to `/actions/{integration}/{action}`
+
+- **Integration Detail View Improvements**
+  - "Actions" tab is now the default view (was "Overview")
+  - Tab order reordered: Actions → Overview → Logs
+  - Action names link to detailed action view
+  - Removed "Manual" badge from actions (not useful)
+  - Description column has more space and shows 2 lines with tooltip
+  - Copy button copies full endpoint (`METHOD /path`)
+
+- **Dashboard Cleanup**
+  - Removed "Quick Actions" panel from dashboard home
+
+- **Integrations List Improvements**
+  - List view now uses compact tabular format (`IntegrationTable` component)
+  - Card view simplified: removed action count, auth type badges, actions button
+  - Both views focus on essential metadata: name, slug, description, status
+
+### Changed
+
+- **URL Triage Optimization**
+  - Dynamic URL truncation based on character count (200k chars) instead of fixed URL count
+  - Simplified LLM triage to single call returning URL array (faster, less token usage)
+  - Wishlist items now more prominent in triage prompt
+  - URL normalization: strips query params and fragments, deduplicates
+
+- **LLM Model Upgrades**
+  - URL triage now uses `gemini-3-pro` (was `gemini-3-flash`)
+  - Endpoint extraction uses `gemini-3-pro` with 32k output tokens
+  - Better reasoning and longer outputs for complex documentation
+
+- **Extraction Prompt Improvements**
+  - Prompts now explicitly skip deprecated endpoints
+  - Focus on core functionality (CRUD, main features)
+  - Quality over quantity guidance (aim for 30-50 important endpoints)
+  - Wishlist passed to extraction phase for targeted discovery
+
+### Dependencies
+
+- Added `@radix-ui/react-radio-group` (via shadcn/ui radio-group)
+
+### Database Migrations
+
+- `20260103072943_add_specific_urls_to_scrape_job`: Added `specific_urls` column
+
+### Technical Notes
+
+- All 637 tests pass
+- Zero lint errors, zero TypeScript errors
+- New components: `IntegrationTable`, enhanced `StepUrlInput` with mode selector
+- Updated test fixtures to include `specificUrls` field
+
+---
 
 ## [0.1.3] - 2026-01-03
 

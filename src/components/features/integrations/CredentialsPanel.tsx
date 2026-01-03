@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,6 +16,9 @@ import {
 } from 'lucide-react';
 import type { IntegrationResponse } from '@/lib/modules/integrations/integration.schemas';
 import { toast } from 'sonner';
+import { apiClient } from '@/lib/api/client';
+import { OAuthConnectButton } from '@/components/features/auth/OAuthConnectButton';
+import { ApiKeyConnectForm } from '@/components/features/auth/ApiKeyConnectForm';
 
 interface CredentialsPanelProps {
   integration: IntegrationResponse;
@@ -23,37 +26,187 @@ interface CredentialsPanelProps {
 
 type CredentialStatus = 'connected' | 'expired' | 'needs_reauth' | 'disconnected';
 
+interface CredentialApiResponse {
+  integration: {
+    id: string;
+    name: string;
+    authType: string;
+    status: string;
+  };
+  credentials: {
+    hasCredentials: boolean;
+    status?: string;
+    credentialType?: string;
+    expiresAt?: string | null;
+    scopes?: string[];
+  };
+}
+
+interface CredentialStatusData {
+  status: CredentialStatus;
+  expiresAt?: string;
+  scopes?: string[];
+  credentialType?: string;
+}
+
 export function CredentialsPanel({ integration }: CredentialsPanelProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showConnectForm, setShowConnectForm] = useState(false);
+  const [credentialData, setCredentialData] = useState<CredentialStatusData>({
+    status: 'disconnected',
+  });
 
-  // Mock credential status - in real app, would come from credential service
-  // Using a function to avoid TypeScript narrowing
-  const getCredentialStatus = (): CredentialStatus => 'connected';
-  const credentialStatus = getCredentialStatus();
-  const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7); // 7 days from now
-  const scopes = ['read', 'write', 'admin'];
+  // Fetch credential status on mount
+  useEffect(() => {
+    async function fetchCredentialStatus() {
+      setIsLoading(true);
+      try {
+        const response = await apiClient.get<CredentialApiResponse>(
+          `/integrations/${integration.id}/credentials`
+        );
+
+        // The API returns { integration: {...}, credentials: {...} }
+        const creds = response.credentials;
+
+        if (!creds.hasCredentials) {
+          setCredentialData({ status: 'disconnected' });
+        } else {
+          // Map the credential status to our UI status
+          let uiStatus: CredentialStatus = 'connected';
+          if (creds.status === 'expired') {
+            uiStatus = 'expired';
+          } else if (creds.status === 'needs_reauth' || creds.status === 'invalid') {
+            uiStatus = 'needs_reauth';
+          }
+
+          setCredentialData({
+            status: uiStatus,
+            expiresAt: creds.expiresAt || undefined,
+            scopes: creds.scopes,
+            credentialType: creds.credentialType,
+          });
+        }
+      } catch {
+        // No credentials found or error - show disconnected state
+        setCredentialData({ status: 'disconnected' });
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchCredentialStatus();
+  }, [integration.id]);
+
+  const credentialStatus = credentialData.status;
+  const expiresAt = credentialData.expiresAt ? new Date(credentialData.expiresAt) : null;
+  const scopes = credentialData.scopes || [];
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    setIsRefreshing(false);
-    toast.success('Credentials refreshed successfully');
+    try {
+      await apiClient.post(`/integrations/${integration.id}/refresh`);
+      // Re-fetch credential status
+      const response = await apiClient.get<CredentialApiResponse>(
+        `/integrations/${integration.id}/credentials`
+      );
+      const creds = response.credentials;
+      setCredentialData({
+        status: creds.hasCredentials ? 'connected' : 'disconnected',
+        expiresAt: creds.expiresAt || undefined,
+        scopes: creds.scopes,
+      });
+      toast.success('Credentials refreshed successfully');
+    } catch (err) {
+      toast.error('Failed to refresh credentials', {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const handleDisconnect = async () => {
     setIsDisconnecting(true);
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setIsDisconnecting(false);
-    toast.success('Credentials disconnected');
+    try {
+      await apiClient.post(`/integrations/${integration.id}/disconnect`);
+      setCredentialData({ status: 'disconnected' });
+      toast.success('Credentials disconnected');
+    } catch (err) {
+      toast.error('Failed to disconnect', {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    } finally {
+      setIsDisconnecting(false);
+    }
   };
 
   const handleConnect = () => {
-    // TODO: Initiate OAuth flow or show API key input
-    toast.info('Connect flow coming soon');
+    setShowConnectForm(true);
   };
+
+  const handleConnectSuccess = async () => {
+    setShowConnectForm(false);
+    // Re-fetch credential status
+    try {
+      const response = await apiClient.get<CredentialApiResponse>(
+        `/integrations/${integration.id}/credentials`
+      );
+      const creds = response.credentials;
+      setCredentialData({
+        status: creds.hasCredentials ? 'connected' : 'disconnected',
+        expiresAt: creds.expiresAt || undefined,
+        scopes: creds.scopes,
+      });
+    } catch {
+      // Still show as connected since the operation succeeded
+      setCredentialData({ status: 'connected' });
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-8">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Show connect form if requested
+  if (showConnectForm) {
+    if (integration.authType === 'oauth2') {
+      return (
+        <Card>
+          <CardHeader>
+            <CardTitle>Connect with OAuth</CardTitle>
+            <CardDescription>Authorize access to {integration.name}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <OAuthConnectButton
+              integrationId={integration.id}
+              integrationName={integration.name}
+              onSuccess={handleConnectSuccess}
+              onError={(error) => toast.error(error)}
+            />
+            <Button variant="ghost" onClick={() => setShowConnectForm(false)}>
+              Cancel
+            </Button>
+          </CardContent>
+        </Card>
+      );
+    } else {
+      return (
+        <ApiKeyConnectForm
+          integrationId={integration.id}
+          integrationName={integration.name}
+          onSuccess={handleConnectSuccess}
+          onError={(error) => toast.error(error)}
+        />
+      );
+    }
+  }
 
   const getStatusIcon = (status: CredentialStatus) => {
     switch (status) {
@@ -114,7 +267,7 @@ export function CredentialsPanel({ integration }: CredentialsPanelProps) {
         </div>
 
         {/* Expiration (for OAuth) */}
-        {integration.authType === 'oauth2' && credentialStatus === 'connected' && (
+        {integration.authType === 'oauth2' && credentialStatus === 'connected' && expiresAt && (
           <div className="space-y-2 rounded-lg bg-muted/50 p-3">
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Expires</span>

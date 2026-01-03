@@ -1,12 +1,26 @@
 'use client';
 
 import { useEffect } from 'react';
-import { Check, Loader2, AlertCircle, Globe, FileSearch, Cpu, Sparkles } from 'lucide-react';
+import {
+  Check,
+  Loader2,
+  AlertCircle,
+  Globe,
+  FileSearch,
+  Cpu,
+  Sparkles,
+  RefreshCw,
+  XCircle,
+} from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { useWizardStore } from '@/stores/wizard.store';
-import { useScrapeJobStatus } from '@/hooks/useScrapeJob';
+import {
+  useScrapeJobStatus,
+  useReanalyzeScrapeJob,
+  useCancelScrapeJob,
+} from '@/hooks/useScrapeJob';
 import { cn } from '@/lib/utils';
 
 interface StepItemProps {
@@ -116,23 +130,105 @@ export function StepScraping() {
     return 'pending';
   };
 
+  const { reanalyze, isPending: isReanalyzing } = useReanalyzeScrapeJob();
+  const { cancel, isPending: isCancelling } = useCancelScrapeJob();
+
+  // Handle cancel
+  const handleCancel = async () => {
+    if (!data.scrapeJobId) return;
+    try {
+      await cancel(data.scrapeJobId);
+      goBack(); // Go back to URL input step
+    } catch {
+      // Error is handled by the hook with toast
+    }
+  };
+
+  // Handle re-analyze
+  const handleReanalyze = async () => {
+    if (!data.scrapeJobId) return;
+    try {
+      const result = await reanalyze(data.scrapeJobId);
+      if (result.status === 'COMPLETED' && result.result) {
+        // Re-fetch job status to get updated results
+        // The query will auto-refetch and trigger the useEffect
+      }
+    } catch {
+      // Error is handled by the hook with toast
+    }
+  };
+
   // Handle failed state
   if (isError || data.scrapeStatus === 'FAILED') {
-    const errorMessage =
-      error?.message ||
-      (jobData && 'error' in jobData ? jobData.error.message : 'An unknown error occurred');
+    const errorDetails = jobData && 'error' in jobData ? jobData.error : null;
+    const errorMessage = error?.message || errorDetails?.message || 'An unknown error occurred';
+    const errorCode = errorDetails?.code || 'UNKNOWN_ERROR';
+    const isRetryable = errorDetails?.retryable ?? false;
+
+    // Determine if this is a rate limit or API key issue
+    const isRateLimitError =
+      errorMessage.toLowerCase().includes('rate limit') ||
+      errorMessage.toLowerCase().includes('quota exceeded');
+    const isApiKeyError =
+      errorMessage.toLowerCase().includes('api key') ||
+      errorMessage.toLowerCase().includes('leaked') ||
+      errorMessage.toLowerCase().includes('unauthorized');
 
     return (
       <div className="space-y-6">
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Scraping Failed</AlertTitle>
-          <AlertDescription>{errorMessage}</AlertDescription>
+          <AlertDescription className="space-y-2">
+            <p>{errorMessage}</p>
+            {errorCode !== 'UNKNOWN_ERROR' && (
+              <p className="text-xs opacity-75">Error code: {errorCode}</p>
+            )}
+          </AlertDescription>
         </Alert>
 
+        {/* Helpful suggestions based on error type */}
+        {isRateLimitError && (
+          <Alert>
+            <RefreshCw className="h-4 w-4" />
+            <AlertTitle>Rate Limited</AlertTitle>
+            <AlertDescription>
+              The AI service is temporarily rate limited. Wait a few minutes and try the
+              &quot;Re-analyze&quot; button below to retry without re-scraping.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {isApiKeyError && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>API Key Issue</AlertTitle>
+            <AlertDescription>
+              There&apos;s an issue with the AI service API key. Please check your environment
+              configuration and try again.
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div className="flex justify-end gap-3">
+          {/* Re-analyze option - retries AI extraction on cached content */}
+          {data.scrapeJobId && (isRetryable || isRateLimitError) && (
+            <Button variant="outline" onClick={handleReanalyze} disabled={isReanalyzing}>
+              {isReanalyzing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Re-analyzing...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Re-analyze
+                </>
+              )}
+            </Button>
+          )}
           <Button variant="outline" onClick={() => goBack()}>
-            Try Again
+            Try Different URL
           </Button>
         </div>
       </div>
@@ -197,6 +293,28 @@ export function StepScraping() {
             </p>
           </div>
         </div>
+      </div>
+
+      {/* Cancel button */}
+      <div className="flex justify-end">
+        <Button
+          variant="outline"
+          onClick={handleCancel}
+          disabled={isCancelling}
+          className="text-muted-foreground hover:text-destructive"
+        >
+          {isCancelling ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Cancelling...
+            </>
+          ) : (
+            <>
+              <XCircle className="mr-2 h-4 w-4" />
+              Cancel
+            </>
+          )}
+        </Button>
       </div>
     </div>
   );

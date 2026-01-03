@@ -47,6 +47,8 @@ import {
   type IntegrationResponse,
   type ListIntegrationsResponse,
 } from './integration.schemas';
+import { createAction } from '../actions/action.service';
+import type { JsonSchemaProperty, JsonSchema } from '../actions/action.schemas';
 
 import type { Integration } from '@prisma/client';
 
@@ -117,6 +119,85 @@ export async function createIntegration(
   };
 
   const integration = await repoCreateIntegration(dbInput);
+
+  // Create actions if provided
+  if (data.actions && data.actions.length > 0) {
+    console.log(
+      `[Integration Service] Creating ${data.actions.length} actions for integration ${integration.id}`
+    );
+
+    let createdCount = 0;
+    let errorCount = 0;
+
+    for (const actionDef of data.actions) {
+      try {
+        // Build input schema from path/query parameters
+        const inputProperties: Record<string, JsonSchemaProperty> = {};
+        const requiredFields: string[] = [];
+
+        // Add path parameters to input schema
+        if (actionDef.pathParameters?.length) {
+          for (const param of actionDef.pathParameters) {
+            inputProperties[param.name] = {
+              type: (param.type || 'string') as JsonSchemaProperty['type'],
+              description: param.description,
+            };
+            if (param.required) requiredFields.push(param.name);
+          }
+        }
+
+        // Add query parameters to input schema
+        if (actionDef.queryParameters?.length) {
+          for (const param of actionDef.queryParameters) {
+            inputProperties[param.name] = {
+              type: (param.type || 'string') as JsonSchemaProperty['type'],
+              description: param.description,
+            };
+            if (param.required) requiredFields.push(param.name);
+          }
+        }
+
+        // Add request body to input schema
+        if (actionDef.requestBody) {
+          inputProperties['body'] = actionDef.requestBody as JsonSchemaProperty;
+        }
+
+        const inputSchema: JsonSchema = {
+          type: 'object',
+          properties: Object.keys(inputProperties).length > 0 ? inputProperties : undefined,
+          required: requiredFields.length > 0 ? requiredFields : undefined,
+        };
+
+        // Build output schema from responses (use 200/201 response if available)
+        const successResponse = actionDef.responses?.['200'] || actionDef.responses?.['201'];
+        const outputSchema: JsonSchema = successResponse
+          ? { type: 'object', ...successResponse }
+          : { type: 'object' };
+
+        await createAction(tenantId, {
+          integrationId: integration.id,
+          name: actionDef.name,
+          slug: actionDef.slug,
+          httpMethod: actionDef.method,
+          endpointTemplate: actionDef.path,
+          description: actionDef.description,
+          inputSchema,
+          outputSchema,
+          cacheable: false,
+          metadata: actionDef.tags?.length ? { tags: actionDef.tags } : undefined,
+        });
+        createdCount++;
+      } catch (error) {
+        errorCount++;
+        console.error(`[Integration Service] Failed to create action ${actionDef.slug}:`, error);
+        // Continue with other actions even if one fails
+      }
+    }
+
+    console.log(
+      `[Integration Service] Created ${createdCount} actions (${errorCount} errors) for integration ${integration.id}`
+    );
+  }
 
   return toIntegrationResponse(integration);
 }

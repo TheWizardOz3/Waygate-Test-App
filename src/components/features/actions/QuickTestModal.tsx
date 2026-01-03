@@ -73,19 +73,20 @@ export function QuickTestModal({ action, integrationSlug, trigger }: QuickTestMo
         setResult({ request: requestPreview });
 
         // Execute the action through the gateway API
+        // API endpoint: POST /api/v1/actions/{integration}/{action}
         const response = await apiClient.post<{
           data: unknown;
-          metadata: {
-            duration: number;
-            cached: boolean;
+          meta?: {
+            execution?: {
+              latencyMs: number;
+              cached: boolean;
+            };
           };
-        }>('/gateway/invoke', {
-          integrationSlug,
-          actionSlug: action.slug,
-          input,
-        });
+        }>(`/actions/${integrationSlug}/${action.slug}`, input);
 
         const duration = Date.now() - startTime;
+
+        const executionDuration = response.meta?.execution?.latencyMs || duration;
 
         const testResult: TestResult = {
           request: requestPreview,
@@ -93,7 +94,7 @@ export function QuickTestModal({ action, integrationSlug, trigger }: QuickTestMo
             status: 200,
             statusText: 'OK',
             body: response.data,
-            duration: response.metadata?.duration || duration,
+            duration: executionDuration,
           },
         };
 
@@ -106,7 +107,7 @@ export function QuickTestModal({ action, integrationSlug, trigger }: QuickTestMo
           input,
           response: {
             status: 200,
-            duration: response.metadata?.duration || duration,
+            duration: executionDuration,
           },
         });
       } catch (err) {

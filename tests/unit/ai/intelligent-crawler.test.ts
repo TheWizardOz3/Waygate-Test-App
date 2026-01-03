@@ -141,17 +141,19 @@ describe('preFilterUrls', () => {
   it('should filter out non-documentation URLs', () => {
     const urls = [
       'https://api.example.com/docs/auth',
+      'https://api.example.com/docs/reference/users',
+      'https://api.example.com/docs/api/v1/messages',
       'https://api.example.com/blog/news',
-      'https://api.example.com/reference/users',
       'https://api.example.com/pricing',
-      'https://api.example.com/api/v1/messages',
     ];
 
     const result = preFilterUrls(urls, 'https://api.example.com/docs');
 
+    // URLs under /docs path should be included
     expect(result.included).toContain('https://api.example.com/docs/auth');
-    expect(result.included).toContain('https://api.example.com/reference/users');
-    expect(result.included).toContain('https://api.example.com/api/v1/messages');
+    expect(result.included).toContain('https://api.example.com/docs/reference/users');
+    expect(result.included).toContain('https://api.example.com/docs/api/v1/messages');
+    // URLs outside /docs path or with exclude patterns should be excluded
     expect(result.excluded).toContain('https://api.example.com/blog/news');
     expect(result.excluded).toContain('https://api.example.com/pricing');
   });
@@ -160,13 +162,15 @@ describe('preFilterUrls', () => {
     const urls = [
       'https://api.example.com/docs/auth',
       'https://other-site.com/docs/auth',
-      'https://api.example.com/reference/users',
+      'https://api.example.com/docs/reference/users',
     ];
 
     const result = preFilterUrls(urls, 'https://api.example.com/docs');
 
+    // Same host, under /docs path should be included
     expect(result.included).toContain('https://api.example.com/docs/auth');
-    expect(result.included).toContain('https://api.example.com/reference/users');
+    expect(result.included).toContain('https://api.example.com/docs/reference/users');
+    // Different host should be excluded
     expect(result.excluded).toContain('https://other-site.com/docs/auth');
   });
 

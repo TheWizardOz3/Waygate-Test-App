@@ -147,6 +147,12 @@ const DEFAULT_TRIAGE_MODEL: LLMModelId = 'gemini-3-flash';
 /** Maximum URLs to return from map (Firecrawl limit) */
 const MAX_MAP_URLS = 5000;
 
+/** Maximum character count for URLs sent to LLM triage (conservative estimate for ~50k tokens) */
+const MAX_TRIAGE_INPUT_CHARS = 200_000;
+
+/** Maximum URLs to select for scraping from triage */
+const MAX_URLS_TO_SELECT = 50;
+
 // =============================================================================
 // Firecrawl Map Function
 // =============================================================================
@@ -253,6 +259,48 @@ export async function mapWebsite(
 
     throw error;
   }
+}
+
+// =============================================================================
+// URL Normalization
+// =============================================================================
+
+/**
+ * Normalize a URL by stripping query params, fragments, and trailing slashes
+ * This reduces noise and helps with deduplication
+ */
+function normalizeUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    // Keep only protocol, host, and pathname
+    // Remove query params (?foo=bar) and fragments (#section)
+    let normalized = `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
+    // Remove trailing slash (except for root)
+    if (normalized.endsWith('/') && parsed.pathname !== '/') {
+      normalized = normalized.slice(0, -1);
+    }
+    return normalized;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Normalize and deduplicate a list of URLs
+ */
+function normalizeAndDedupeUrls(urls: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const url of urls) {
+    const normalized = normalizeUrl(url);
+    if (!seen.has(normalized)) {
+      seen.add(normalized);
+      result.push(normalized);
+    }
+  }
+
+  return result;
 }
 
 // =============================================================================
@@ -414,6 +462,11 @@ export function detectUrlCategory(url: string): {
 /**
  * Pre-filter URLs based on patterns before LLM triage
  * This reduces the number of URLs we send to the LLM
+ *
+ * Key filtering:
+ * 1. Must be same host as root URL
+ * 2. Must be under the same path prefix (e.g., /methods/* if root is /methods)
+ * 3. Must not match exclude patterns (blog, pricing, etc.)
  */
 export function preFilterUrls(
   urls: string[],
@@ -423,11 +476,22 @@ export function preFilterUrls(
   const excluded: string[] = [];
 
   let rootHost: string;
+  let rootPath: string;
   try {
-    rootHost = new URL(rootUrl).hostname;
+    const rootParsed = new URL(rootUrl);
+    rootHost = rootParsed.hostname;
+    // Get the path prefix (e.g., "/methods" from "/methods" or "/methods/chat.postMessage")
+    // Remove trailing slash and get the directory path
+    rootPath = rootParsed.pathname.replace(/\/$/, '');
+    // If path has multiple segments, use the first meaningful segment as prefix
+    // e.g., "/methods/chat.postMessage" -> "/methods"
+    // e.g., "/api/v1/users" -> "/api/v1" or "/api"
+    // For now, use the full path as prefix (user-specified path is intentional)
   } catch {
     return { included: urls, excluded: [] };
   }
+
+  console.log(`[Pre-filter] Root host: ${rootHost}, Root path prefix: ${rootPath || '/'}`);
 
   for (const url of urls) {
     try {
@@ -437,6 +501,16 @@ export function preFilterUrls(
       if (parsed.hostname !== rootHost) {
         excluded.push(url);
         continue;
+      }
+
+      // Must be under the same path prefix (if root has a path)
+      // This ensures /methods/* only includes /methods pages, not /tutorials or /basics
+      if (rootPath && rootPath !== '/' && rootPath !== '') {
+        const urlPath = parsed.pathname;
+        if (!urlPath.startsWith(rootPath)) {
+          excluded.push(url);
+          continue;
+        }
       }
 
       const detection = detectUrlCategory(url);
@@ -454,116 +528,82 @@ export function preFilterUrls(
 }
 
 // =============================================================================
-// LLM Triage
+// LLM Triage (Simplified)
 // =============================================================================
 
 /**
- * Schema for LLM URL prioritization response
+ * Simple schema for URL selection - just returns array of URLs
+ * This allows processing many more URLs in a single call
  */
-const URL_PRIORITIZATION_SCHEMA: LLMResponseSchema = {
-  type: 'array',
-  items: {
-    type: 'object',
-    properties: {
-      url: { type: 'string', description: 'The URL' },
-      priority: {
-        type: 'integer',
-        description: 'Priority score 0-100 (higher = more important)',
-      },
-      category: {
-        type: 'string',
-        enum: [
-          'api_endpoint',
-          'api_reference',
-          'authentication',
-          'getting_started',
-          'rate_limits',
-          'sdk_library',
-          'changelog',
-          'tutorial',
-          'other',
-        ],
-        description: 'Category of the page',
-      },
-      reason: { type: 'string', description: 'Brief reason for this priority' },
-      matchesWishlist: {
-        type: 'boolean',
-        description: 'Whether this URL likely matches a wishlist item',
-      },
-      matchedWishlistItems: {
-        type: 'array',
-        items: { type: 'string' },
-        description: 'Which wishlist items this URL matches',
-      },
+const SIMPLE_URL_SELECTION_SCHEMA: LLMResponseSchema = {
+  type: 'object',
+  properties: {
+    selectedUrls: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'The selected URLs in priority order (most important first)',
     },
-    required: ['url', 'priority', 'category', 'reason', 'matchesWishlist'],
+    authUrls: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'URLs specifically about authentication (critical)',
+    },
   },
+  required: ['selectedUrls'],
 };
 
 /**
- * Build the prompt for URL triage
+ * Build the simplified prompt for bulk URL selection
+ * Optimized for processing 500+ URLs with minimal output
  */
-function buildTriagePrompt(urls: string[], wishlist?: string[]): string {
+function buildSimpleTriagePrompt(urls: string[], maxToSelect: number, wishlist?: string[]): string {
   const wishlistSection = wishlist?.length
     ? `
-## Wishlist (Prioritize URLs related to these)
-The user specifically wants to find these actions/endpoints:
-${wishlist.map((w) => `- ${w}`).join('\n')}
+## 🎯 USER WISHLIST - MUST INCLUDE URLs RELATED TO THESE:
+${wishlist.map((w) => `- "${w}" - Find URLs about ${w} operations, ${w} methods, ${w} endpoints, ${w} queries, ${w} views`).join('\n')}
 
-NOTE: The wishlist is a guide, not a strict filter. Prioritize matching URLs, but also include
-other valuable API documentation. Don't ONLY find wishlist items - we want comprehensive coverage.
+**IMPORTANT**: URLs related to wishlist items should be included even if they don't rank highly by other criteria.
 `
     : '';
 
-  return `You are an API documentation URL prioritizer. Analyze these URLs from a documentation site and rank them by relevance for understanding and using the API.
-
-## URLs to Analyze
-${urls.map((u, i) => `${i + 1}. ${u}`).join('\n')}
+  return `Select the ${maxToSelect} most important URLs for API documentation from this list.
 ${wishlistSection}
-## Priority Guidelines
+## URL List (${urls.length} total)
+${urls.join('\n')}
 
-Assign priority scores (0-100) based on these rules:
+## Selection Criteria (in order of importance)
 
-### Highest Priority (90-100):
-- Individual API endpoint documentation (e.g., /api/v1/users/create, /methods/chat.postMessage)
-- Authentication/authorization documentation (CRITICAL - we need this)
-- API reference overview pages
+1. **Wishlist Items** - ALWAYS include URLs related to user's wishlist above
+2. **Authentication/OAuth docs** - CRITICAL, always include these
+3. **Individual API endpoint docs** (e.g., /methods/chat.postMessage, /api/users/create)
+4. **API reference overview pages**
+5. **Rate limiting docs**
+6. **Getting started/quickstart guides**
 
-### High Priority (70-89):
-- Rate limiting documentation
-- Error handling documentation  
-- Getting started/quickstart guides (often contain important context)
-- Core API concepts
-
-### Medium Priority (50-69):
-- SDK/library documentation (useful for understanding patterns)
-- Pagination, filtering, webhooks documentation
-- Common patterns documentation
-
-### Lower Priority (30-49):
-- Tutorials and guides (less dense info)
-- Example applications
-- Best practices
-
-### Skip (0-29):
-- Blog posts, news, changelogs
-- Marketing pages
+## SKIP these:
+- Blog posts, changelogs, release notes
 - Community/forum pages
-- Non-documentation pages
+- Marketing/pricing pages
+- SDK-only docs (unless they document API behavior)
 
-## Important Notes
-1. Authentication docs are CRITICAL - prioritize them highly
-2. Individual endpoint docs are more valuable than overview pages
-3. Match against wishlist items but don't be dogmatic - include other valuable pages
-4. When in doubt, include rather than exclude
+## Output Instructions
+Return a JSON object with:
+- "selectedUrls": Array of the top ${maxToSelect} URLs, ordered by importance (most important first)
+- "authUrls": Array of any authentication-related URLs you found (subset of selectedUrls)
 
-Return a JSON array of prioritized URLs with their scores and categories.`;
+IMPORTANT: Return ONLY the URL strings, no explanations or metadata.`;
 }
 
 /**
- * Use LLM to triage and prioritize URLs
+ * Use LLM to select the most important URLs for scraping
  *
- * @param urls - URLs to triage (should be pre-filtered)
+ * Optimized approach:
+ * - Single LLM call for up to 500 URLs (just URL strings, minimal input)
+ * - Simple output: just array of selected URLs (minimal output)
+ * - Falls back to pattern-based selection if LLM fails
+ *
+ * @param urls - URLs to triage (should be pre-filtered and normalized)
+ * @param maxToSelect - Maximum URLs to select
  * @param wishlist - Optional wishlist items to prioritize
  * @param model - LLM model to use
  * @returns Prioritized URLs sorted by priority
@@ -571,77 +611,83 @@ Return a JSON array of prioritized URLs with their scores and categories.`;
 export async function triageUrls(
   urls: string[],
   wishlist?: string[],
-  model: LLMModelId = DEFAULT_TRIAGE_MODEL
+  model: LLMModelId = DEFAULT_TRIAGE_MODEL,
+  maxToSelect: number = MAX_URLS_TO_SELECT
 ): Promise<PrioritizedUrl[]> {
-  // If we have too many URLs, batch them
-  const BATCH_SIZE = 100;
-  const batches: string[][] = [];
-
-  for (let i = 0; i < urls.length; i += BATCH_SIZE) {
-    batches.push(urls.slice(i, i + BATCH_SIZE));
-  }
-
-  console.log(`[Triage] Processing ${urls.length} URLs in ${batches.length} batches`);
+  console.log(
+    `[Triage] Processing ${urls.length} URLs in single LLM call, selecting top ${maxToSelect}`
+  );
 
   const llm = getLLM(model);
-  const allResults: PrioritizedUrl[] = [];
 
-  for (let i = 0; i < batches.length; i++) {
-    const batch = batches[i];
-    console.log(`[Triage] Processing batch ${i + 1}/${batches.length} (${batch.length} URLs)`);
+  try {
+    const prompt = buildSimpleTriagePrompt(urls, maxToSelect, wishlist);
 
-    const prompt = buildTriagePrompt(batch, wishlist);
+    console.log(`[Triage] Prompt size: ${prompt.length} chars`);
 
-    try {
-      const result = await llm.generate<PrioritizedUrl[]>(prompt, {
-        responseSchema: URL_PRIORITIZATION_SCHEMA,
-        temperature: 0.1, // Low temperature for consistent ranking
-      });
+    const result = await llm.generate<{ selectedUrls: string[]; authUrls?: string[] }>(prompt, {
+      responseSchema: SIMPLE_URL_SELECTION_SCHEMA,
+      temperature: 0.1, // Low temperature for consistent selection
+      maxOutputTokens: 8192, // Enough for ~100 URLs as output
+    });
 
-      allResults.push(...result.content);
-    } catch (error) {
-      console.error(`[Triage] Batch ${i + 1} failed:`, error);
-      // Fall back to pattern-based scoring for this batch
-      for (const url of batch) {
-        const detection = detectUrlCategory(url);
-        allResults.push({
-          url,
-          priority: detection.patternScore,
-          category: detection.category,
-          reason: 'Pattern-based fallback (LLM failed)',
-          matchesWishlist: false,
-        });
-      }
-    }
-  }
+    const selectedUrls = result.content.selectedUrls || [];
+    const authUrls = new Set(result.content.authUrls || []);
 
-  // Sort by priority (descending)
-  allResults.sort((a, b) => b.priority - a.priority);
+    console.log(
+      `[Triage] LLM selected ${selectedUrls.length} URLs (${authUrls.size} auth-related)`
+    );
 
-  // Apply wishlist boost if not already applied by LLM
-  if (wishlist?.length) {
-    const wishlistLower = wishlist.map((w) => w.toLowerCase());
-    for (const item of allResults) {
-      // Check if URL path contains any wishlist terms
-      try {
-        const path = new URL(item.url).pathname.toLowerCase();
-        const matchedItems = wishlistLower.filter((w) => path.includes(w.replace(/[_\s]+/g, '-')));
-        if (matchedItems.length > 0 && !item.matchesWishlist) {
-          item.matchesWishlist = true;
-          item.matchedWishlistItems = matchedItems;
-          // Boost priority if not already high
-          item.priority = Math.min(100, item.priority + 15);
+    // Convert to PrioritizedUrl format with priority based on position
+    const prioritizedResults: PrioritizedUrl[] = selectedUrls.map((url, index) => ({
+      url,
+      // Priority decreases with position (first = 100, second = 99, etc.)
+      priority: Math.max(50, 100 - index),
+      category: authUrls.has(url) ? 'authentication' : detectUrlCategory(url).category,
+      reason: authUrls.has(url) ? 'Authentication documentation' : 'LLM selected',
+      matchesWishlist: false,
+    }));
+
+    // Apply wishlist matching
+    if (wishlist?.length) {
+      const wishlistLower = wishlist.map((w) => w.toLowerCase());
+      for (const item of prioritizedResults) {
+        try {
+          const path = new URL(item.url).pathname.toLowerCase();
+          const matchedItems = wishlistLower.filter(
+            (w) =>
+              path.includes(w.replace(/[_\s]+/g, '-')) || path.includes(w.replace(/[_\s]+/g, ''))
+          );
+          if (matchedItems.length > 0) {
+            item.matchesWishlist = true;
+            item.matchedWishlistItems = matchedItems;
+          }
+        } catch {
+          // Ignore URL parsing errors
         }
-      } catch {
-        // Ignore URL parsing errors
       }
     }
 
-    // Re-sort after wishlist boost
-    allResults.sort((a, b) => b.priority - a.priority);
-  }
+    return prioritizedResults;
+  } catch (error) {
+    console.error(`[Triage] LLM triage failed, falling back to pattern-based selection:`, error);
 
-  return allResults;
+    // Fallback: use pattern-based scoring
+    const scoredUrls = urls.map((url) => {
+      const detection = detectUrlCategory(url);
+      return {
+        url,
+        priority: detection.patternScore,
+        category: detection.category,
+        reason: 'Pattern-based fallback',
+        matchesWishlist: false,
+      } as PrioritizedUrl;
+    });
+
+    // Sort by score and take top N
+    scoredUrls.sort((a, b) => b.priority - a.priority);
+    return scoredUrls.slice(0, maxToSelect);
+  }
 }
 
 // =============================================================================
@@ -714,7 +760,7 @@ export async function intelligentCrawl(
     // =========================================================================
     report('triaging', 'Pre-filtering URLs based on patterns...', { percentComplete: 20 });
 
-    // Pre-filter to remove obvious non-doc pages
+    // Pre-filter to remove obvious non-doc pages and enforce path prefix
     const { included: filteredUrls, excluded } = preFilterUrls(mapResult.urls, rootUrl);
     skippedUrls.push(...excluded);
 
@@ -722,13 +768,58 @@ export async function intelligentCrawl(
       `[Intelligent Crawl] Pre-filtered: ${filteredUrls.length} included, ${excluded.length} excluded`
     );
 
-    report('triaging', `Analyzing ${filteredUrls.length} potential documentation URLs...`, {
+    // Normalize and dedupe URLs (strip query params, fragments)
+    const normalizedUrls = normalizeAndDedupeUrls(filteredUrls);
+    console.log(
+      `[Intelligent Crawl] After normalization: ${normalizedUrls.length} unique URLs (deduped ${filteredUrls.length - normalizedUrls.length})`
+    );
+
+    // Calculate total character count for URLs
+    const totalUrlChars = normalizedUrls.reduce((sum, url) => sum + url.length + 1, 0); // +1 for newline
+
+    // Cap URLs for triage if character count exceeds limit
+    let urlsForTriage = normalizedUrls;
+    if (totalUrlChars > MAX_TRIAGE_INPUT_CHARS) {
+      console.log(
+        `[Intelligent Crawl] URL list too large (${totalUrlChars} chars), truncating to ~${MAX_TRIAGE_INPUT_CHARS} chars`
+      );
+
+      // Score and sort URLs by pattern detection (best ones first)
+      const scoredUrls = normalizedUrls.map((url) => {
+        const detection = detectUrlCategory(url);
+        return { url, score: detection.patternScore };
+      });
+      scoredUrls.sort((a, b) => b.score - a.score);
+
+      // Take URLs until we hit the character limit
+      urlsForTriage = [];
+      let charCount = 0;
+      for (const { url } of scoredUrls) {
+        if (charCount + url.length + 1 > MAX_TRIAGE_INPUT_CHARS) break;
+        urlsForTriage.push(url);
+        charCount += url.length + 1;
+      }
+
+      // Add the rest to skipped
+      const skippedFromCap = scoredUrls.slice(urlsForTriage.length).map((s) => s.url);
+      skippedUrls.push(...skippedFromCap);
+
+      console.log(
+        `[Intelligent Crawl] Selected ${urlsForTriage.length} URLs (${charCount} chars) for triage`
+      );
+    } else {
+      console.log(
+        `[Intelligent Crawl] Sending all ${normalizedUrls.length} URLs (${totalUrlChars} chars) to triage`
+      );
+    }
+
+    report('triaging', `Analyzing ${urlsForTriage.length} URLs with AI...`, {
       urlsDiscovered: mapResult.urls.length,
       percentComplete: 25,
     });
 
-    // LLM triage
-    const prioritizedUrls = await triageUrls(filteredUrls, wishlist, model);
+    // LLM triage - single call to select best URLs
+    const prioritizedUrls = await triageUrls(urlsForTriage, wishlist, model, maxPages);
 
     report('triaging', `Prioritized ${prioritizedUrls.length} URLs`, {
       urlsSelected: Math.min(prioritizedUrls.length, maxPages),

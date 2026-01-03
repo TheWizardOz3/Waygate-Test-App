@@ -302,8 +302,22 @@ export function StepConfigureAuth() {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '');
 
-    // Get selected actions count
+    // Get selected actions
     const selectedActions = data.detectedActions.filter((a) => a.selected);
+
+    // Convert selected actions to the format expected by the API
+    const actionsToCreate = selectedActions.map((action) => ({
+      name: action.name,
+      slug: action.slug,
+      method: action.method,
+      path: action.path,
+      description: action.description,
+      pathParameters: action.pathParameters,
+      queryParameters: action.queryParameters,
+      requestBody: action.requestBody,
+      responses: action.responses,
+      tags: action.tags,
+    }));
 
     try {
       const integration = await createIntegration.mutateAsync({
@@ -318,6 +332,7 @@ export function StepConfigureAuth() {
         },
         tags: [],
         metadata: {},
+        actions: actionsToCreate, // Pass the selected actions!
       });
 
       // Store auth config and created integration info

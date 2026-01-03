@@ -86,14 +86,17 @@ export type ParseErrorCode =
 /** Maximum content length before using chunked parsing */
 const DEFAULT_MAX_CONTENT_LENGTH = 100_000;
 
-/** Default model for parsing */
-const DEFAULT_MODEL: LLMModelId = 'gemini-3-flash';
+/** Default model for parsing - Pro for better reasoning and longer outputs */
+const DEFAULT_MODEL: LLMModelId = 'gemini-3-pro';
 
 /** Chunk size for large documents */
 const CHUNK_SIZE = 50_000;
 
 /** Overlap between chunks to maintain context */
 const CHUNK_OVERLAP = 2_000;
+
+/** Max output tokens for endpoint extraction (high for extracting many endpoints) */
+const ENDPOINT_EXTRACTION_MAX_TOKENS = 32768;
 
 // =============================================================================
 // Main Parser
@@ -163,6 +166,15 @@ export async function parseApiDocumentation(
 
   const durationMs = Date.now() - startTime;
   options.onProgress?.(`Parsing complete in ${durationMs}ms`);
+
+  // DEBUG: Log parsing results
+  console.log(`[Document Parser] Parsing complete in ${durationMs}ms`);
+  console.log(`[Document Parser] API Name: ${doc.name}`);
+  console.log(`[Document Parser] Base URL: ${doc.baseUrl}`);
+  console.log(`[Document Parser] Endpoints found: ${doc.endpoints?.length ?? 0}`);
+  console.log(`[Document Parser] Auth methods found: ${doc.authMethods?.length ?? 0}`);
+  console.log(`[Document Parser] Overall confidence: ${(confidence * 100).toFixed(1)}%`);
+  console.log(`[Document Parser] Warnings: ${warnings.length > 0 ? warnings.join('; ') : 'None'}`);
 
   return {
     doc,
@@ -430,11 +442,27 @@ async function extractEndpoints(
 ): Promise<ExtractionResult<ApiEndpoint[]>> {
   const warnings: string[] = [];
 
+  // DEBUG: Log content being sent to LLM
+  console.log(`[extractEndpoints] Content length being analyzed: ${content.length} chars`);
+  if (content.length < 100) {
+    console.log(`[extractEndpoints] WARNING: Very short content! Full content:\n${content}`);
+  }
+
   try {
     const prompt = buildEndpointExtractionPrompt(content);
+    console.log(`[extractEndpoints] Sending prompt to LLM (${prompt.length} chars)...`);
+
     const result = await llm.generate<ApiEndpoint[]>(prompt, {
       responseSchema: ENDPOINTS_ARRAY_SCHEMA,
+      maxOutputTokens: ENDPOINT_EXTRACTION_MAX_TOKENS, // Higher limit for extracting many endpoints
     });
+
+    console.log(`[extractEndpoints] LLM returned ${result.content?.length ?? 0} endpoints`);
+    if (result.content && result.content.length > 0) {
+      console.log(
+        `[extractEndpoints] First endpoint: ${JSON.stringify(result.content[0], null, 2)}`
+      );
+    }
 
     // Validate and clean endpoints
     const validEndpoints = (result.content || []).filter((ep: ApiEndpoint) => {

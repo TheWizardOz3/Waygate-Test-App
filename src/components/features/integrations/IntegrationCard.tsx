@@ -3,15 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  MoreHorizontal,
-  ExternalLink,
-  Settings,
-  Trash2,
-  Play,
-  Puzzle,
-  ArrowRight,
-} from 'lucide-react';
+import { MoreHorizontal, ExternalLink, Settings, Trash2, Puzzle, ArrowRight } from 'lucide-react';
 
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -39,7 +31,7 @@ interface IntegrationCardProps {
  */
 export function IntegrationCard({ integration, onDelete, className }: IntegrationCardProps) {
   const router = useRouter();
-  const { id, name, slug, description, status, authType, tags, actionCount } = integration;
+  const { id, name, slug, description, status } = integration;
 
   const handleCardClick = (e: React.MouseEvent) => {
     // Only navigate if we didn't click on an interactive element
@@ -58,7 +50,7 @@ export function IntegrationCard({ integration, onDelete, className }: Integratio
         className
       )}
     >
-      <CardHeader className="pb-3">
+      <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-4">
           {/* Icon and Title */}
           <div className="flex items-center gap-3">
@@ -69,7 +61,7 @@ export function IntegrationCard({ integration, onDelete, className }: Integratio
               <span className="block truncate font-semibold transition-colors group-hover:text-primary">
                 {name}
               </span>
-              <p className="text-xs text-muted-foreground">{slug}</p>
+              <p className="font-mono text-xs text-muted-foreground">{slug}</p>
             </div>
           </div>
 
@@ -81,86 +73,47 @@ export function IntegrationCard({ integration, onDelete, className }: Integratio
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-4">
+      <CardContent className="pt-0">
         {/* Description */}
         {description && <p className="line-clamp-2 text-sm text-muted-foreground">{description}</p>}
 
-        {/* Meta Info */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <span className="font-medium">{actionCount}</span> actions
-          </span>
-          <span className="capitalize">{authType.replace('_', ' ')}</span>
-        </div>
-
-        {/* Tags */}
-        {tags.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {tags.slice(0, 3).map((tag) => (
-              <span
-                key={tag}
-                className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground"
-              >
-                {tag}
-              </span>
-            ))}
-            {tags.length > 3 && (
-              <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                +{tags.length - 3}
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="flex items-center justify-between pt-2">
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" asChild>
-              <Link href={`/integrations/${id}/actions`}>
-                <Play className="mr-1 h-3 w-3" />
-                Actions
-              </Link>
+        {/* More Menu - absolute positioned */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute bottom-2 right-2 h-8 w-8 opacity-0 group-hover:opacity-100"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+              <span className="sr-only">More actions</span>
             </Button>
-          </div>
-
-          {/* More Menu */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 opacity-0 group-hover:opacity-100"
-              >
-                <MoreHorizontal className="h-4 w-4" />
-                <span className="sr-only">More actions</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem asChild>
+              <Link href={`/integrations/${id}`}>
+                <Settings className="mr-2 h-4 w-4" />
+                View Details
+              </Link>
+            </DropdownMenuItem>
+            {integration.documentationUrl && (
               <DropdownMenuItem asChild>
-                <Link href={`/integrations/${id}`}>
-                  <Settings className="mr-2 h-4 w-4" />
-                  Settings
-                </Link>
+                <a href={integration.documentationUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  View Docs
+                </a>
               </DropdownMenuItem>
-              {integration.documentationUrl && (
-                <DropdownMenuItem asChild>
-                  <a href={integration.documentationUrl} target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="mr-2 h-4 w-4" />
-                    View Docs
-                  </a>
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onClick={() => onDelete?.(id)}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+            )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={() => onDelete?.(id)}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </CardContent>
     </Card>
   );

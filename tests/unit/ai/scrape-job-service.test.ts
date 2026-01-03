@@ -76,6 +76,7 @@ const mockJob = {
   tenantId: 'tenant-456',
   status: 'PENDING' as ScrapeJobStatus,
   documentationUrl: 'https://docs.example.com',
+  specificUrls: [] as string[],
   wishlist: ['send message'],
   progress: 0,
   result: null,
@@ -94,7 +95,15 @@ const mockCompletedJob = {
     name: 'Test API',
     baseUrl: 'https://api.example.com',
     authMethods: [],
-    endpoints: [],
+    endpoints: [
+      {
+        name: 'Get Users',
+        slug: 'get-users',
+        method: 'GET',
+        path: '/users',
+        description: 'List all users',
+      },
+    ],
   },
   completedAt: new Date(),
 };
@@ -143,6 +152,7 @@ describe('createScrapeJob', () => {
     expect(repo.createScrapeJob).toHaveBeenCalledWith({
       tenantId: 'tenant-456',
       documentationUrl: 'https://docs.example.com',
+      specificUrls: [],
       wishlist: ['send message'],
     });
   });

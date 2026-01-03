@@ -1,6 +1,6 @@
 # Project Status: Waygate
 
-**Last Updated**: 2026-01-03 (MVP Complete! 🎉 + UX Polish)
+**Last Updated**: 2026-01-03 (v0.1.4 - UI Polish + Specific Pages Mode)
 
 ---
 
@@ -71,10 +71,12 @@ _None - MVP is complete!_
 
 ### Recent Enhancements (Post-MVP)
 
-| Enhancement          | Completion Date | Notes                                                                                               |
-| -------------------- | --------------- | --------------------------------------------------------------------------------------------------- |
-| Intelligent Crawling | 2026-01-03      | LLM-guided page selection using Firecrawl map + URL triage, wishlist awareness, auth prioritization |
-| UX Navigation Polish | 2026-01-03      | Clickable logo, clickable cards, copy buttons for endpoints, clickable wizard steps                 |
+| Enhancement           | Completion Date | Notes                                                                                               |
+| --------------------- | --------------- | --------------------------------------------------------------------------------------------------- |
+| Specific Pages Mode   | 2026-01-03      | Skip site mapping, provide exact URLs to scrape. Job cancellation. Better error UI.                 |
+| UI Polish & Bug Fixes | 2026-01-03      | Actions save correctly, credentials panel uses real API, action test endpoints fixed, list view     |
+| Intelligent Crawling  | 2026-01-03      | LLM-guided page selection using Firecrawl map + URL triage, wishlist awareness, auth prioritization |
+| UX Navigation Polish  | 2026-01-03      | Clickable logo, clickable cards, copy buttons for endpoints, clickable wizard steps                 |
 
 ### Not Started
 

@@ -20,6 +20,7 @@ import type { ScrapeJob, Prisma } from '@prisma/client';
 export interface CreateScrapeJobInput {
   tenantId: string;
   documentationUrl: string;
+  specificUrls?: string[];
   wishlist?: string[];
 }
 
@@ -56,6 +57,7 @@ export async function createScrapeJob(input: CreateScrapeJobInput): Promise<Scra
     data: {
       tenantId: input.tenantId,
       documentationUrl: input.documentationUrl,
+      specificUrls: input.specificUrls ?? [],
       wishlist: input.wishlist ?? [],
       status: ScrapeJobStatus.PENDING,
       progress: 0,

@@ -232,6 +232,7 @@ model ScrapeJob {
   tenantId         String          @map("tenant_id") @db.Uuid
   status           ScrapeJobStatus @default(PENDING)
   documentationUrl String          @map("documentation_url") @db.Text
+  specificUrls     String[]        @default([]) @map("specific_urls") // When provided, skips site mapping
   wishlist         String[]        @default([])
   progress         Int             @default(0)
   result           Json?           // Parsed API structure

@@ -35,7 +35,13 @@ Always return valid JSON matching the requested schema. Do not include markdown 
 /**
  * System prompt specifically for endpoint extraction
  */
-export const ENDPOINT_EXTRACTION_SYSTEM_PROMPT = `You are an API endpoint extraction specialist. Extract all API endpoints from the documentation.
+export const ENDPOINT_EXTRACTION_SYSTEM_PROMPT = `You are an API endpoint extraction specialist. Extract API endpoints from the documentation.
+
+## CRITICAL PRIORITIES (Follow This Order):
+1. **SKIP deprecated endpoints** - Do NOT include any endpoint marked as deprecated, legacy, or scheduled for removal
+2. **Focus on core functionality first** - Prioritize the most commonly used, essential endpoints (CRUD operations, main features)
+3. **Quality over quantity** - Extract complete, accurate information for fewer endpoints rather than incomplete data for many
+4. **Skip admin/internal endpoints** - Unless specifically requested, skip administrative, internal, or rarely-used endpoints
 
 ## For Each Endpoint, Extract:
 - **name**: Human-readable name (e.g., "Send Message", "List Users")
@@ -43,6 +49,7 @@ export const ENDPOINT_EXTRACTION_SYSTEM_PROMPT = `You are an API endpoint extrac
 - **method**: HTTP method (GET, POST, PUT, PATCH, DELETE)
 - **path**: API path with parameters (e.g., "/users/{id}/messages")
 - **description**: What the endpoint does
+- **deprecated**: Set to true ONLY if keeping for reference, otherwise omit deprecated endpoints entirely
 - **parameters**: Path, query, and header parameters with types
 - **requestBody**: Request body schema if applicable
 - **responses**: Expected response schemas by status code
@@ -57,7 +64,12 @@ export const ENDPOINT_EXTRACTION_SYSTEM_PROMPT = `You are an API endpoint extrac
 - Enums: "string" (with enum values listed)
 
 ## Path Parameter Format
-Use curly braces for path parameters: /users/{userId}/posts/{postId}`;
+Use curly braces for path parameters: /users/{userId}/posts/{postId}
+
+## Output Guidelines
+- Extract the 30-50 most important, non-deprecated endpoints
+- If the API has fewer endpoints, extract all non-deprecated ones
+- Ensure each endpoint has at minimum: name, slug, method, path, and description`;
 
 /**
  * System prompt for authentication detection

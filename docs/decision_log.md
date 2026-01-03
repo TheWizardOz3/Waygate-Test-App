@@ -27,6 +27,7 @@
 | ADR-011 | 2026-01-02 | ui       | active | CSS variable-based design system for global theming     |
 | ADR-012 | 2026-01-02 | ui       | active | Zustand for wizard state, React Query for server state  |
 | ADR-013 | 2026-01-02 | arch     | active | Gemini 3.0 as default LLM, crawl-first scraping         |
+| ADR-014 | 2026-01-03 | arch     | active | Dual scraping modes: auto-discover vs specific pages    |
 
 **Categories:** `arch` | `data` | `api` | `ui` | `test` | `infra` | `error`
 
@@ -67,6 +68,66 @@
 ## Log Entries
 
 <!-- Add new entries below this line, newest first -->
+
+### ADR-014: Dual Scraping Modes - Auto-Discover vs Specific Pages
+
+**Date:** 2026-01-03 | **Category:** arch | **Status:** active
+
+#### Trigger
+
+Users who knew exactly which documentation pages contained API details were frustrated by:
+
+1. The mapping phase taking extra time and API calls
+2. The LLM triage potentially selecting wrong pages
+3. No way to bypass the intelligent crawl for known, specific URLs
+
+#### Decision
+
+Implemented dual scraping modes:
+
+1. **Auto-discover** (default): Existing behavior with Firecrawl map + LLM triage
+2. **Specific pages** (new): User provides exact URLs, system skips mapping entirely
+
+Changes:
+
+- Added `specificUrls` field to `ScrapeJob` model and `CreateScrapeJobInput` schema
+- UI radio toggle in `StepUrlInput` component between modes
+- `processJob` detects `specificUrls` array and scrapes those directly
+- No mapping, no LLM triage when specific URLs provided
+
+#### Rationale
+
+- Respects user expertise: if they know the docs, don't second-guess them
+- Faster execution: skips mapping API call and LLM triage costs
+- Predictable results: user controls exactly what gets scraped
+- Maintains flexibility: auto-discover still available for exploration
+
+Alternatives considered:
+
+- URL whitelist/blacklist: More complex, harder to use
+- Always require exact URLs: Would hurt users exploring new APIs
+
+#### Supersedes
+
+N/A (new capability, doesn't replace existing)
+
+#### Migration
+
+- **Affected files:** `scrape-job.schemas.ts`, `scrape-job.service.ts`, `scrape-job.repository.ts`, `StepUrlInput.tsx`
+- **Find:** `documentationUrl` only in scrape input
+- **Replace with:** Either `documentationUrl` (auto-discover) or `specificUrls` array (direct scrape)
+- **Verify:** `npm run test` - all 637 tests pass
+
+#### AI Instructions
+
+When implementing scraping features:
+
+- Check if `specificUrls` is provided before triggering intelligent crawl
+- Auto-discover mode should remain the default for exploratory use cases
+- Specific pages mode should cap at 20 URLs to prevent abuse
+- Always handle mixed scenarios gracefully (user might provide both - prefer specificUrls)
+
+---
 
 ### ADR-013: Gemini 3.0 Default and Crawl-First Scraping Strategy
 

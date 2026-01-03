@@ -26,6 +26,7 @@ import {
   type ScrapeJobFailedResponse,
   type ScrapeJobErrorDetails,
   type ParsedApiDoc,
+  type ScrapeJobStatusType,
   isJobInProgress,
 } from './scrape-job.schemas';
 import { scrapeDocumentation, crawlDocumentation, isScrapeError } from './doc-scraper';
@@ -33,7 +34,7 @@ import { intelligentCrawl } from './intelligent-crawler';
 import type { IntelligentCrawlProgress } from './intelligent-crawler';
 import { parseApiDocumentation, isParseError } from './document-parser';
 import { parseOpenApiSpec, isOpenApiSpec, isOpenApiParseError } from './openapi-parser';
-import { storeScrapedContent, isStorageError } from './storage';
+import { storeScrapedContent, getScrapedContentByJobId, isStorageError } from './storage';
 
 import type { ScrapeJob } from '@prisma/client';
 
@@ -79,46 +80,101 @@ export class ScrapeJobError extends Error {
 // =============================================================================
 
 /**
+ * Options for creating a scrape job
+ */
+export interface CreateScrapeJobOptions {
+  /** Force a new scrape even if cached result exists */
+  force?: boolean;
+  /** Minimum number of endpoints required for a valid cache hit */
+  minEndpointsForCache?: number;
+}
+
+/**
  * Creates a new scrape job with PENDING status
  *
  * @param tenantId - The tenant creating the job
  * @param input - Job creation parameters
+ * @param options - Additional options (force, cache validation)
  * @returns Created job response with estimated duration
  */
 export async function createScrapeJob(
   tenantId: string,
-  input: CreateScrapeJobInput
+  input: CreateScrapeJobInput,
+  options: CreateScrapeJobOptions = {}
 ): Promise<CreateScrapeJobResponse> {
+  const { force = false, minEndpointsForCache = 1 } = options;
+
   // Validate input
   const parsed = CreateScrapeJobInputSchema.safeParse(input);
   if (!parsed.success) {
     throw new ScrapeJobError('INVALID_INPUT', `Invalid scrape job input: ${parsed.error.message}`);
   }
 
-  const { documentationUrl, wishlist } = parsed.data;
+  const { documentationUrl, specificUrls, wishlist } = parsed.data;
+
+  // Determine the primary URL for display/caching
+  // If specificUrls provided, use the first one as the primary
+  const primaryUrl = documentationUrl || specificUrls?.[0];
+  if (!primaryUrl) {
+    throw new ScrapeJobError(
+      'INVALID_INPUT',
+      'Either documentationUrl or specificUrls must be provided'
+    );
+  }
 
   // Check for existing completed scrape of the same URL (cache check)
-  const existingJob = await findScrapeJobByUrl(tenantId, documentationUrl);
-  if (existingJob) {
-    // Return the existing completed job info
-    return {
-      jobId: existingJob.id,
-      status: existingJob.status as CreateScrapeJobResponse['status'],
-      estimatedDuration: 0, // Already complete
-    };
+  // Skip cache check if force=true or if using specific URLs (always fresh)
+  if (!force && !specificUrls?.length) {
+    const existingJob = await findScrapeJobByUrl(tenantId, primaryUrl);
+    if (existingJob) {
+      // Validate that the cached result is actually useful
+      const result = existingJob.result as ParsedApiDoc | null;
+      const hasEnoughEndpoints =
+        result?.endpoints && result.endpoints.length >= minEndpointsForCache;
+
+      // Only use cache if it has valid results
+      if (hasEnoughEndpoints) {
+        return {
+          jobId: existingJob.id,
+          status: existingJob.status as CreateScrapeJobResponse['status'],
+          estimatedDuration: 0, // Already complete
+        };
+      }
+
+      // Cache exists but has 0/few endpoints - log and create new job
+      console.log(
+        `[Scrape Job] Found cached job ${existingJob.id} with ${result?.endpoints?.length ?? 0} endpoints ` +
+          `(min required: ${minEndpointsForCache}). Creating fresh job.`
+      );
+    }
+  }
+
+  // Log scrape mode
+  if (specificUrls?.length) {
+    console.log(
+      `[Scrape Job] Creating job with ${specificUrls.length} specific URLs (skipping site mapping)`
+    );
+  } else {
+    console.log(`[Scrape Job] Creating job with auto-discovery for ${primaryUrl}`);
   }
 
   // Create the new job
   const job = await repoCreateScrapeJob({
     tenantId,
-    documentationUrl,
+    documentationUrl: primaryUrl,
+    specificUrls: specificUrls ?? [],
     wishlist,
   });
+
+  // Estimate is shorter when using specific URLs (no mapping phase)
+  const estimatedDuration = specificUrls?.length
+    ? STAGE_DURATIONS.PARSING + STAGE_DURATIONS.GENERATING
+    : DEFAULT_ESTIMATED_DURATION;
 
   return {
     jobId: job.id,
     status: 'PENDING',
-    estimatedDuration: DEFAULT_ESTIMATED_DURATION,
+    estimatedDuration,
   };
 }
 
@@ -432,17 +488,64 @@ export async function processJob(
   }
 
   const documentationUrl = job.documentationUrl;
+  const specificUrls = job.specificUrls ?? [];
+  const hasSpecificUrls = specificUrls.length > 0;
+
   let scrapedContent = '';
-  let sourceUrls: string[] = [documentationUrl];
+  let sourceUrls: string[] = hasSpecificUrls ? specificUrls : [documentationUrl];
 
   try {
     // ==========================================================================
     // Stage 1: CRAWLING - Scrape the documentation
     // ==========================================================================
-    onProgress?.('CRAWLING', `Starting to scrape ${documentationUrl}`);
+    onProgress?.(
+      'CRAWLING',
+      `Starting to scrape ${hasSpecificUrls ? `${specificUrls.length} specific pages` : documentationUrl}`
+    );
     await updateJobStatus(jobId, 'CRAWLING', 10);
 
-    if (crawlMode) {
+    if (hasSpecificUrls) {
+      // SPECIFIC URLS MODE: Skip mapping, directly scrape the provided URLs
+      onProgress?.(
+        'CRAWLING',
+        `Scraping ${specificUrls.length} specific documentation pages (skipping site mapping)...`
+      );
+      console.log(
+        `[Scrape Job] Using SPECIFIC URLS mode - scraping ${specificUrls.length} URLs directly`
+      );
+
+      const contentParts: string[] = [];
+      let successCount = 0;
+
+      for (let i = 0; i < specificUrls.length; i++) {
+        const url = specificUrls[i];
+        onProgress?.('CRAWLING', `Scraping page ${i + 1}/${specificUrls.length}: ${url}`);
+
+        try {
+          const scrapeResult = await scrapeDocumentation(url, {
+            onProgress: (msg) => onProgress?.('CRAWLING', msg),
+          });
+          if (scrapeResult.content) {
+            contentParts.push(`\n\n--- SOURCE: ${url} ---\n\n${scrapeResult.content}`);
+            successCount++;
+          }
+        } catch (err) {
+          console.warn(`[Scrape Job] Failed to scrape specific URL ${url}:`, err);
+          // Continue with other URLs
+        }
+
+        // Update progress proportionally
+        const progress = 10 + Math.floor((15 * (i + 1)) / specificUrls.length);
+        await updateJobProgress(jobId, progress);
+      }
+
+      scrapedContent = contentParts.join('\n');
+      sourceUrls = specificUrls.slice(0, successCount); // Only include successfully scraped URLs
+      console.log(
+        `[Scrape Job] Specific URLs mode: scraped ${successCount}/${specificUrls.length} pages`
+      );
+      await updateJobProgress(jobId, 25);
+    } else if (crawlMode) {
       if (useIntelligentCrawl) {
         // Intelligent crawling: Map site → LLM triage → Scrape best pages
         onProgress?.('CRAWLING', 'Using intelligent crawling with LLM-guided page selection...');
@@ -496,6 +599,18 @@ export async function processJob(
     }
 
     onProgress?.('CRAWLING', `Scraped ${scrapedContent.length} characters`);
+
+    // DEBUG: Log scraping details
+    console.log(`[Scrape Job] URL: ${documentationUrl}`);
+    console.log(`[Scrape Job] Total scraped content length: ${scrapedContent.length} characters`);
+    console.log(`[Scrape Job] Source URLs scraped: ${sourceUrls.length}`);
+    if (scrapedContent.length > 0) {
+      console.log(
+        `[Scrape Job] Content preview (first 500 chars):\n${scrapedContent.substring(0, 500)}`
+      );
+    } else {
+      console.log(`[Scrape Job] WARNING: No content scraped!`);
+    }
 
     // Store scraped content for caching (non-blocking, don't fail job if storage fails)
     let cachedContentKey: string | undefined;
@@ -603,21 +718,32 @@ export function startJobProcessing(jobId: string, options: ProcessJobOptions = {
  */
 function applyWishlistPrioritization(doc: ParsedApiDoc, wishlist: string[]): ParsedApiDoc {
   if (!doc.endpoints || doc.endpoints.length === 0) {
+    console.log(`[Wishlist] No endpoints to prioritize`);
     return doc;
   }
 
   const wishlistLower = wishlist.map((w) => w.toLowerCase());
+  console.log(`[Wishlist] Applying prioritization for: ${wishlist.join(', ')}`);
 
   // Score endpoints based on wishlist matches
   const scoredEndpoints = doc.endpoints.map((endpoint) => {
-    const nameMatch = wishlistLower.some(
-      (w) =>
-        endpoint.name.toLowerCase().includes(w) ||
-        endpoint.slug.toLowerCase().includes(w) ||
-        endpoint.path.toLowerCase().includes(w)
-    );
-    return { endpoint, score: nameMatch ? 1 : 0 };
+    // Check name, slug, path, and description for matches
+    const searchText = [endpoint.name, endpoint.slug, endpoint.path, endpoint.description || '']
+      .join(' ')
+      .toLowerCase();
+
+    const matchedItems = wishlistLower.filter((w) => searchText.includes(w));
+    const score = matchedItems.length;
+
+    if (score > 0) {
+      console.log(`[Wishlist] Match! "${endpoint.name}" matches: ${matchedItems.join(', ')}`);
+    }
+
+    return { endpoint, score, matchedItems };
   });
+
+  const matchCount = scoredEndpoints.filter((s) => s.score > 0).length;
+  console.log(`[Wishlist] ${matchCount}/${doc.endpoints.length} endpoints matched wishlist items`);
 
   // Sort by score (matched first), then by original order
   scoredEndpoints.sort((a, b) => b.score - a.score);
@@ -714,4 +840,274 @@ function categorizeError(error: unknown): {
     message: 'An unexpected error occurred',
     retryable: false,
   };
+}
+
+// =============================================================================
+// Re-analyze Job (Re-extraction from Cached Content)
+// =============================================================================
+
+/**
+ * Options for re-analyzing a job
+ */
+export interface ReanalyzeJobOptions {
+  /** Callback for progress updates */
+  onProgress?: (stage: string, message: string) => void;
+}
+
+/**
+ * Re-analyze a completed job by re-running AI extraction on cached content
+ *
+ * This is useful when:
+ * - Previous extraction failed due to API key issues
+ * - Rate limits prevented proper extraction
+ * - You want to try extraction with updated AI models
+ *
+ * @param jobId - The job ID to re-analyze
+ * @param tenantId - The tenant ID (for authorization)
+ * @param options - Processing options
+ * @returns The updated job with new results
+ *
+ * @throws ScrapeJobError if job not found, not owned by tenant, or no cached content
+ */
+export async function reanalyzeJob(
+  jobId: string,
+  tenantId: string,
+  options: ReanalyzeJobOptions = {}
+): Promise<ScrapeJob> {
+  const { onProgress } = options;
+
+  // Get the job and verify ownership
+  const job = await findScrapeJobByIdAndTenant(jobId, tenantId);
+  if (!job) {
+    throw new ScrapeJobError('JOB_NOT_FOUND', 'Scrape job not found or access denied', 404);
+  }
+
+  // Job must be completed (even with 0 results) to re-analyze
+  if (job.status !== 'COMPLETED' && job.status !== 'FAILED') {
+    throw new ScrapeJobError(
+      'INVALID_STATUS',
+      `Cannot re-analyze job with status ${job.status}. Job must be COMPLETED or FAILED.`,
+      400
+    );
+  }
+
+  // Try to get cached content
+  let cachedContent: string | null = null;
+
+  // First try by cached_content_key if available
+  if (job.cachedContentKey) {
+    try {
+      const { getScrapedContent } = await import('./storage');
+      cachedContent = await getScrapedContent(job.cachedContentKey);
+    } catch (error) {
+      console.warn(`Failed to retrieve content by key ${job.cachedContentKey}:`, error);
+    }
+  }
+
+  // Fallback to job ID lookup
+  if (!cachedContent) {
+    cachedContent = await getScrapedContentByJobId(jobId);
+  }
+
+  if (!cachedContent) {
+    throw new ScrapeJobError(
+      'NO_CACHED_CONTENT',
+      'No cached scraped content available for this job. You need to re-scrape the documentation.',
+      400
+    );
+  }
+
+  onProgress?.('PARSING', 'Re-analyzing cached content with AI...');
+
+  // Reset job to PARSING status
+  await updateJobStatus(jobId, 'PARSING', 30);
+
+  try {
+    let parsedDoc: ParsedApiDoc;
+    const sourceUrls = [job.documentationUrl];
+
+    // Check if content is OpenAPI/Swagger spec
+    if (isOpenApiSpec(cachedContent)) {
+      onProgress?.('PARSING', 'Detected OpenAPI/Swagger specification, parsing directly...');
+      const openApiResult = await parseOpenApiSpec(cachedContent, {
+        sourceUrl: job.documentationUrl,
+      });
+      parsedDoc = openApiResult.doc;
+      onProgress?.('PARSING', `Parsed OpenAPI ${openApiResult.openApiVersion} specification`);
+    } else {
+      // Use AI to parse unstructured documentation
+      onProgress?.('PARSING', 'Using AI to extract API information...');
+      const parseResult = await parseApiDocumentation(cachedContent, {
+        sourceUrls,
+        onProgress: (msg) => onProgress?.('PARSING', msg),
+      });
+      parsedDoc = parseResult.doc;
+      onProgress?.(
+        'PARSING',
+        `AI parsing complete (confidence: ${Math.round(parseResult.confidence * 100)}%)`
+      );
+    }
+
+    await updateJobStatus(jobId, 'GENERATING', 80);
+
+    // Apply wishlist filtering/prioritization if provided
+    if (job.wishlist && job.wishlist.length > 0) {
+      parsedDoc = applyWishlistPrioritization(parsedDoc, job.wishlist);
+      onProgress?.('GENERATING', `Applied wishlist prioritization (${job.wishlist.length} items)`);
+    }
+
+    // Finalize the document
+    parsedDoc = finalizeDocument(parsedDoc, sourceUrls);
+
+    // Add metadata about re-analysis
+    parsedDoc.metadata = {
+      ...parsedDoc.metadata,
+      reanalyzedAt: new Date().toISOString(),
+      previousEndpointCount: (job.result as ParsedApiDoc | null)?.endpoints?.length ?? 0,
+    } as ParsedApiDoc['metadata'];
+
+    await updateJobProgress(jobId, 95);
+
+    // Complete the job with new results
+    onProgress?.('COMPLETED', 'Re-analysis completed successfully');
+    const completedJob = await completeJob(jobId, parsedDoc, job.cachedContentKey ?? undefined);
+
+    console.log(
+      `[Reanalyze] Job ${jobId} re-analyzed: ` +
+        `${parsedDoc.endpoints.length} endpoints found (was ${(job.result as ParsedApiDoc | null)?.endpoints?.length ?? 0})`
+    );
+
+    return completedJob;
+  } catch (error) {
+    // Handle and record the error
+    const errorInfo = categorizeError(error);
+    onProgress?.('FAILED', `Re-analysis failed: ${errorInfo.message}`);
+
+    await failJob(jobId, errorInfo);
+
+    throw error;
+  }
+}
+
+/**
+ * Check if a job can be re-analyzed
+ *
+ * @param job - The scrape job to check
+ * @returns Object with canReanalyze flag and reason
+ */
+export async function canReanalyzeJob(job: ScrapeJob): Promise<{
+  canReanalyze: boolean;
+  reason: string;
+  hasCachedContent: boolean;
+}> {
+  // Must be completed or failed
+  if (job.status !== 'COMPLETED' && job.status !== 'FAILED') {
+    return {
+      canReanalyze: false,
+      reason: `Job is still ${job.status.toLowerCase()}`,
+      hasCachedContent: false,
+    };
+  }
+
+  // Check for cached content
+  let hasCachedContent = false;
+
+  if (job.cachedContentKey) {
+    try {
+      const { getScrapedContent } = await import('./storage');
+      await getScrapedContent(job.cachedContentKey);
+      hasCachedContent = true;
+    } catch {
+      // Content not available by key
+    }
+  }
+
+  if (!hasCachedContent) {
+    const content = await getScrapedContentByJobId(job.id);
+    hasCachedContent = content !== null;
+  }
+
+  if (!hasCachedContent) {
+    return {
+      canReanalyze: false,
+      reason: 'No cached content available. Re-scrape required.',
+      hasCachedContent: false,
+    };
+  }
+
+  // Check current results
+  const result = job.result as ParsedApiDoc | null;
+  const endpointCount = result?.endpoints?.length ?? 0;
+
+  if (job.status === 'FAILED') {
+    return {
+      canReanalyze: true,
+      reason: 'Job failed - re-analysis may recover results',
+      hasCachedContent: true,
+    };
+  }
+
+  if (endpointCount === 0) {
+    return {
+      canReanalyze: true,
+      reason: 'No endpoints extracted - re-analysis recommended',
+      hasCachedContent: true,
+    };
+  }
+
+  return {
+    canReanalyze: true,
+    reason: `${endpointCount} endpoints found - re-analysis available`,
+    hasCachedContent: true,
+  };
+}
+
+/**
+ * Cancel a running scrape job
+ *
+ * @param jobId - The job ID to cancel
+ * @param tenantId - The tenant ID (for authorization)
+ * @returns The cancelled job
+ */
+export async function cancelScrapeJob(jobId: string, tenantId: string): Promise<ScrapeJob> {
+  const job = await findScrapeJobByIdAndTenant(jobId, tenantId);
+
+  if (!job) {
+    throw new ScrapeJobError('JOB_NOT_FOUND', 'Scrape job not found', 404);
+  }
+
+  // Can only cancel in-progress jobs
+  if (!isJobInProgress(job.status as ScrapeJobStatusType)) {
+    throw new ScrapeJobError('INVALID_STATE', `Cannot cancel job with status ${job.status}`, 400);
+  }
+
+  // Mark as failed with CANCELLED error
+  await repoMarkJobFailed(jobId, {
+    code: 'CANCELLED',
+    message: 'Job cancelled by user',
+    retryable: true,
+  });
+
+  console.log(`[Scrape Job] Job ${jobId} cancelled by user`);
+
+  return (await findScrapeJobById(jobId))!;
+}
+
+// Track cancelled jobs so running processes can check
+const cancelledJobs = new Set<string>();
+
+/**
+ * Check if a job has been cancelled
+ */
+export function isJobCancelled(jobId: string): boolean {
+  return cancelledJobs.has(jobId);
+}
+
+/**
+ * Mark a job as cancelled in the tracking set
+ */
+export function markJobCancelled(jobId: string): void {
+  cancelledJobs.add(jobId);
+  // Clean up after 5 minutes
+  setTimeout(() => cancelledJobs.delete(jobId), 5 * 60 * 1000);
 }
