@@ -58,8 +58,10 @@ export const GET = withApiAuth(async (request: NextRequest, { tenant }) => {
     return NextResponse.json(
       {
         success: true,
-        data: result.actions,
-        pagination: result.pagination,
+        data: {
+          actions: result.actions,
+          pagination: result.pagination,
+        },
       },
       { status: 200 }
     );

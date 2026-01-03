@@ -11,7 +11,8 @@
 
 import { config } from 'dotenv';
 import path from 'node:path';
-import { createHash } from 'crypto';
+import { randomBytes } from 'crypto';
+import bcrypt from 'bcrypt';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
@@ -35,10 +36,16 @@ const prisma = new PrismaClient({ adapter });
 // =============================================================================
 // These are for DEVELOPMENT ONLY. Never use in production.
 
-// Test Waygate API Key: wg_test_dev_abc123xyz789
-// We'll hash it with SHA-256 for simplicity in dev (production would use bcrypt)
-const TEST_API_KEY = 'wg_test_dev_abc123xyz789';
-const TEST_API_KEY_HASH = createHash('sha256').update(TEST_API_KEY).digest('hex');
+// Generate a proper API key format: wg_live_<32 hex chars>
+const API_KEY_PREFIX = 'wg_live_';
+const generateTestApiKey = () => {
+  const randomPart = randomBytes(16).toString('hex');
+  return `${API_KEY_PREFIX}${randomPart}`;
+};
+
+// Generate the test API key and its bcrypt hash
+let TEST_API_KEY: string;
+let TEST_API_KEY_HASH: string;
 
 // =============================================================================
 // Seed Data
@@ -46,6 +53,10 @@ const TEST_API_KEY_HASH = createHash('sha256').update(TEST_API_KEY).digest('hex'
 
 async function main() {
   console.log('🌱 Starting database seed...\n');
+
+  // Generate API key with proper format
+  TEST_API_KEY = generateTestApiKey();
+  TEST_API_KEY_HASH = await bcrypt.hash(TEST_API_KEY, 12);
 
   // Clean existing data (in reverse dependency order)
   console.log('🧹 Cleaning existing seed data...');

@@ -26,6 +26,9 @@ import type {
 
 const API_BASE_URL = '/api/v1';
 
+// Get API key for development (this key is only used in development mode)
+const DEV_API_KEY = process.env.NEXT_PUBLIC_DEV_API_KEY;
+
 export class ApiError extends Error {
   code: string;
   status: number;
@@ -68,6 +71,7 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
   // Default headers
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
+    ...(DEV_API_KEY ? { Authorization: `Bearer ${DEV_API_KEY}` } : {}),
     ...fetchOptions.headers,
   };
 
