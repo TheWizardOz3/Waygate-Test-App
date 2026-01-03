@@ -46,6 +46,7 @@ const apiKeySchema = z.object({
   apiKey: z.string().min(1, 'API Key is required'),
   headerName: z.string().min(1),
   prefix: z.string(),
+  baseUrl: z.string().url('Please enter a valid URL').optional().or(z.literal('')),
 });
 
 type OAuth2FormData = z.infer<typeof oauth2Schema>;
@@ -170,40 +171,95 @@ function ApiKeyForm({
   apiName?: string;
 }) {
   const [showKey, setShowKey] = useState(false);
+  const nameLower = apiName?.toLowerCase() || '';
+
+  // Detect if this is a user-specific API that requires a base URL
+  const isSupabase = nameLower.includes('supabase');
+  const isAirtable = nameLower.includes('airtable');
+  const requiresBaseUrl = isSupabase || isAirtable;
 
   const form = useForm<ApiKeyFormData>({
     resolver: zodResolver(apiKeySchema),
     defaultValues: {
       apiKey: '',
-      headerName: 'Authorization',
-      prefix: 'Bearer',
+      headerName: isSupabase ? 'apikey' : 'Authorization', // Supabase uses 'apikey' header
+      prefix: isSupabase ? 'none' : 'Bearer', // Supabase doesn't use prefix
+      baseUrl: '',
     },
   });
 
   // Generate context-specific help text based on API name
   const getApiKeyHelp = () => {
-    const name = apiName?.toLowerCase() || '';
-    if (name.includes('supabase')) {
-      return 'Find your API key in Project Settings → API → anon/public key or service_role key';
+    if (isSupabase) {
+      return 'Use your "service_role" key for full access (found in Project Settings → API)';
     }
-    if (name.includes('stripe')) {
+    if (nameLower.includes('stripe')) {
       return 'Find your API key in Dashboard → Developers → API keys';
     }
-    if (name.includes('openai') || name.includes('gpt')) {
+    if (nameLower.includes('openai') || nameLower.includes('gpt')) {
       return 'Find your API key at platform.openai.com → API keys';
     }
-    if (name.includes('github')) {
+    if (nameLower.includes('github')) {
       return 'Create a Personal Access Token at Settings → Developer settings → Tokens';
     }
-    if (name.includes('slack')) {
+    if (nameLower.includes('slack')) {
       return 'Find your Bot Token at api.slack.com → Your Apps → OAuth & Permissions';
     }
     return 'Your API key will be encrypted and stored securely';
   };
 
+  // Generate base URL help text
+  const getBaseUrlHelp = () => {
+    if (isSupabase) {
+      return 'Your Supabase project URL (found in Project Settings → API)';
+    }
+    if (isAirtable) {
+      return 'Your Airtable base URL (e.g., https://api.airtable.com/v0/your-base-id)';
+    }
+    return 'The base URL for API requests (unique to your account/project)';
+  };
+
+  const getBaseUrlPlaceholder = () => {
+    if (isSupabase) {
+      return 'https://your-project-id.supabase.co';
+    }
+    if (isAirtable) {
+      return 'https://api.airtable.com/v0/your-base-id';
+    }
+    return 'https://your-api.example.com';
+  };
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        {/* Base URL field - shown for user-specific APIs like Supabase */}
+        {requiresBaseUrl && (
+          <FormField
+            control={form.control}
+            name="baseUrl"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>
+                  API Base URL
+                  <Badge variant="default" className="ml-2 bg-amber-600 text-xs">
+                    Required
+                  </Badge>
+                </FormLabel>
+                <FormControl>
+                  <Input
+                    type="url"
+                    placeholder={getBaseUrlPlaceholder()}
+                    className="font-mono"
+                    {...field}
+                  />
+                </FormControl>
+                <FormDescription className="text-xs">{getBaseUrlHelp()}</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
+
         <FormField
           control={form.control}
           name="apiKey"
@@ -253,6 +309,7 @@ function ApiKeyForm({
                     <SelectItem value="X-API-Key">X-API-Key</SelectItem>
                     <SelectItem value="X-Auth-Token">X-Auth-Token</SelectItem>
                     <SelectItem value="Api-Key">Api-Key</SelectItem>
+                    <SelectItem value="apikey">apikey</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -321,7 +378,7 @@ export function StepConfigureAuth() {
   const createIntegrationWithAuth = async (
     authConfig: Record<string, unknown>,
     authType: AuthType,
-    credentialData?: { apiKey: string; headerName: string; prefix: string }
+    credentialData?: { apiKey: string; headerName: string; prefix: string; baseUrl?: string }
   ) => {
     // Generate slug from API name
     const slug = data.detectedApiName
@@ -385,6 +442,8 @@ export function StepConfigureAuth() {
             apiKey: credentialData.apiKey,
             headerName: credentialData.headerName || 'Authorization',
             prefix: credentialData.prefix || 'Bearer',
+            // Include baseUrl for user-specific APIs (e.g., Supabase project URL)
+            ...(credentialData.baseUrl && { baseUrl: credentialData.baseUrl }),
           });
         } catch (credError) {
           console.error('[Auth Config] Failed to save credentials:', credError);
@@ -434,6 +493,8 @@ export function StepConfigureAuth() {
         apiKey: formData.apiKey,
         headerName: formData.headerName,
         prefix: prefix,
+        // Pass baseUrl for user-specific APIs (stored with credential, not integration)
+        baseUrl: formData.baseUrl || undefined,
       }
     );
   };

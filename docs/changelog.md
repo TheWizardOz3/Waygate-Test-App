@@ -14,6 +14,7 @@
 
 | Version | Date       | Type       | Summary                                                         |
 | ------- | ---------- | ---------- | --------------------------------------------------------------- |
+| 0.1.9   | 2026-01-03 | minor      | Per-credential baseUrl for user-specific APIs (Supabase, etc.)  |
 | 0.1.8   | 2026-01-03 | patch      | Credential saving, endpoint copy, parameter descriptions fixes  |
 | 0.1.7   | 2026-01-03 | minor      | Template-based integration creation for schema-driven APIs      |
 | 0.1.6   | 2026-01-03 | patch      | Smart cache invalidation with wishlist coverage check           |
@@ -67,6 +68,40 @@
 ## Releases
 
 <!-- Add new versions below this line, newest first -->
+
+## [0.1.9] - 2026-01-03
+
+### Added
+
+- **Per-Credential Base URL Support**
+  - Credential schema now includes optional `baseUrl` for user-specific APIs
+  - Each connected app can have its own API endpoint (e.g., different Supabase projects)
+  - Gateway service prioritizes credential baseUrl over integration authConfig.baseUrl
+
+- **Base URL Input in Credential Forms**
+  - `ApiKeyConnectForm` and wizard `StepConfigureAuth` now show base URL field
+  - Auto-detects user-specific APIs (Supabase, Airtable) and requires baseUrl
+  - Context-specific hints for where to find the base URL
+
+- **Supabase-Specific UX Improvements**
+  - Pre-configures header name to `apikey` (Supabase convention)
+  - Pre-configures prefix to `none` (Supabase doesn't use Bearer prefix)
+  - Shows placeholder: `https://your-project-id.supabase.co`
+  - Hints explain service_role key location
+
+### Changed
+
+- Gateway `buildRequest()` now checks credential.data.baseUrl first, then falls back to integration.authConfig.baseUrl
+- Improved error message when baseUrl is missing: now suggests configuring in credential settings
+
+### Technical
+
+- Updated `ApiKeyCredentialSchema` and `BearerCredentialSchema` to include optional `baseUrl`
+- Updated `storeApiKeyCredential` and `storeBearerCredential` functions to accept `baseUrl`
+- Updated credentials API endpoint to pass `baseUrl` to storage functions
+- Added ADR-018: Per-Credential Base URL for User-Specific APIs
+
+---
 
 ## [0.1.8] - 2026-01-03
 

@@ -308,9 +308,11 @@ function buildRequest(
   input: Record<string, unknown>,
   credential: DecryptedCredential | null
 ): BuiltRequest {
-  // Get base URL from integration config
+  // Get base URL from credential FIRST (per-connection), then fall back to integration config
+  // This allows each connected app to have its own endpoint (e.g., different Supabase projects)
+  const credentialData = credential?.data as Record<string, unknown> | null;
   const authConfig = integration.authConfig as Record<string, unknown> | null;
-  const baseUrl = (authConfig?.baseUrl as string) || '';
+  const baseUrl = (credentialData?.baseUrl as string) || (authConfig?.baseUrl as string) || '';
 
   // Build the path with parameter substitution
   const path = buildUrl(action.endpointTemplate, input);
@@ -328,8 +330,8 @@ function buildRequest(
       throw new GatewayError(
         'CONFIGURATION_ERROR',
         `Integration "${integration.name}" is missing a base URL. ` +
-          `Configure the base URL in the integration settings to execute this action. ` +
-          `Expected format: https://your-api.example.com`,
+          `Please configure the base URL when connecting your credentials. ` +
+          `For Supabase, use your project URL: https://YOUR-PROJECT-ID.supabase.co`,
         { integrationId: integration.id, path }
       );
     }

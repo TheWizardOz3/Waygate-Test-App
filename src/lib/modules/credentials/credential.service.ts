@@ -134,6 +134,7 @@ export async function storeApiKeyCredential(
     apiKey: string;
     placement: 'header' | 'query' | 'body';
     paramName: string;
+    baseUrl?: string; // Per-credential base URL (for user-specific APIs like Supabase)
   }
 ): Promise<IntegrationCredential> {
   const parsed = ApiKeyCredentialSchema.safeParse(data);
@@ -191,6 +192,7 @@ export async function storeBearerCredential(
   integrationId: string,
   data: {
     token: string;
+    baseUrl?: string; // Per-credential base URL (for user-specific APIs)
   }
 ): Promise<IntegrationCredential> {
   const parsed = BearerCredentialSchema.safeParse(data);

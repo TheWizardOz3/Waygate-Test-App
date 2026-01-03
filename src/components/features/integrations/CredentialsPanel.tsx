@@ -197,10 +197,39 @@ export function CredentialsPanel({ integration }: CredentialsPanelProps) {
         </Card>
       );
     } else {
+      // Detect if this integration requires a base URL (e.g., Supabase, Airtable, etc.)
+      const integrationNameLower = integration.name.toLowerCase();
+      const integrationSlugLower = integration.slug?.toLowerCase() || '';
+      const isSupabase =
+        integrationNameLower.includes('supabase') || integrationSlugLower.includes('supabase');
+      const isAirtable =
+        integrationNameLower.includes('airtable') || integrationSlugLower.includes('airtable');
+      const isUserSpecificApi = isSupabase || isAirtable;
+
+      // Determine hints based on the integration type
+      let baseUrlHint = '';
+      let baseUrlPlaceholder = 'https://your-project.example.com';
+      let apiKeyHint = 'Your API key will be encrypted before storage';
+
+      if (isSupabase) {
+        baseUrlHint = 'Your Supabase project URL (found in Project Settings → API)';
+        baseUrlPlaceholder = 'https://your-project-id.supabase.co';
+        apiKeyHint =
+          'Use your "service_role" key for full access (found in Project Settings → API → service_role)';
+      } else if (isAirtable) {
+        baseUrlHint = 'Your Airtable base URL';
+        baseUrlPlaceholder = 'https://api.airtable.com/v0/your-base-id';
+        apiKeyHint = 'Your Airtable Personal Access Token or API key';
+      }
+
       return (
         <ApiKeyConnectForm
           integrationId={integration.id}
           integrationName={integration.name}
+          requiresBaseUrl={isUserSpecificApi}
+          baseUrlHint={baseUrlHint}
+          baseUrlPlaceholder={baseUrlPlaceholder}
+          apiKeyHint={apiKeyHint}
           onSuccess={handleConnectSuccess}
           onError={(error) => toast.error(error)}
         />

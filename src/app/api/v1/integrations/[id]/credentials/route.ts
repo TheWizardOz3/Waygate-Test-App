@@ -25,12 +25,14 @@ const CreateApiKeyCredentialSchema = z.object({
   apiKey: z.string().min(1, 'API key is required'),
   headerName: z.string().optional().default('Authorization'),
   prefix: z.string().optional().default('Bearer'),
+  baseUrl: z.string().url().optional(), // Per-credential base URL (e.g., Supabase project URL)
 });
 
 // Schema for creating Bearer credentials
 const CreateBearerCredentialSchema = z.object({
   type: z.literal('bearer'),
   token: z.string().min(1, 'Token is required'),
+  baseUrl: z.string().url().optional(), // Per-credential base URL
 });
 
 // Schema for creating OAuth2 credentials (typically from callback, but support direct)
@@ -200,12 +202,14 @@ export const POST = withApiAuth(async (request: NextRequest, { tenant }) => {
           apiKey: data.apiKey,
           placement: 'header',
           paramName: data.headerName,
+          baseUrl: data.baseUrl, // Per-credential base URL
         });
         break;
 
       case 'bearer':
         credential = await storeBearerCredential(tenant.id, integrationId, {
           token: data.token,
+          baseUrl: data.baseUrl, // Per-credential base URL
         });
         break;
 

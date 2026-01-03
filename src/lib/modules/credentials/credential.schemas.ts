@@ -22,11 +22,14 @@ export type OAuth2CredentialData = z.infer<typeof OAuth2CredentialSchema>;
 
 /**
  * API Key credential data (decrypted)
+ * baseUrl is optional - allows per-credential endpoint configuration
+ * (useful for user-specific APIs like Supabase, Airtable, etc.)
  */
 export const ApiKeyCredentialSchema = z.object({
   apiKey: z.string().min(1, 'API key is required'),
   placement: z.enum(['header', 'query', 'body']),
   paramName: z.string().min(1, 'Parameter name is required'),
+  baseUrl: z.string().url().optional(), // Per-credential base URL
 });
 
 export type ApiKeyCredentialData = z.infer<typeof ApiKeyCredentialSchema>;
@@ -43,9 +46,11 @@ export type BasicCredentialData = z.infer<typeof BasicCredentialSchema>;
 
 /**
  * Bearer Token credential data (decrypted)
+ * baseUrl is optional - allows per-credential endpoint configuration
  */
 export const BearerCredentialSchema = z.object({
   token: z.string().min(1, 'Token is required'),
+  baseUrl: z.string().url().optional(), // Per-credential base URL
 });
 
 export type BearerCredentialData = z.infer<typeof BearerCredentialSchema>;
@@ -103,6 +108,7 @@ export const StoreApiKeyCredentialInputSchema = z.object({
   apiKey: z.string().min(1),
   placement: z.enum(['header', 'query', 'body']),
   paramName: z.string().min(1),
+  baseUrl: z.string().url().optional(), // Per-credential base URL for user-specific APIs
 });
 
 export type StoreApiKeyCredentialInput = z.infer<typeof StoreApiKeyCredentialInputSchema>;
@@ -124,6 +130,7 @@ export type StoreBasicCredentialInput = z.infer<typeof StoreBasicCredentialInput
 export const StoreBearerCredentialInputSchema = z.object({
   integrationId: z.string().uuid(),
   token: z.string().min(1),
+  baseUrl: z.string().url().optional(), // Per-credential base URL for user-specific APIs
 });
 
 export type StoreBearerCredentialInput = z.infer<typeof StoreBearerCredentialInputSchema>;

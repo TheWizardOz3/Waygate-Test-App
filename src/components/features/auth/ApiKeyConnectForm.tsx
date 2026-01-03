@@ -25,6 +25,7 @@ const apiKeySchema = z.object({
   apiKey: z.string().min(1, 'API key is required'),
   headerName: z.string().optional(),
   prefix: z.string().optional(),
+  baseUrl: z.string().url('Please enter a valid URL').optional().or(z.literal('')),
 });
 
 type ApiKeyFormData = z.infer<typeof apiKeySchema>;
@@ -36,6 +37,12 @@ interface ApiKeyConnectFormProps {
   prefix?: string;
   /** Optional hint text about where to find the API key */
   apiKeyHint?: string;
+  /** Whether this integration requires a base URL (e.g., Supabase project URL) */
+  requiresBaseUrl?: boolean;
+  /** Hint text for the base URL field */
+  baseUrlHint?: string;
+  /** Placeholder for the base URL field */
+  baseUrlPlaceholder?: string;
   onSuccess?: () => void;
   onError?: (error: string) => void;
 }
@@ -48,6 +55,9 @@ export function ApiKeyConnectForm({
   headerName = 'Authorization',
   prefix = 'Bearer',
   apiKeyHint,
+  requiresBaseUrl = false,
+  baseUrlHint,
+  baseUrlPlaceholder = 'https://your-project.example.com',
   onSuccess,
   onError,
 }: ApiKeyConnectFormProps) {
@@ -56,12 +66,20 @@ export function ApiKeyConnectForm({
   const [testError, setTestError] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
 
+  // Use a conditional schema that requires baseUrl when needed
+  const formSchema = requiresBaseUrl
+    ? apiKeySchema.extend({
+        baseUrl: z.string().url('Please enter a valid URL'),
+      })
+    : apiKeySchema;
+
   const form = useForm<ApiKeyFormData>({
-    resolver: zodResolver(apiKeySchema),
+    resolver: zodResolver(formSchema),
     defaultValues: {
       apiKey: '',
       headerName,
       prefix,
+      baseUrl: '',
     },
   });
 
@@ -100,6 +118,8 @@ export function ApiKeyConnectForm({
         apiKey: data.apiKey,
         headerName: data.headerName || headerName,
         prefix: data.prefix || prefix,
+        // Only include baseUrl if it's a valid URL
+        ...(data.baseUrl && { baseUrl: data.baseUrl }),
       });
 
       toast.success(`API key saved for ${integrationName}`);
@@ -125,6 +145,32 @@ export function ApiKeyConnectForm({
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            {/* Base URL field - shown for user-specific APIs like Supabase */}
+            {requiresBaseUrl && (
+              <FormField
+                control={form.control}
+                name="baseUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>API Base URL</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="url"
+                        placeholder={baseUrlPlaceholder}
+                        className="font-mono"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {baseUrlHint ||
+                        'The base URL for API requests (unique to your account/project)'}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
             <FormField
               control={form.control}
               name="apiKey"

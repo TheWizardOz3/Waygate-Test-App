@@ -31,6 +31,7 @@
 | ADR-015 | 2026-01-03 | arch     | planned | Hybrid auth model: platform-owned + user-owned creds    |
 | ADR-016 | 2026-01-03 | arch     | active  | Wishlist-aware cache validation for scrape jobs         |
 | ADR-017 | 2026-01-03 | arch     | active  | Template auto-detection for schema-driven APIs          |
+| ADR-018 | 2026-01-03 | arch     | active  | Per-credential baseUrl for user-specific APIs           |
 
 **Categories:** `arch` | `data` | `api` | `ui` | `test` | `infra` | `error`
 
@@ -71,6 +72,79 @@
 ## Log Entries
 
 <!-- Add new entries below this line, newest first -->
+
+### ADR-018: Per-Credential Base URL for User-Specific APIs
+
+**Date:** 2026-01-03 | **Category:** arch | **Status:** active
+
+#### Trigger
+
+User asked "Will that base URL get applied when I connect a project to one of these integrations?" when setting up Supabase. This revealed a fundamental architecture gap:
+
+- `baseUrl` was stored at the **Integration** level (in `authConfig`)
+- This meant ALL consuming apps using an integration share the SAME base URL
+- **Problem**: User-specific APIs like Supabase have different endpoints per user (e.g., `https://project-a.supabase.co` vs `https://project-b.supabase.co`)
+
+#### Decision
+
+Moved `baseUrl` from integration-level to **credential-level** storage:
+
+1. **Schema Update**: Added `baseUrl?: string` to `ApiKeyCredentialSchema` and `BearerCredentialSchema`
+2. **Gateway Resolution**: `buildRequest()` now checks credential.data.baseUrl FIRST, then falls back to authConfig.baseUrl
+3. **UI Flow**: Added base URL input field in credential forms when `requiresBaseUrl` is detected (Supabase, Airtable)
+4. **Context Detection**: Forms auto-detect integration type and show appropriate hints
+
+```typescript
+// Gateway request building - credential URL takes priority
+const credentialData = credential?.data as Record<string, unknown> | null;
+const authConfig = integration.authConfig as Record<string, unknown> | null;
+const baseUrl = (credentialData?.baseUrl as string) || (authConfig?.baseUrl as string) || '';
+```
+
+#### Rationale
+
+- **Multi-tenancy**: Each consuming app can have its own endpoint configuration
+- **Template reusability**: One "Supabase PostgREST" integration works for all users
+- **Backward compatible**: Falls back to integration-level baseUrl if no credential baseUrl
+- **Security**: Each credential is encrypted separately, so per-user URLs are also secured
+
+Architecture after:
+
+```
+Integration: "Supabase PostgREST"
+├── authConfig: { headerName: "apikey" }  ← No baseUrl here!
+└── actions: [query, insert, update, ...]
+
+Credentials (per-connection):
+├── App A: { apiKey: "...", baseUrl: "https://project-a.supabase.co" }
+└── App B: { apiKey: "...", baseUrl: "https://project-b.supabase.co" }
+```
+
+#### Supersedes
+
+N/A (enhancement to existing credential storage)
+
+#### Migration
+
+- **Affected files:**
+  - `src/lib/modules/credentials/credential.schemas.ts`
+  - `src/lib/modules/credentials/credential.service.ts`
+  - `src/lib/modules/gateway/gateway.service.ts`
+  - `src/components/features/auth/ApiKeyConnectForm.tsx`
+  - `src/components/features/integrations/wizard/StepConfigureAuth.tsx`
+  - `src/app/api/v1/integrations/[id]/credentials/route.ts`
+- **Find:** `baseUrl` in `authConfig` for user-specific APIs
+- **Replace with:** `baseUrl` in credential data
+
+#### AI Instructions
+
+- For user-specific APIs (Supabase, Airtable, user's own endpoints), ALWAYS collect baseUrl when connecting credentials
+- Check `requiresBaseUrl` flag or detect by integration name
+- Display helpful hints for where to find the base URL (e.g., Supabase Project Settings → API)
+- When building gateway requests, credential.data.baseUrl takes priority over integration.authConfig.baseUrl
+- If neither exists and path is relative, throw CONFIGURATION_ERROR with clear instructions
+
+---
 
 ### ADR-017: Template Auto-Detection for Schema-Driven APIs
 
