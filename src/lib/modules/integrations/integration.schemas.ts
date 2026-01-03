@@ -56,17 +56,27 @@ export const ApiKeyConfigSchema = z.object({
 
 /**
  * Base URL configuration
+ * Uses transform to convert empty strings to undefined before URL validation
  */
 export const BaseUrlConfigSchema = z.object({
-  baseUrl: z.string().url().optional(),
+  baseUrl: z
+    .string()
+    .optional()
+    .transform((val) => (val?.trim() === '' ? undefined : val))
+    .pipe(z.string().url().optional()),
 });
 
 /**
  * Combined auth config (union of all types)
+ * Uses transform to convert empty strings to undefined before URL validation
  */
 export const AuthConfigSchema = z
   .object({
-    baseUrl: z.string().url().optional(),
+    baseUrl: z
+      .string()
+      .optional()
+      .transform((val) => (val?.trim() === '' ? undefined : val))
+      .pipe(z.string().url().optional()),
   })
   .merge(OAuth2ConfigSchema.partial())
   .merge(ApiKeyConfigSchema.partial())

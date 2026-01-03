@@ -322,8 +322,17 @@ export function StepConfigureAuth() {
 
     try {
       // Only include baseUrl if it's a valid URL (not empty)
-      const baseUrl = data.detectedBaseUrl?.trim();
-      const isValidUrl = baseUrl && /^https?:\/\/.+/.test(baseUrl);
+      // Use URL constructor for strict validation
+      let validBaseUrl: string | undefined;
+      const rawBaseUrl = data.detectedBaseUrl?.trim();
+      if (rawBaseUrl) {
+        try {
+          new URL(rawBaseUrl); // Will throw if invalid
+          validBaseUrl = rawBaseUrl;
+        } catch {
+          console.log('[Auth Config] Invalid baseUrl detected, omitting:', rawBaseUrl);
+        }
+      }
 
       const integration = await createIntegration.mutateAsync({
         name: data.detectedApiName || 'New Integration',
@@ -332,7 +341,7 @@ export function StepConfigureAuth() {
         documentationUrl: data.documentationUrl,
         authType,
         authConfig: {
-          ...(isValidUrl && { baseUrl }),
+          ...(validBaseUrl && { baseUrl: validBaseUrl }),
           ...authConfig,
         },
         tags: [],
