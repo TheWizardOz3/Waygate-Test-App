@@ -70,6 +70,7 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
     "tailwindcss-animate": "^1.0.7",
+    "undici": "^7.16.0",
     "yaml": "^2.8.2",
     "zod": "^4.3.4",
     "zustand": "^5.0.9"

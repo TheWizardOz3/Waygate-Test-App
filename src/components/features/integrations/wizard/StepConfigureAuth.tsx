@@ -251,7 +251,7 @@ function ApiKeyForm({
                     <SelectItem value="Bearer">Bearer</SelectItem>
                     <SelectItem value="Token">Token</SelectItem>
                     <SelectItem value="Basic">Basic</SelectItem>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -352,7 +352,7 @@ export function StepConfigureAuth() {
       {
         apiKey: formData.apiKey,
         headerName: formData.headerName,
-        prefix: formData.prefix,
+        prefix: formData.prefix === 'none' ? '' : formData.prefix,
       },
       'api_key'
     );

@@ -87,7 +87,7 @@ export type ParseErrorCode =
 const DEFAULT_MAX_CONTENT_LENGTH = 100_000;
 
 /** Default model for parsing */
-const DEFAULT_MODEL: LLMModelId = 'gemini-1.5-flash';
+const DEFAULT_MODEL: LLMModelId = 'gemini-2.0-flash';
 
 /** Chunk size for large documents */
 const CHUNK_SIZE = 50_000;

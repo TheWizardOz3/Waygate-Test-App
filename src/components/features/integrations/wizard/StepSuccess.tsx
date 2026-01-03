@@ -32,13 +32,15 @@ export function StepSuccess() {
   }, []);
 
   const handleViewIntegration = () => {
+    const integrationId = data.createdIntegrationId;
     reset();
-    router.push(`/integrations/${data.createdIntegrationId}`);
+    router.push(`/integrations/${integrationId}`);
   };
 
   const handleTestAction = () => {
+    const integrationId = data.createdIntegrationId;
     reset();
-    router.push(`/integrations/${data.createdIntegrationId}/actions`);
+    router.push(`/integrations/${integrationId}/actions`);
   };
 
   const handleCreateAnother = () => {

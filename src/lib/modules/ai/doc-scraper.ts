@@ -5,7 +5,7 @@
  * Provides URL scraping with timeout handling and error management.
  */
 
-import FirecrawlApp from '@mendable/firecrawl-js';
+// Note: Firecrawl SDK import removed - using direct API calls instead for reliability
 
 // =============================================================================
 // Types
@@ -208,7 +208,7 @@ export type ScrapeErrorCode =
 // =============================================================================
 
 /** Default timeout for single URL scrapes */
-const DEFAULT_TIMEOUT_MS = 60000; // 60 seconds
+const DEFAULT_TIMEOUT_MS = 120000; // 120 seconds (Firecrawl needs more time for JS-heavy pages)
 
 /** Default timeout for documentation scraping (longer for complex pages) */
 const DOCUMENTATION_TIMEOUT_MS = 300000; // 5 minutes
@@ -229,24 +229,14 @@ const DEFAULT_CRAWL_TIMEOUT_MS = 600000; // 10 minutes
 const DEFAULT_REQUEST_DELAY_MS = 1000; // 1 second
 
 // =============================================================================
-// Client Initialization
+// API Key Management
 // =============================================================================
 
 /**
- * Firecrawl client singleton
- */
-let firecrawlClient: FirecrawlApp | null = null;
-
-/**
- * Get or create the Firecrawl client
- *
+ * Get the API key for Firecrawl
  * @throws ScrapeError if FIRECRAWL_API_KEY is not set
  */
-function getClient(): FirecrawlApp {
-  if (firecrawlClient) {
-    return firecrawlClient;
-  }
-
+function getApiKey(): string {
   const apiKey = process.env.FIRECRAWL_API_KEY;
 
   if (!apiKey) {
@@ -258,15 +248,73 @@ function getClient(): FirecrawlApp {
     );
   }
 
-  firecrawlClient = new FirecrawlApp({ apiKey });
-  return firecrawlClient;
+  return apiKey;
 }
 
 /**
- * Reset the client (useful for testing)
+ * Reset the client (no-op, kept for API compatibility)
+ * @deprecated Direct API calls are now used instead of SDK
  */
 export function resetClient(): void {
-  firecrawlClient = null;
+  // No-op - we now use direct API calls instead of the SDK client
+}
+
+/**
+ * Direct Firecrawl API call (workaround for SDK timeout issues)
+ */
+async function scrapeWithDirectApi(
+  url: string,
+  options: { formats: string[]; onlyMainContent: boolean; timeout: number }
+): Promise<{
+  markdown?: string;
+  html?: string;
+  links?: string[];
+  metadata?: { title?: string; description?: string };
+}> {
+  const apiKey = getApiKey();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), options.timeout);
+
+  try {
+    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url,
+        formats: options.formats,
+        onlyMainContent: options.onlyMainContent,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.error || 'Firecrawl scrape failed');
+    }
+
+    return data.data;
+  } catch (error) {
+    clearTimeout(timeoutId);
+
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new ScrapeError(url, 'TIMEOUT', `Scrape timed out after ${options.timeout}ms`, {
+        retryable: true,
+      });
+    }
+
+    throw error;
+  }
 }
 
 // =============================================================================
@@ -324,35 +372,23 @@ export async function scrapeUrl(url: string, options: ScrapeOptions = {}): Promi
   const includeLinks = options.includeLinks ?? false;
   const onlyMainContent = options.onlyMainContent ?? true;
 
-  const client = getClient();
-
   // Build formats array
-  const formats: ('markdown' | 'links')[] = ['markdown'];
+  const formats: string[] = ['markdown'];
   if (includeLinks) {
     formats.push('links');
   }
 
-  // Set up timeout
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    setTimeout(() => {
-      reject(
-        new ScrapeError(validatedUrl, 'TIMEOUT', `Scrape timed out after ${timeout}ms`, {
-          retryable: true,
-        })
-      );
-    }, timeout);
-  });
-
   try {
-    // Race between scrape and timeout
-    const result = await Promise.race([
-      client.scrape(validatedUrl, {
-        formats,
-        onlyMainContent,
-        timeout: Math.floor(timeout / 1000), // Firecrawl uses seconds
-      }),
-      timeoutPromise,
-    ]);
+    console.log(`[Firecrawl] Scraping ${validatedUrl} with timeout ${timeout}ms...`);
+
+    // Use direct API call instead of SDK (SDK has timeout issues)
+    const result = await scrapeWithDirectApi(validatedUrl, {
+      formats,
+      onlyMainContent,
+      timeout,
+    });
+
+    console.log(`[Firecrawl] Success! Got ${result.markdown?.length || 0} chars`);
 
     // Extract content - prefer markdown
     const content = result.markdown || result.html || '';
