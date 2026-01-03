@@ -431,14 +431,29 @@ function buildUrl(template: string, input: Record<string, unknown>): string {
 /**
  * Build URL with query parameters
  * Handles both absolute URLs (https://...) and relative paths (/api/...)
+ * Filters out empty/null/undefined values to avoid issues with APIs like PostgREST
  */
 function buildUrlWithQuery(
   baseUrl: string,
   params: Record<string, unknown>,
   authParams: Record<string, string> = {}
 ): string {
-  // Check if we have any params to add
-  const hasParams = Object.keys(params).length > 0 || Object.keys(authParams).length > 0;
+  // Helper to check if a value should be included
+  const shouldInclude = (value: unknown): boolean => {
+    if (value === undefined || value === null) return false;
+    if (typeof value === 'string' && value.trim() === '') return false;
+    return true;
+  };
+
+  // Check if we have any params to add (excluding empty values)
+  const filteredParams = Object.fromEntries(
+    Object.entries(params).filter(([, v]) => shouldInclude(v))
+  );
+  const filteredAuthParams = Object.fromEntries(
+    Object.entries(authParams).filter(([, v]) => shouldInclude(v))
+  );
+  const hasParams =
+    Object.keys(filteredParams).length > 0 || Object.keys(filteredAuthParams).length > 0;
 
   if (!hasParams) {
     return baseUrl;
@@ -448,34 +463,32 @@ function buildUrlWithQuery(
   if (baseUrl.startsWith('http://') || baseUrl.startsWith('https://')) {
     const urlObj = new URL(baseUrl);
 
-    // Add input params
-    for (const [key, value] of Object.entries(params)) {
-      if (value !== undefined && value !== null) {
-        urlObj.searchParams.set(key, String(value));
-      }
+    // Add input params (already filtered)
+    for (const [key, value] of Object.entries(filteredParams)) {
+      urlObj.searchParams.set(key, String(value));
     }
 
-    // Add auth params
-    for (const [key, value] of Object.entries(authParams)) {
+    // Add auth params (already filtered)
+    for (const [key, value] of Object.entries(filteredAuthParams)) {
       urlObj.searchParams.set(key, value);
     }
 
     return urlObj.toString();
   }
 
-  // For relative URLs, build query string manually
-  const allParams = { ...params, ...authParams };
-  const filteredParams = Object.entries(allParams)
-    .filter(([, value]) => value !== undefined && value !== null)
-    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
+  // For relative URLs, build query string manually (use already filtered params)
+  const allFilteredParams = { ...filteredParams, ...filteredAuthParams };
+  const queryParts = Object.entries(allFilteredParams).map(
+    ([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`
+  );
 
-  if (filteredParams.length === 0) {
+  if (queryParts.length === 0) {
     return baseUrl;
   }
 
   // Check if URL already has query params
   const separator = baseUrl.includes('?') ? '&' : '?';
-  return `${baseUrl}${separator}${filteredParams.join('&')}`;
+  return `${baseUrl}${separator}${queryParts.join('&')}`;
 }
 
 /**
@@ -562,11 +575,30 @@ async function executeRequest(
   integrationId: string,
   options: GatewayInvokeOptions
 ): Promise<ExecutionResultWithMetrics<unknown>> {
-  return executeWithMetrics(request, {
+  // Debug: log the full request including headers
+  console.log('[GATEWAY] Executing request:', {
+    url: request.url,
+    method: request.method,
+    headers: request.headers,
+    hasBody: !!request.body,
+  });
+
+  const result = await executeWithMetrics(request, {
     circuitBreakerId: integrationId,
     timeout: options.timeoutMs,
     idempotencyKey: options.idempotencyKey,
   });
+
+  // Debug: log the result
+  console.log('[GATEWAY] Execution result:', {
+    success: result.success,
+    attempts: result.attempts,
+    durationMs: result.totalDurationMs,
+    error: result.error,
+    dataType: result.data ? typeof result.data : 'undefined',
+  });
+
+  return result;
 }
 
 /**

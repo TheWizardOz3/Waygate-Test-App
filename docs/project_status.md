@@ -1,6 +1,6 @@
 # Project Status: Waygate
 
-**Last Updated**: 2026-01-03 (v0.1.10 - Intelligent API Key Defaults)
+**Last Updated**: 2026-01-03 (v0.1.11 - Empty Query Params Fix)
 
 ---
 

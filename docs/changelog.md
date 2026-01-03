@@ -14,6 +14,7 @@
 
 | Version | Date       | Type       | Summary                                                         |
 | ------- | ---------- | ---------- | --------------------------------------------------------------- |
+| 0.1.11  | 2026-01-03 | patch      | Fix empty query params causing PostgREST parse errors           |
 | 0.1.10  | 2026-01-03 | patch      | Intelligent API key defaults for Supabase (apikey header, etc.) |
 | 0.1.9   | 2026-01-03 | minor      | Per-credential baseUrl for user-specific APIs (Supabase, etc.)  |
 | 0.1.8   | 2026-01-03 | patch      | Credential saving, endpoint copy, parameter descriptions fixes  |
@@ -69,6 +70,25 @@
 ## Releases
 
 <!-- Add new versions below this line, newest first -->
+
+## [0.1.11] - 2026-01-03
+
+### Fixed
+
+- **Empty Query Parameters Bug**
+  - Fixed issue where empty query parameters (e.g., `order=`, `select=`) were being sent to APIs
+  - PostgREST/Supabase was rejecting requests with "failed to parse order ()" error
+  - Now filters out empty string, null, and undefined values before building query strings
+  - Applies to both absolute URLs (https://...) and relative paths
+
+### Changed
+
+- **Gateway URL Building**
+  - Added `shouldInclude()` helper to validate query parameter values
+  - Empty strings are now treated same as null/undefined (excluded from URL)
+  - Debug logging added to execution step for easier troubleshooting
+
+---
 
 ## [0.1.10] - 2026-01-03
 
