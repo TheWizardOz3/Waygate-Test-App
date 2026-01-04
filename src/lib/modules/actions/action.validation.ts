@@ -5,7 +5,7 @@
  */
 
 import { z } from 'zod';
-import { HttpMethodSchema, JsonSchemaSchema } from './action.schemas';
+import { HttpMethodSchema, JsonSchemaSchema, TagSchema } from './action.schemas';
 import { ValidationConfigSchema } from '../execution/validation';
 
 // =============================================================================
@@ -45,6 +45,7 @@ export const ActionEditorSchema = z.object({
     .max(86400, 'Cache TTL must be 24 hours or less')
     .nullable()
     .optional(),
+  tags: z.array(TagSchema).max(10, 'Maximum 10 tags allowed').default([]),
   retryConfig: z
     .object({
       maxRetries: z.number().int().min(0).max(10),

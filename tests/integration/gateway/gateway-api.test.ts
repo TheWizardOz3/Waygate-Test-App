@@ -20,9 +20,11 @@ vi.mock('@/lib/db/client', () => ({
     integration: {
       findFirst: vi.fn(),
       findUnique: vi.fn(),
+      findMany: vi.fn(),
     },
     action: {
       findFirst: vi.fn(),
+      findMany: vi.fn(),
     },
     integrationCredential: {
       findFirst: vi.fn(),
@@ -82,6 +84,7 @@ const mockAction = {
     },
   },
   outputSchema: {},
+  tags: [] as string[],
   metadata: {},
   paginationConfig: null,
   retryConfig: null,
@@ -305,6 +308,19 @@ describe('Gateway API Integration Tests', () => {
 
       vi.mocked(prisma.requestLog.findMany).mockResolvedValueOnce(mockLogs);
       vi.mocked(prisma.requestLog.count).mockResolvedValueOnce(1);
+      // Mock for enrichLogsWithDetails - cast to unknown to avoid full type requirements
+      vi.mocked(prisma.integration.findMany).mockResolvedValueOnce([
+        { id: TEST_INTEGRATION_ID, name: 'Test Integration', slug: 'test-integration' },
+      ] as unknown as Awaited<ReturnType<typeof prisma.integration.findMany>>);
+      vi.mocked(prisma.action.findMany).mockResolvedValueOnce([
+        {
+          id: TEST_ACTION_ID,
+          name: 'Test Action',
+          slug: 'test-action',
+          httpMethod: HttpMethod.POST,
+          endpointTemplate: '/test',
+        },
+      ] as unknown as Awaited<ReturnType<typeof prisma.action.findMany>>);
 
       const result = await listRequestLogs(TEST_TENANT_ID, { limit: 20 });
 
@@ -318,6 +334,9 @@ describe('Gateway API Integration Tests', () => {
 
       vi.mocked(prisma.requestLog.findMany).mockResolvedValueOnce([]);
       vi.mocked(prisma.requestLog.count).mockResolvedValueOnce(0);
+      // Mock for enrichLogsWithDetails (empty results)
+      vi.mocked(prisma.integration.findMany).mockResolvedValueOnce([]);
+      vi.mocked(prisma.action.findMany).mockResolvedValueOnce([]);
 
       // Use a valid UUID format for the integration ID filter (v4 UUID)
       const integrationIdFilter = '11111111-1111-4111-a111-111111111111';
@@ -341,6 +360,9 @@ describe('Gateway API Integration Tests', () => {
 
       vi.mocked(prisma.requestLog.findMany).mockResolvedValueOnce([]);
       vi.mocked(prisma.requestLog.count).mockResolvedValueOnce(0);
+      // Mock for enrichLogsWithDetails (empty results)
+      vi.mocked(prisma.integration.findMany).mockResolvedValueOnce([]);
+      vi.mocked(prisma.action.findMany).mockResolvedValueOnce([]);
 
       const startDate = '2026-01-01T00:00:00.000Z';
       const endDate = '2026-01-02T00:00:00.000Z';

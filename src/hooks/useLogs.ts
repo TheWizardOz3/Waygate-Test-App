@@ -118,6 +118,16 @@ export function useLogEntry(id: string | undefined) {
   });
 }
 
+export interface LogStats {
+  totalRequests: number;
+  successRate: number;
+  averageLatency: number;
+  errorCount: number;
+  requestsByIntegration: { integrationId: string; integrationName: string; count: number }[];
+  requestsByStatus: { status: string; count: number }[];
+  latencyPercentiles: { p50: number; p90: number; p99: number };
+}
+
 /**
  * Hook to fetch log statistics
  */
@@ -129,15 +139,10 @@ export function useLogStats(params?: {
   return useQuery({
     queryKey: [...logKeys.stats(), params],
     queryFn: () =>
-      apiClient.get<{
-        totalRequests: number;
-        successRate: number;
-        averageLatency: number;
-        errorCount: number;
-        requestsByIntegration: { integrationId: string; integrationName: string; count: number }[];
-        requestsByStatus: { status: string; count: number }[];
-        latencyPercentiles: { p50: number; p90: number; p99: number };
-      }>('/logs/stats', params as Record<string, string | number | boolean | undefined>),
+      apiClient.get<LogStats>(
+        '/logs/stats',
+        params as Record<string, string | number | boolean | undefined>
+      ),
     staleTime: 30 * 1000, // 30 seconds
   });
 }

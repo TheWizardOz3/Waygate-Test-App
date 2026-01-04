@@ -58,7 +58,9 @@ import { CopyButton } from '@/components/ui/copy-button';
 import { MethodBadge } from './MethodBadge';
 import { DeleteActionDialog, BulkDeleteActionsDialog } from './DeleteActionDialog';
 import { BulkActionBar } from './BulkActionBar';
-import { useActions, useBulkDeleteActions, useIntegration } from '@/hooks';
+import { TagFilter } from '@/components/features/integrations/TagFilter';
+import { TagList } from '@/components/ui/tag-badge';
+import { useActions, useBulkDeleteActions, useIntegration, useTags } from '@/hooks';
 import type { ActionResponse } from '@/lib/modules/actions/action.schemas';
 
 interface ActionTableProps {
@@ -78,25 +80,32 @@ export function ActionTable({ integrationId }: ActionTableProps) {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [methodFilter, setMethodFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [actionToDelete, setActionToDelete] = useState<ActionResponse | null>(null);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
 
   const { data, isLoading, isError } = useActions(integrationId);
   const { data: integration } = useIntegration(integrationId);
+  const { data: tagsData } = useTags('actions');
   const bulkDelete = useBulkDeleteActions();
 
   const integrationSlug = integration?.slug;
 
-  // Filter by method and source
+  const availableTags = tagsData?.tags ?? [];
+
+  // Filter by method, source, and tags
   const filteredActions = useMemo(() => {
     const actions = data?.actions ?? [];
     return actions.filter((action) => {
       if (methodFilter !== 'all' && action.httpMethod !== methodFilter) return false;
       if (sourceFilter === 'ai' && !action.metadata?.aiConfidence) return false;
       if (sourceFilter === 'manual' && action.metadata?.aiConfidence) return false;
+      if (tagFilter.length > 0 && !tagFilter.some((tag) => action.tags?.includes(tag))) {
+        return false;
+      }
       return true;
     });
-  }, [data?.actions, methodFilter, sourceFilter]);
+  }, [data?.actions, methodFilter, sourceFilter, tagFilter]);
 
   // Define columns
   const columns: ColumnDef<ActionResponse>[] = useMemo(
@@ -211,7 +220,7 @@ export function ActionTable({ integrationId }: ActionTableProps) {
       {
         accessorKey: 'description',
         header: 'Description',
-        size: 300,
+        size: 250,
         cell: ({ row }) => (
           <span
             className="line-clamp-2 text-sm text-muted-foreground"
@@ -220,6 +229,12 @@ export function ActionTable({ integrationId }: ActionTableProps) {
             {row.getValue('description') || '—'}
           </span>
         ),
+      },
+      {
+        id: 'tags',
+        header: 'Tags',
+        size: 150,
+        cell: ({ row }) => <TagList tags={row.original.tags ?? []} size="sm" maxVisible={2} />,
       },
       {
         id: 'validation',
@@ -398,6 +413,14 @@ export function ActionTable({ integrationId }: ActionTableProps) {
             <SelectItem value="manual">Manual</SelectItem>
           </SelectContent>
         </Select>
+
+        {availableTags.length > 0 && (
+          <TagFilter
+            selectedTags={tagFilter}
+            onSelectionChange={setTagFilter}
+            availableTags={availableTags}
+          />
+        )}
       </div>
 
       {/* Bulk action bar */}

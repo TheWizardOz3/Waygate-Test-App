@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { IntegrationStatusBadge } from './IntegrationStatusBadge';
+import { TagList } from '@/components/ui/tag-badge';
 import { cn } from '@/lib/utils';
 import type { IntegrationSummary } from '@/lib/modules/integrations/integration.schemas';
 
@@ -75,7 +76,14 @@ export function IntegrationCard({ integration, onDelete, className }: Integratio
 
       <CardContent className="pt-0">
         {/* Description */}
-        {description && <p className="line-clamp-2 text-sm text-muted-foreground">{description}</p>}
+        {description && (
+          <p className="mb-2 line-clamp-2 text-sm text-muted-foreground">{description}</p>
+        )}
+
+        {/* Tags */}
+        {integration.tags.length > 0 && (
+          <TagList tags={integration.tags} size="sm" maxVisible={3} />
+        )}
 
         {/* More Menu - absolute positioned */}
         <DropdownMenu>

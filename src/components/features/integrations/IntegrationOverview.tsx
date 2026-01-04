@@ -2,8 +2,10 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Zap, Clock, CheckCircle2, AlertTriangle, Activity, Key } from 'lucide-react';
+import { TagInput } from '@/components/ui/tag-input';
+import { Zap, Clock, CheckCircle2, AlertTriangle, Activity, Key, Tags } from 'lucide-react';
 import { CredentialsPanel } from './CredentialsPanel';
+import { useTags, useUpdateIntegration } from '@/hooks';
 import type { IntegrationResponse } from '@/lib/modules/integrations/integration.schemas';
 
 interface IntegrationOverviewProps {
@@ -43,6 +45,16 @@ function StatCard({ title, value, description, icon, trend }: StatCardProps) {
 }
 
 export function IntegrationOverview({ integration }: IntegrationOverviewProps) {
+  const { data: tagsData } = useTags('integrations');
+  const updateIntegration = useUpdateIntegration();
+
+  const handleTagsChange = (newTags: string[]) => {
+    updateIntegration.mutate({
+      id: integration.id,
+      tags: newTags,
+    });
+  };
+
   // Mock stats - in real app, these would come from API
   const stats = {
     totalActions: 12,
@@ -94,6 +106,20 @@ export function IntegrationOverview({ integration }: IntegrationOverviewProps) {
             <CardDescription>Integration settings and metadata</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Tags */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Tags className="h-4 w-4 text-muted-foreground" />
+                <p className="text-sm font-medium text-muted-foreground">Tags</p>
+              </div>
+              <TagInput
+                value={integration.tags}
+                onChange={handleTagsChange}
+                suggestions={tagsData?.tags ?? []}
+                placeholder="Add tags to organize..."
+              />
+            </div>
+
             {/* Base URL */}
             {integration.authConfig?.baseUrl && (
               <div className="space-y-1">

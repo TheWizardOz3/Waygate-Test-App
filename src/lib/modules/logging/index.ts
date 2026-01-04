@@ -53,6 +53,7 @@ export {
   findLatestSuccessfulLogForIntegration,
   findRecentLogsForIntegration,
   getLogStatsForIntegration,
+  getLogStatsForTenant,
   deleteOldLogs,
   deleteLogsForIntegration,
 } from './logging.repository';
@@ -61,6 +62,7 @@ export type {
   CreateRequestLogDbInput,
   LogPaginationOptions,
   PaginatedLogs,
+  TenantLogStats,
 } from './logging.repository';
 
 // =============================================================================
@@ -86,3 +88,5 @@ export {
   getLastSuccessfulRequestTime,
   getIntegrationLogStats,
 } from './logging.service';
+
+export type { EnrichedLogEntry } from './logging.service';

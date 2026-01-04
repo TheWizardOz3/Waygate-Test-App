@@ -184,6 +184,7 @@ export async function createIntegration(
           inputSchema,
           outputSchema,
           cacheable: false,
+          tags: actionDef.tags ?? [],
           metadata: actionDef.tags?.length ? { tags: actionDef.tags } : undefined,
         });
         createdCount++;

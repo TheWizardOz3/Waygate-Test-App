@@ -34,6 +34,8 @@
 | ADR-018 | 2026-01-03 | arch     | active  | Per-credential baseUrl for user-specific APIs           |
 | ADR-019 | 2026-01-03 | arch     | active  | LLM-friendly pagination with token-aware limits         |
 | ADR-020 | 2026-01-03 | arch     | active  | Response validation with Zod and three-mode strategy    |
+| ADR-021 | 2026-01-04 | ui       | active  | Hash-based tag colors for consistent categorization     |
+| ADR-022 | 2026-01-04 | api      | active  | Enriched log responses with integration/action names    |
 
 **Categories:** `arch` | `data` | `api` | `ui` | `test` | `infra` | `error`
 
@@ -1311,5 +1313,120 @@ When working with validation:
 - Check `response.validation.issues` for any validation problems
 - Drift detection alerts appear in logs when failure rate exceeds threshold
 - To bypass validation for debugging: `X-Waygate-Bypass-Validation: true` header
+
+---
+
+### ADR-021: Hash-Based Tag Colors for Consistent Categorization
+
+**Date:** 2026-01-04 | **Category:** ui | **Status:** active
+
+#### Trigger
+
+Users need to organize integrations and actions with tags for categorization. Tags should have consistent, visually distinct colors to aid quick recognition, but allowing full user customization adds complexity and potential for poor color choices.
+
+#### Decision
+
+Implemented hash-based tag coloring:
+
+1. **Deterministic Colors:**
+   - Tag name is hashed to select from a predefined 10-color palette
+   - Same tag always gets the same color across all views
+   - No user color configuration (simplifies UX)
+
+2. **Color Palette:**
+   - Blue, Purple, Green, Amber, Rose, Cyan, Indigo, Emerald, Teal, Orange
+   - Each has light/dark mode variants for accessibility
+   - Chosen for visual distinction and contrast
+
+3. **Tag Validation:**
+   - 2-30 characters length constraint
+   - Lowercase alphanumeric with hyphens only (`/^[a-z0-9-]+$/`)
+   - Maximum 10 tags per entity (prevents visual overload)
+   - Normalized to lowercase on input for consistency
+
+4. **Implementation:**
+   - `src/lib/utils/tag-colors.ts` provides `getTagColor(tagName)` and `getTagClasses(tagName)`
+   - TagBadge component uses dynamic variant with computed Tailwind classes
+   - Case-insensitive hashing ensures "Payment" and "payment" get same color
+
+#### Rationale
+
+- **Cognitive Load**: Consistent colors create visual patterns users can learn
+- **Simplicity**: No color picker UI reduces complexity
+- **Accessibility**: Predefined palette ensures sufficient contrast
+- **Performance**: Hash-based lookup is O(1), no database storage needed
+- **Tenant Isolation**: Tags are per-tenant but colors are global (same tag = same color across all users)
+
+#### Alternatives Considered
+
+1. **User-defined colors**: Rejected - adds UI complexity, risk of poor choices, requires storage
+2. **Random colors**: Rejected - inconsistent between views, hard to build recognition
+3. **Category-based colors**: Rejected - requires predefined categories, limits flexibility
+4. **Gradient/icon alternatives**: Deferred - colored badges are simpler MVP solution
+
+#### AI Instructions
+
+When working with tags:
+
+- Tags must be lowercase alphanumeric with hyphens (validation rejects uppercase)
+- Use `getTagColor(tag)` for consistent coloring, never hardcode colors
+- Maximum 10 tags per integration/action - enforce in both schema and UI
+- Tag autocomplete uses `useTags` hook to fetch tenant's existing tags
+- TagFilter component shows all available tags with multi-select checkboxes
+
+---
+
+### ADR-022: Enriched Log Responses with Integration/Action Names
+
+**Date:** 2026-01-04 | **Category:** api | **Status:** active
+
+#### Trigger
+
+Request logs stored raw integration/action IDs, requiring frontend to make additional requests to resolve names for display. This created N+1 query patterns and poor UX with loading states for log viewers.
+
+#### Decision
+
+Enriched log responses at the service layer:
+
+1. **Server-Side Enrichment:**
+   - `listRequestLogs` service fetches integration and action details in parallel
+   - Single batch query for all unique IDs in result set
+   - Returns denormalized data: `integrationName`, `integrationSlug`, `actionName`, `actionSlug`
+
+2. **Computed Status Field:**
+   - `status: 'success' | 'error' | 'timeout'` derived from statusCode and error presence
+   - 2xx = success, error present = error, else = timeout
+   - Frontend no longer needs status logic
+
+3. **HTTP Method Extraction:**
+   - `httpMethod` extracted from `requestSummary.method`
+   - Simplified access for UI display and filtering
+
+4. **Performance Optimization:**
+   - Batch fetch: Single `findMany` for integrations, single for actions
+   - Maps for O(1) lookup during enrichment
+   - Acceptable trade-off: Slightly larger response vs. N+1 client queries
+
+#### Rationale
+
+- **User Experience**: Log viewer immediately shows human-readable names
+- **Client Simplicity**: No need to resolve IDs, manage loading states, or handle missing data
+- **Consistency**: Single source of truth for log formatting
+- **Filtering**: Names available for client-side search without additional queries
+
+#### Migration
+
+- **Affected files:** `src/lib/modules/logging/logging.service.ts`, `src/hooks/useLogs.ts`
+- **Schema changes:** `RequestLogResponseSchema` extended with new fields
+- **Breaking changes:** None - existing fields preserved, new fields additive
+
+#### AI Instructions
+
+When working with logs:
+
+- Always use enriched response fields (`integrationName`, `actionName`) for display
+- `status` field is pre-computed - don't derive from statusCode in UI
+- Log list responses include all necessary data for display without follow-up queries
+- For log stats, use dedicated `/logs/stats` endpoint with aggregation
 
 ---

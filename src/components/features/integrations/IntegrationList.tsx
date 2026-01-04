@@ -42,7 +42,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { IntegrationCard, IntegrationCardSkeleton } from './IntegrationCard';
 import { IntegrationStatusBadge } from './IntegrationStatusBadge';
 import { IntegrationEmptyState, IntegrationNoResults } from './IntegrationEmptyState';
-import { useIntegrations, useDeleteIntegration } from '@/hooks/useIntegrations';
+import { TagFilter } from './TagFilter';
+import { TagList } from '@/components/ui/tag-badge';
+import { useIntegrations, useDeleteIntegration, useTags } from '@/hooks';
 import { cn } from '@/lib/utils';
 import type {
   IntegrationStatus,
@@ -72,6 +74,7 @@ export function IntegrationList({ className }: IntegrationListProps) {
   const [search, setSearch] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState<IntegrationStatus | 'all'>('all');
   const [authTypeFilter, setAuthTypeFilter] = React.useState<AuthType | 'all'>('all');
+  const [tagFilter, setTagFilter] = React.useState<string[]>([]);
   const [viewMode, setViewMode] = React.useState<ViewMode>('grid');
 
   // Debounced search
@@ -81,11 +84,16 @@ export function IntegrationList({ className }: IntegrationListProps) {
     return () => clearTimeout(timer);
   }, [search]);
 
+  // Fetch available tags for filter
+  const { data: tagsData } = useTags('integrations');
+  const availableTags = tagsData?.tags ?? [];
+
   // Query
   const { data, isLoading, error } = useIntegrations({
     search: debouncedSearch || undefined,
     status: statusFilter === 'all' ? undefined : statusFilter,
     authType: authTypeFilter === 'all' ? undefined : authTypeFilter,
+    tags: tagFilter.length > 0 ? tagFilter : undefined,
   });
 
   // Mutations
@@ -103,7 +111,8 @@ export function IntegrationList({ className }: IntegrationListProps) {
   // Computed
   const integrations = data?.integrations ?? [];
   const hasIntegrations = integrations.length > 0;
-  const hasFilters = debouncedSearch || statusFilter !== 'all' || authTypeFilter !== 'all';
+  const hasFilters =
+    debouncedSearch || statusFilter !== 'all' || authTypeFilter !== 'all' || tagFilter.length > 0;
   const isEmpty = !isLoading && integrations.length === 0;
 
   return (
@@ -171,6 +180,15 @@ export function IntegrationList({ className }: IntegrationListProps) {
             <SelectItem value="custom_header">Custom Header</SelectItem>
           </SelectContent>
         </Select>
+
+        {/* Tag Filter */}
+        {availableTags.length > 0 && (
+          <TagFilter
+            selectedTags={tagFilter}
+            onSelectionChange={setTagFilter}
+            availableTags={availableTags}
+          />
+        )}
 
         {/* View Toggle */}
         <div className="flex rounded-md border">
@@ -266,6 +284,7 @@ function IntegrationTable({ integrations, onDelete }: IntegrationTableProps) {
           <TableRow>
             <TableHead className="w-[300px]">Integration</TableHead>
             <TableHead>Slug</TableHead>
+            <TableHead>Tags</TableHead>
             <TableHead>Status</TableHead>
             <TableHead className="w-[40px]"></TableHead>
           </TableRow>
@@ -293,6 +312,9 @@ function IntegrationTable({ integrations, onDelete }: IntegrationTableProps) {
               </TableCell>
               <TableCell>
                 <code className="text-sm text-muted-foreground">{integration.slug}</code>
+              </TableCell>
+              <TableCell>
+                <TagList tags={integration.tags} size="sm" maxVisible={2} />
               </TableCell>
               <TableCell>
                 <IntegrationStatusBadge status={integration.status} size="sm" />
@@ -352,6 +374,7 @@ function IntegrationTableSkeleton() {
           <TableRow>
             <TableHead className="w-[300px]">Integration</TableHead>
             <TableHead>Slug</TableHead>
+            <TableHead>Tags</TableHead>
             <TableHead>Status</TableHead>
             <TableHead className="w-[40px]"></TableHead>
           </TableRow>
@@ -370,6 +393,9 @@ function IntegrationTableSkeleton() {
               </TableCell>
               <TableCell>
                 <Skeleton className="h-4 w-24" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-5 w-20 rounded-md" />
               </TableCell>
               <TableCell>
                 <Skeleton className="h-5 w-16 rounded-full" />

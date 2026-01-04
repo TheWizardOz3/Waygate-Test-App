@@ -143,6 +143,7 @@ model Action {
   retryConfig      Json?      @map("retry_config")
   cacheable        Boolean    @default(false)
   cacheTtlSeconds  Int?       @map("cache_ttl_seconds")
+  tags             String[]   @default([])
   metadata         Json       @default("{}")
   createdAt        DateTime   @default(now()) @map("created_at")
   updatedAt        DateTime   @updatedAt @map("updated_at")

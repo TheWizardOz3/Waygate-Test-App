@@ -1,6 +1,6 @@
 # Project Status: Waygate
 
-**Last Updated**: 2026-01-03 (Basic Field Mapping Implementation Complete)
+**Last Updated**: 2026-01-04 (Dashboard Polish & Tagging Feature Finalized - v0.5.5)
 
 ---
 
@@ -49,26 +49,31 @@
 
 ### Completed
 
-| Feature/Task                 | Completion Date | Notes                                                                                                                                             |
-| ---------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Project Scaffolding          | 2026-01-01      | Next.js 14, TypeScript, Tailwind, Shadcn/ui, Prisma - [Feature Doc](Features/project-scaffolding.md)                                              |
-| Database Setup               | 2026-01-02      | Supabase config, Prisma schema, seed data, 16 integration tests - [Feature Doc](Features/database-setup.md)                                       |
-| Authentication Framework     | 2026-01-02      | Multi-type auth, encryption, OAuth, API keys, 139 tests - [Feature Doc](Features/authentication-framework.md)                                     |
-| Retry Logic & Error Handling | 2026-01-02      | Exponential backoff, circuit breaker, HTTP client, 252 total tests - [Feature Doc](Features/retry-error-handling.md)                              |
-| AI Documentation Scraper     | 2026-01-02      | Firecrawl, LLM abstraction, job processing, OpenAPI parser, AI extraction, action generator - [Feature Doc](Features/ai-documentation-scraper.md) |
-| Action Registry & Schema     | 2026-01-02      | Zod schemas, repository, service, JSON Schema validator (Ajv), REST APIs, 472 total tests - [Feature Doc](Features/action-registry-schema.md)     |
-| Token Refresh Management     | 2026-01-02      | Advisory locks, retry logic, cron job, manual refresh API, 505 total tests - [Feature Doc](Features/token-refresh-management.md)                  |
-| Gateway API                  | 2026-01-02      | Unified REST API, action invocation pipeline, health endpoint, request logs, 592 total tests - [Feature Doc](Features/gateway-api.md)             |
-| **Basic Configuration UI**   | 2026-01-02      | Full dashboard with wizard, action CRUD, testing, logs, design system, 592 tests - [Feature Doc](Features/basic-configuration-ui.md)              |
-| **Pagination Handler**       | 2026-01-03      | V0.5 Feature #1 - Auto pagination with cursor/offset/page/link strategies, LLM-friendly limits - [Feature Doc](Features/pagination-handler.md)    |
-| **Response Validation**      | 2026-01-03      | V0.5 Feature #2 - Zod-based schema validation with strict/warn/lenient modes, drift detection - [Feature Doc](Features/response-validation.md)    |
-| **Basic Field Mapping**      | 2026-01-03      | V0.5 Feature #3 - JSONPath mapping, type coercion, fail-open mode, UI configuration - [Feature Doc](Features/basic-field-mapping.md)              |
+| Feature/Task                   | Completion Date | Notes                                                                                                                                                 |
+| ------------------------------ | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Project Scaffolding            | 2026-01-01      | Next.js 14, TypeScript, Tailwind, Shadcn/ui, Prisma - [Feature Doc](Features/project-scaffolding.md)                                                  |
+| Database Setup                 | 2026-01-02      | Supabase config, Prisma schema, seed data, 16 integration tests - [Feature Doc](Features/database-setup.md)                                           |
+| Authentication Framework       | 2026-01-02      | Multi-type auth, encryption, OAuth, API keys, 139 tests - [Feature Doc](Features/authentication-framework.md)                                         |
+| Retry Logic & Error Handling   | 2026-01-02      | Exponential backoff, circuit breaker, HTTP client, 252 total tests - [Feature Doc](Features/retry-error-handling.md)                                  |
+| AI Documentation Scraper       | 2026-01-02      | Firecrawl, LLM abstraction, job processing, OpenAPI parser, AI extraction, action generator - [Feature Doc](Features/ai-documentation-scraper.md)     |
+| Action Registry & Schema       | 2026-01-02      | Zod schemas, repository, service, JSON Schema validator (Ajv), REST APIs, 472 total tests - [Feature Doc](Features/action-registry-schema.md)         |
+| Token Refresh Management       | 2026-01-02      | Advisory locks, retry logic, cron job, manual refresh API, 505 total tests - [Feature Doc](Features/token-refresh-management.md)                      |
+| Gateway API                    | 2026-01-02      | Unified REST API, action invocation pipeline, health endpoint, request logs, 592 total tests - [Feature Doc](Features/gateway-api.md)                 |
+| **Basic Configuration UI**     | 2026-01-02      | Full dashboard with wizard, action CRUD, testing, logs, design system, 592 tests - [Feature Doc](Features/basic-configuration-ui.md)                  |
+| **Pagination Handler**         | 2026-01-03      | V0.5 Feature #1 - Auto pagination with cursor/offset/page/link strategies, LLM-friendly limits - [Feature Doc](Features/pagination-handler.md)        |
+| **Response Validation**        | 2026-01-03      | V0.5 Feature #2 - Zod-based schema validation with strict/warn/lenient modes, drift detection - [Feature Doc](Features/response-validation.md)        |
+| **Basic Field Mapping**        | 2026-01-03      | V0.5 Feature #3 - JSONPath mapping, type coercion, fail-open mode, UI configuration - [Feature Doc](Features/basic-field-mapping.md)                  |
+| **Dashboard Polish & Tagging** | 2026-01-04      | V0.5 Feature #4 - Integration/action tags, tag filters, real dashboard stats, enriched logs - [Feature Doc](Features/dashboard-polish-and-tagging.md) |
 
 ### In Progress
 
-| Feature/Task | Started | Assignee | Notes |
-| ------------ | ------- | -------- | ----- |
-| —            | —       | —        | —     |
+_No features currently in progress_
+
+### Next Up
+
+| Feature                        | Priority | Notes                                     |
+| ------------------------------ | -------- | ----------------------------------------- |
+| Continuous Integration Testing | P2       | V0.5 Feature #5 - Scheduled health checks |
 
 ### Recent Enhancements (Post-MVP)
 
@@ -87,8 +92,6 @@
 
 | Feature/Task                   | Priority | Notes                                       |
 | ------------------------------ | -------- | ------------------------------------------- |
-| Integration & Action Tagging   | P2       | Lightweight categorization with filtering   |
-| Dashboard & Logs Polish        | P2       | UX improvements, consistent data display    |
 | Continuous Integration Testing | P1       | Scheduled health checks on all integrations |
 
 ---
@@ -117,14 +120,13 @@
 
 ## V0.5 Build Order
 
-| #   | Feature                        | Dependencies       | Complexity | Notes                                                           |
-| --- | ------------------------------ | ------------------ | ---------- | --------------------------------------------------------------- |
-| 1   | Pagination Handler             | Action Registry ✅ | MED        | ✅ COMPLETE - [Feature Doc](Features/pagination-handler.md)     |
-| 2   | Response Validation            | Action Registry ✅ | MED        | ✅ COMPLETE - [Feature Doc](Features/response-validation.md)    |
-| 3   | Basic Field Mapping            | Action Registry ✅ | MED        | 🔄 IN PROGRESS - [Feature Doc](Features/basic-field-mapping.md) |
-| 4   | Integration & Action Tagging   | None               | LOW        | Organization, can parallel with #3                              |
-| 5   | Dashboard & Logs Polish        | Existing UI        | LOW        | UX improvements, can parallel                                   |
-| 6   | Continuous Integration Testing | Gateway API ✅     | MED        | Scheduled health checks                                         |
+| #   | Feature                        | Dependencies       | Complexity | Notes                                                                                     |
+| --- | ------------------------------ | ------------------ | ---------- | ----------------------------------------------------------------------------------------- |
+| 1   | Pagination Handler             | Action Registry ✅ | MED        | ✅ COMPLETE - [Feature Doc](Features/pagination-handler.md)                               |
+| 2   | Response Validation            | Action Registry ✅ | MED        | ✅ COMPLETE - [Feature Doc](Features/response-validation.md)                              |
+| 3   | Basic Field Mapping            | Action Registry ✅ | MED        | ✅ COMPLETE - [Feature Doc](Features/basic-field-mapping.md)                              |
+| 4   | Dashboard Polish & Tagging     | Existing UI        | MED        | 🔄 IN PROGRESS - [Feature Doc](Features/dashboard-polish-and-tagging.md) (combines #4+#5) |
+| 5   | Continuous Integration Testing | Gateway API ✅     | MED        | Scheduled health checks                                                                   |
 
 ---
 

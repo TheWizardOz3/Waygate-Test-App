@@ -28,12 +28,13 @@ import {
   type CreateRequestLogInput,
   type RequestLogFilters,
   type ListLogsQuery,
-  type RequestLogResponse,
   type ListLogsResponse,
+  type RequestLogResponse,
   type RequestSummary,
   type ResponseSummary,
   type LogError,
 } from './logging.schemas';
+import { prisma } from '@/lib/db/client';
 
 import type { RequestLog } from '@prisma/client';
 
@@ -317,7 +318,7 @@ export async function getRequestLog(tenantId: string, logId: string): Promise<Re
 }
 
 /**
- * Lists request logs with filtering and pagination
+ * Lists request logs with filtering and pagination (enriched with integration/action details)
  */
 export async function listRequestLogs(
   tenantId: string,
@@ -348,8 +349,11 @@ export async function listRequestLogs(
   // Query
   const result = await findRequestLogsPaginated(tenantId, paginationOptions, filters);
 
+  // Enrich logs with integration and action details
+  const enrichedLogs = await enrichLogsWithDetails(result.logs);
+
   return {
-    logs: result.logs.map(toRequestLogResponse),
+    logs: enrichedLogs,
     pagination: {
       cursor: result.nextCursor,
       hasMore: result.nextCursor !== null,
@@ -390,4 +394,105 @@ export async function getIntegrationLogStats(
     ...stats,
     successRate: stats.total > 0 ? Math.round((stats.successful / stats.total) * 100) : 100,
   };
+}
+
+// =============================================================================
+// Enrichment Helpers
+// =============================================================================
+
+/**
+ * Enriched log entry with integration and action details
+ */
+export interface EnrichedLogEntry {
+  id: string;
+  integrationId: string;
+  integrationName: string;
+  integrationSlug: string;
+  actionId: string;
+  actionName: string;
+  actionSlug: string;
+  httpMethod: string;
+  endpoint: string;
+  status: 'success' | 'error' | 'timeout';
+  statusCode: number;
+  duration: number;
+  requestHeaders?: Record<string, string>;
+  requestBody?: unknown;
+  responseHeaders?: Record<string, string>;
+  responseBody?: unknown;
+  errorMessage?: string;
+  errorCode?: string;
+  timestamp: string;
+  cached: boolean;
+  retryCount: number;
+}
+
+/**
+ * Enriches raw log entries with integration and action details
+ */
+async function enrichLogsWithDetails(logs: RequestLog[]): Promise<EnrichedLogEntry[]> {
+  if (logs.length === 0) return [];
+
+  // Get unique integration and action IDs
+  const integrationIds = Array.from(new Set(logs.map((l) => l.integrationId)));
+  const actionIds = Array.from(new Set(logs.map((l) => l.actionId)));
+
+  // Fetch integration and action details in parallel
+  const [integrations, actions] = await Promise.all([
+    prisma.integration.findMany({
+      where: { id: { in: integrationIds } },
+      select: { id: true, name: true, slug: true },
+    }),
+    prisma.action.findMany({
+      where: { id: { in: actionIds } },
+      select: { id: true, name: true, slug: true, httpMethod: true, endpointTemplate: true },
+    }),
+  ]);
+
+  // Create lookup maps
+  const integrationMap = new Map(integrations.map((i) => [i.id, i]));
+  const actionMap = new Map(actions.map((a) => [a.id, a]));
+
+  // Enrich each log
+  return logs.map((log) => {
+    const integration = integrationMap.get(log.integrationId);
+    const action = actionMap.get(log.actionId);
+    const requestSummary = log.requestSummary as RequestSummary | null;
+    const responseSummary = log.responseSummary as ResponseSummary | null;
+    const error = log.error as LogError | null;
+
+    // Determine status
+    let status: 'success' | 'error' | 'timeout' = 'success';
+    if (log.statusCode && log.statusCode >= 200 && log.statusCode < 300 && !error) {
+      status = 'success';
+    } else if (error?.code === 'TIMEOUT' || log.latencyMs > 30000) {
+      status = 'timeout';
+    } else {
+      status = 'error';
+    }
+
+    return {
+      id: log.id,
+      integrationId: log.integrationId,
+      integrationName: integration?.name ?? 'Unknown',
+      integrationSlug: integration?.slug ?? 'unknown',
+      actionId: log.actionId,
+      actionName: action?.name ?? 'Unknown',
+      actionSlug: action?.slug ?? 'unknown',
+      httpMethod: action?.httpMethod ?? requestSummary?.method ?? 'GET',
+      endpoint: action?.endpointTemplate ?? requestSummary?.url ?? '/',
+      status,
+      statusCode: log.statusCode ?? 0,
+      duration: log.latencyMs,
+      requestHeaders: requestSummary?.headers,
+      requestBody: requestSummary?.body,
+      responseHeaders: responseSummary?.headers,
+      responseBody: responseSummary?.body,
+      errorMessage: error?.message,
+      errorCode: error?.code,
+      timestamp: log.createdAt.toISOString(),
+      cached: false, // TODO: implement caching flag
+      retryCount: log.retryCount,
+    };
+  });
 }

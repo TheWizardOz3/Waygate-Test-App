@@ -14,6 +14,8 @@
 
 | Version | Date       | Type       | Summary                                                         |
 | ------- | ---------- | ---------- | --------------------------------------------------------------- |
+| 0.5.5   | 2026-01-04 | minor      | Dashboard Polish & Tagging System - V0.5 Feature #4 finalized   |
+| 0.5.4   | 2026-01-04 | minor      | Dashboard Polish & Tagging System - V0.5 Feature #4 complete    |
 | 0.5.3   | 2026-01-03 | minor      | Basic Field Mapping - V0.5 Feature #3 complete                  |
 | 0.5.2   | 2026-01-03 | minor      | Response Validation - V0.5 Feature #2 complete                  |
 | 0.5.1   | 2026-01-03 | minor      | Pagination Handler - V0.5 Feature #1 complete                   |
@@ -62,6 +64,74 @@
 - {{Breaking change — reference decision_log entry}}
 - **Migration:** {{Brief migration instruction or link to decision_log}}
 ```
+
+---
+
+## [0.5.5] - 2026-01-04
+
+### Fixed
+
+- **URL doubling in useLogs hook**: Fixed API paths in `useLogs`, `useInfiniteLogs`, `useLogEntry`, and `useLogStats` that were incorrectly using `/api/v1/logs` instead of `/logs` (the `apiClient` already includes `/api/v1` prefix)
+- **Gateway API test mocks**: Added missing `findMany` mocks for integration and action Prisma models to support log enrichment
+
+### Added
+
+- **Tag unit tests**: 25 new tests for tag functionality
+  - `tests/unit/tags/tag-colors.test.ts`: 11 tests for color utility
+  - `tests/unit/tags/tag-schemas.test.ts`: 14 tests for tag validation
+
+---
+
+## [0.5.4] - 2026-01-04
+
+### Added
+
+- **Integration & Action Tagging System** - V0.5 Feature #4: Organize integrations and actions with user-defined tags
+  - Database migration: `tags` column added to `actions` table (integrations already had tags)
+  - Tag validation: 2-30 chars, lowercase alphanumeric with hyphens only
+  - Hash-based tag colors: Consistent colors per tag name using predefined palette
+  - `GET /api/v1/tags` endpoint: Fetch all unique tags in tenant for autocomplete
+  - Tags filter on integrations list (`?tags=comma,separated,values`)
+  - Tags filter on actions table with multi-select dropdown
+  - TagBadge component: Colored badge with optional remove button
+  - TagInput component: Multi-select input with autocomplete suggestions
+  - TagFilter component: Dropdown filter for list views
+  - `useTags` hook for fetching tags with React Query
+
+- **Dashboard & Logs Data Connection** - Connect mock data to real APIs
+  - `GET /api/v1/logs/stats` endpoint: Aggregated log statistics (total requests, success rate, avg latency, percentiles)
+  - `getLogStatsForTenant` repository function: Comprehensive stats with raw SQL for status grouping
+  - `useLogStats` hook now fetches from real API endpoint
+  - Recent activity component uses real logs from `useLogs` hook
+  - Enriched log entries: Include integration/action names, slugs, HTTP methods in responses
+
+### Changed
+
+- `CreateActionInputSchema` now includes `tags` field (optional, defaults to empty array)
+- `toActionResponse` includes `tags` array in API responses
+- IntegrationCard displays tags using TagList component
+- IntegrationList table view has new Tags column
+- ActionTable has new Tags column with filter
+- ActionEditor form includes TagInput for editing action tags
+- IntegrationOverview has editable tags in Configuration card
+
+### Technical Details
+
+- New files:
+  - `src/lib/utils/tag-colors.ts` - Hash-based tag color utility
+  - `src/components/ui/tag-badge.tsx` - TagBadge and TagList components
+  - `src/components/ui/tag-input.tsx` - TagInput with autocomplete
+  - `src/components/ui/command.tsx` - Shadcn Command component (for autocomplete)
+  - `src/components/features/integrations/TagFilter.tsx` - Tag filter dropdown
+  - `src/hooks/useTags.ts` - React Query hook for tags
+  - `src/app/api/v1/tags/route.ts` - Tags API endpoint
+  - `src/app/api/v1/logs/stats/route.ts` - Log stats API endpoint
+- Updated modules:
+  - `action.schemas.ts` - Added TagSchema, tags to ActionBaseSchema
+  - `action.validation.ts` - Added tags to ActionEditorSchema
+  - `logging.repository.ts` - Added getLogStatsForTenant function
+  - `logging.service.ts` - Added enrichLogsWithDetails for enriched responses
+  - `logging.schemas.ts` - Added EnrichedLogEntrySchema
 
 ---
 

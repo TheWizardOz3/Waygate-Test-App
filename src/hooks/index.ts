@@ -51,3 +51,6 @@ export {
   useBulkMappings,
   mappingKeys,
 } from './useMappings';
+
+// Tag hooks
+export { useTags, useIntegrationTags, useActionTags, tagKeys } from './useTags';

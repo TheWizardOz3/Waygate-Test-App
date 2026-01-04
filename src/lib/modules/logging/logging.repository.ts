@@ -270,6 +270,119 @@ export async function getLogStatsForIntegration(
   };
 }
 
+/**
+ * Log statistics for a tenant
+ */
+export interface TenantLogStats {
+  totalRequests: number;
+  successRate: number;
+  averageLatency: number;
+  errorCount: number;
+  requestsByIntegration: { integrationId: string; integrationName: string; count: number }[];
+  requestsByStatus: { status: string; count: number }[];
+  latencyPercentiles: { p50: number; p90: number; p99: number };
+}
+
+/**
+ * Gets comprehensive log statistics for a tenant
+ */
+export async function getLogStatsForTenant(
+  tenantId: string,
+  since?: Date
+): Promise<TenantLogStats> {
+  const where: Prisma.RequestLogWhereInput = {
+    tenantId,
+    ...(since && { createdAt: { gte: since } }),
+  };
+
+  // Run queries in parallel
+  const [total, successful, aggregation, integrationStats, statusStats, allLatencies] =
+    await Promise.all([
+      prisma.requestLog.count({ where }),
+      prisma.requestLog.count({
+        where: {
+          ...where,
+          statusCode: { gte: 200, lt: 300 },
+          error: { equals: Prisma.DbNull },
+        },
+      }),
+      prisma.requestLog.aggregate({
+        where,
+        _avg: { latencyMs: true },
+      }),
+      // Group by integration
+      prisma.requestLog.groupBy({
+        by: ['integrationId'],
+        where,
+        _count: { id: true },
+        orderBy: { _count: { id: 'desc' } },
+        take: 10,
+      }),
+      // Group by status code range
+      prisma.$queryRaw<{ status: string; count: bigint }[]>`
+        SELECT 
+          CASE 
+            WHEN status_code >= 200 AND status_code < 300 THEN 'success'
+            WHEN status_code >= 400 AND status_code < 500 THEN 'client_error'
+            WHEN status_code >= 500 THEN 'server_error'
+            ELSE 'unknown'
+          END as status,
+          COUNT(*) as count
+        FROM request_logs
+        WHERE tenant_id = ${tenantId}
+        ${since ? Prisma.sql`AND created_at >= ${since}` : Prisma.sql``}
+        GROUP BY status
+      `,
+      // Get latencies for percentile calculation (limited sample)
+      prisma.requestLog.findMany({
+        where,
+        select: { latencyMs: true },
+        orderBy: { latencyMs: 'asc' },
+        take: 1000,
+      }),
+    ]);
+
+  // Get integration names
+  const integrationIds = integrationStats.map((s) => s.integrationId);
+  const integrations = await prisma.integration.findMany({
+    where: { id: { in: integrationIds } },
+    select: { id: true, name: true },
+  });
+  const integrationMap = new Map(integrations.map((i) => [i.id, i.name]));
+
+  // Calculate percentiles
+  const latencies = allLatencies.map((l) => l.latencyMs);
+  const p50 = percentile(latencies, 50);
+  const p90 = percentile(latencies, 90);
+  const p99 = percentile(latencies, 99);
+
+  return {
+    totalRequests: total,
+    successRate: total > 0 ? (successful / total) * 100 : 100,
+    averageLatency: Math.round(aggregation._avg.latencyMs ?? 0),
+    errorCount: total - successful,
+    requestsByIntegration: integrationStats.map((s) => ({
+      integrationId: s.integrationId,
+      integrationName: integrationMap.get(s.integrationId) ?? 'Unknown',
+      count: s._count.id,
+    })),
+    requestsByStatus: statusStats.map((s) => ({
+      status: s.status,
+      count: Number(s.count),
+    })),
+    latencyPercentiles: { p50, p90, p99 },
+  };
+}
+
+/**
+ * Calculate percentile from sorted array
+ */
+function percentile(arr: number[], p: number): number {
+  if (arr.length === 0) return 0;
+  const index = Math.ceil((p / 100) * arr.length) - 1;
+  return arr[Math.max(0, Math.min(index, arr.length - 1))];
+}
+
 // =============================================================================
 // Delete Operations
 // =============================================================================

@@ -187,6 +187,16 @@ export type ActionMetadata = z.infer<typeof ActionMetadataSchema>;
 // =============================================================================
 
 /**
+ * Tag validation schema - alphanumeric + hyphens, 2-30 chars
+ */
+export const TagSchema = z
+  .string()
+  .min(2, 'Tag must be at least 2 characters')
+  .max(30, 'Tag must be at most 30 characters')
+  .regex(/^[a-z0-9-]+$/, 'Tag must be lowercase alphanumeric with hyphens only')
+  .transform((s) => s.toLowerCase());
+
+/**
  * Base action definition (shared fields)
  */
 const ActionBaseSchema = z.object({
@@ -202,6 +212,7 @@ const ActionBaseSchema = z.object({
   retryConfig: ActionRetryConfigSchema.nullable().optional(),
   cacheable: z.boolean().default(false),
   cacheTtlSeconds: z.number().int().min(0).max(86400).nullable().optional(),
+  tags: z.array(TagSchema).max(10, 'Maximum 10 tags allowed').default([]),
   metadata: ActionMetadataSchema.default({}),
 });
 
@@ -238,8 +249,10 @@ export type ActionResponse = z.infer<typeof ActionResponseSchema>;
  */
 export const CreateActionInputSchema = ActionBaseSchema.omit({
   metadata: true,
+  tags: true,
 }).extend({
   integrationId: z.string().uuid('Invalid integration ID'),
+  tags: z.array(TagSchema).max(10, 'Maximum 10 tags allowed').optional().default([]),
   metadata: ActionMetadataSchema.optional(),
 });
 
@@ -480,6 +493,7 @@ export function toActionResponse(action: {
   retryConfig: unknown;
   cacheable: boolean;
   cacheTtlSeconds: number | null;
+  tags: string[];
   metadata: unknown;
   createdAt: Date;
   updatedAt: Date;
@@ -499,6 +513,7 @@ export function toActionResponse(action: {
     retryConfig: action.retryConfig as ActionRetryConfig | null,
     cacheable: action.cacheable,
     cacheTtlSeconds: action.cacheTtlSeconds,
+    tags: action.tags ?? [],
     metadata: (action.metadata ?? {}) as ActionMetadata,
     createdAt: action.createdAt.toISOString(),
     updatedAt: action.updatedAt.toISOString(),

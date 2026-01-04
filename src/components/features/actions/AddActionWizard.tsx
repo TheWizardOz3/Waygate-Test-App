@@ -200,6 +200,7 @@ export function AddActionWizard({ integrationId }: AddActionWizardProps) {
             type: 'object' as const,
           },
           cacheable: false,
+          tags: [],
           metadata: {
             aiConfidence: 0.8,
           },

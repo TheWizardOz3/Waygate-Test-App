@@ -22,6 +22,8 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { TagInput } from '@/components/ui/tag-input';
+import { useTags } from '@/hooks';
 
 interface BasicInfoSectionProps {
   form: UseFormReturn<FieldValues>;
@@ -32,6 +34,7 @@ interface BasicInfoSectionProps {
 export function BasicInfoSection({ form, isEditing, integrationSlug }: BasicInfoSectionProps) {
   const [copied, setCopied] = useState(false);
   const actionSlug = form.watch('slug');
+  const { data: tagsData } = useTags('actions');
 
   // Construct the Waygate Gateway API endpoint
   const waygateEndpoint =
@@ -111,6 +114,27 @@ export function BasicInfoSection({ form, isEditing, integrationSlug }: BasicInfo
                 />
               </FormControl>
               <FormDescription>Describe what this action does</FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Tags */}
+        <FormField
+          control={form.control}
+          name="tags"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Tags</FormLabel>
+              <FormControl>
+                <TagInput
+                  value={field.value ?? []}
+                  onChange={field.onChange}
+                  suggestions={tagsData?.tags ?? []}
+                  placeholder="Add tags to organize..."
+                />
+              </FormControl>
+              <FormDescription>Add tags to categorize and filter actions</FormDescription>
               <FormMessage />
             </FormItem>
           )}

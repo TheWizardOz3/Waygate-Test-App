@@ -107,6 +107,7 @@ const mockAction = {
       ts: { type: 'string' },
     },
   },
+  tags: [] as string[],
   paginationConfig: null,
   retryConfig: null,
   validationConfig: null,
@@ -267,6 +268,7 @@ describe('Action Registry API', () => {
       outputSchema: { type: 'object' as const, properties: {} },
       cacheable: true,
       cacheTtlSeconds: 300,
+      tags: [] as string[],
     };
 
     it('should create a new action', async () => {
@@ -307,6 +309,7 @@ describe('Action Registry API', () => {
         endpointTemplate: 'https://api.slack.com/api/chat.postMessage',
         inputSchema: { type: 'object' as const, properties: {} },
         outputSchema: { type: 'object' as const, properties: {} },
+        tags: [] as string[],
         cacheable: false,
         metadata: { originalPath: '/chat.postMessage' },
       },
@@ -318,6 +321,7 @@ describe('Action Registry API', () => {
         endpointTemplate: 'https://api.slack.com/api/conversations.list',
         inputSchema: { type: 'object' as const, properties: {} },
         outputSchema: { type: 'object' as const, properties: {} },
+        tags: [] as string[],
         cacheable: true,
         cacheTtlSeconds: 300,
         metadata: { originalPath: '/conversations.list' },

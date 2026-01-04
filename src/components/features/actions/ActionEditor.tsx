@@ -56,6 +56,7 @@ export function ActionEditor({ integrationId, actionId }: ActionEditorProps) {
       outputSchema: createEmptySchema(),
       cacheable: false,
       cacheTtlSeconds: null as number | null,
+      tags: [] as string[],
       retryConfig: null as { maxRetries: number; retryableStatuses: number[] } | null,
       validationConfig: {
         enabled: true,
@@ -92,6 +93,7 @@ export function ActionEditor({ integrationId, actionId }: ActionEditorProps) {
         outputSchema: existingAction.outputSchema,
         cacheable: existingAction.cacheable,
         cacheTtlSeconds: existingAction.cacheTtlSeconds,
+        tags: existingAction.tags ?? [],
         retryConfig: existingAction.retryConfig,
         validationConfig: existingAction.validationConfig ?? {
           enabled: true,
@@ -170,6 +172,7 @@ export function ActionEditor({ integrationId, actionId }: ActionEditorProps) {
           outputSchema: data.outputSchema,
           cacheable: data.cacheable,
           cacheTtlSeconds: data.cacheTtlSeconds,
+          tags: data.tags ?? [],
           retryConfig: data.retryConfig,
           validationConfig: data.validationConfig,
         };
@@ -249,7 +252,7 @@ export function ActionEditor({ integrationId, actionId }: ActionEditorProps) {
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:grid-cols-none lg:flex">
+            <TabsList className="grid w-full grid-cols-5 lg:flex lg:w-auto lg:grid-cols-none">
               <TabsTrigger value="endpoint" className="gap-2">
                 <Globe className="h-4 w-4" />
                 <span className="hidden sm:inline">Endpoint</span>

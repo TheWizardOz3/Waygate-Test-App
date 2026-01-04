@@ -169,10 +169,37 @@ export const RequestLogResponseSchema = z.object({
 export type RequestLogResponse = z.infer<typeof RequestLogResponseSchema>;
 
 /**
- * Paginated list of request logs
+ * Enriched log entry with integration/action details (for API responses)
+ */
+export const EnrichedLogEntrySchema = z.object({
+  id: z.string().uuid(),
+  integrationId: z.string().uuid(),
+  integrationName: z.string(),
+  integrationSlug: z.string(),
+  actionId: z.string().uuid(),
+  actionName: z.string(),
+  actionSlug: z.string(),
+  httpMethod: z.string(),
+  endpoint: z.string(),
+  status: z.enum(['success', 'error', 'timeout']),
+  statusCode: z.number().int(),
+  duration: z.number().int(),
+  requestHeaders: z.record(z.string(), z.string()).optional(),
+  requestBody: z.unknown().optional(),
+  responseHeaders: z.record(z.string(), z.string()).optional(),
+  responseBody: z.unknown().optional(),
+  errorMessage: z.string().optional(),
+  errorCode: z.string().optional(),
+  timestamp: z.string(),
+  cached: z.boolean(),
+  retryCount: z.number().int(),
+});
+
+/**
+ * Paginated list of request logs (enriched)
  */
 export const ListLogsResponseSchema = z.object({
-  logs: z.array(RequestLogResponseSchema),
+  logs: z.array(EnrichedLogEntrySchema),
   pagination: z.object({
     cursor: z.string().nullable(),
     hasMore: z.boolean(),
