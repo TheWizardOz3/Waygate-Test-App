@@ -58,6 +58,10 @@ export function RecentActivity({ limit = 5 }: RecentActivityProps) {
 function ActivityItem({ log }: { log: LogEntry }) {
   const statusConfig = getStatusConfig(log.status, log.statusCode);
 
+  // Safely parse timestamp
+  const timestamp = log.timestamp ? new Date(log.timestamp) : null;
+  const isValidDate = timestamp && !isNaN(timestamp.getTime());
+
   return (
     <Link
       href={`/logs?id=${log.id}`}
@@ -86,7 +90,7 @@ function ActivityItem({ log }: { log: LogEntry }) {
             {log.statusCode}
           </Badge>
           <p className="mt-1 text-xs text-muted-foreground">
-            {formatDistanceToNow(new Date(log.timestamp), { addSuffix: true })}
+            {isValidDate ? formatDistanceToNow(timestamp, { addSuffix: true }) : '—'}
           </p>
         </div>
         <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
