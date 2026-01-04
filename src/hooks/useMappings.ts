@@ -51,10 +51,10 @@ export function useMappings(actionId: string | undefined, integrationId: string 
       if (!actionId || !integrationId) {
         return { mappings: [] };
       }
-      const response = await apiClient.get<{ data: MappingsResponse }>(
+      // apiClient already unwraps the `data` property from API responses
+      return apiClient.get<MappingsResponse>(
         `/integrations/${integrationId}/actions/${actionId}/mappings?includeConfig=true`
       );
-      return response.data;
     },
     enabled: !!actionId && !!integrationId,
   });
@@ -76,10 +76,11 @@ export function useMappingConfig(actionId: string | undefined, integrationId: st
       if (!actionId || !integrationId) {
         return undefined;
       }
-      const response = await apiClient.get<{ data: MappingsResponse }>(
+      // apiClient already unwraps the `data` property from API responses
+      const response = await apiClient.get<MappingsResponse>(
         `/integrations/${integrationId}/actions/${actionId}/mappings?includeConfig=true`
       );
-      return response.data.config;
+      return response.config;
     },
     enabled: !!actionId && !!integrationId,
   });
@@ -89,11 +90,11 @@ export function useMappingConfig(actionId: string | undefined, integrationId: st
       if (!actionId || !integrationId) {
         throw new Error('Action ID and Integration ID required');
       }
-      const response = await apiClient.patch<{ data: MappingConfig }>(
+      // apiClient already unwraps the `data` property from API responses
+      return apiClient.patch<MappingConfig>(
         `/integrations/${integrationId}/actions/${actionId}/mappings`,
         config
       );
-      return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: mappingKeys.config(actionId ?? '') });
@@ -126,11 +127,11 @@ export function useCreateMapping(actionId: string | undefined, integrationId: st
       if (!actionId || !integrationId) {
         throw new Error('Action ID and Integration ID required');
       }
-      const response = await apiClient.post<{ data: FieldMapping }>(
+      // apiClient already unwraps the `data` property from API responses
+      return apiClient.post<FieldMapping>(
         `/integrations/${integrationId}/actions/${actionId}/mappings`,
         mapping
       );
-      return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: mappingKeys.list(actionId ?? '') });
@@ -162,11 +163,11 @@ export function useUpdateMapping(actionId: string | undefined, integrationId: st
       if (!actionId || !integrationId) {
         throw new Error('Action ID and Integration ID required');
       }
-      const response = await apiClient.patch<{ data: FieldMapping }>(
+      // apiClient already unwraps the `data` property from API responses
+      return apiClient.patch<FieldMapping>(
         `/integrations/${integrationId}/actions/${actionId}/mappings/${mappingId}`,
         data
       );
-      return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: mappingKeys.list(actionId ?? '') });
@@ -218,11 +219,11 @@ export function usePreviewMapping(actionId: string | undefined, integrationId: s
       if (!actionId || !integrationId) {
         throw new Error('Action ID and Integration ID required');
       }
-      const response = await apiClient.post<{ data: MappingPreviewResponse }>(
+      // apiClient already unwraps the `data` property from API responses
+      return apiClient.post<MappingPreviewResponse>(
         `/integrations/${integrationId}/actions/${actionId}/mappings/preview`,
         request
       );
-      return response.data;
     },
     onError: () => {
       toast.error('Failed to preview mapping');
@@ -257,11 +258,11 @@ export function useBulkMappings(actionId: string | undefined, integrationId: str
       if (!actionId || !integrationId) {
         throw new Error('Action ID and Integration ID required');
       }
-      const response = await apiClient.post<{ data: BulkMappingResult }>(
+      // apiClient already unwraps the `data` property from API responses
+      return apiClient.post<BulkMappingResult>(
         `/integrations/${integrationId}/actions/${actionId}/mappings/bulk`,
         { mappings, replace }
       );
-      return response.data;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: mappingKeys.list(actionId ?? '') });
