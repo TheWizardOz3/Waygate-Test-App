@@ -58,6 +58,7 @@ describe('Credential Service', () => {
     id: mockCredentialId,
     tenantId: mockTenantId,
     integrationId: mockIntegrationId,
+    connectionId: null, // Added for multi-app connections support
     credentialType: CredentialType.oauth2_tokens,
     encryptedData: Buffer.from('encrypted'),
     encryptedRefreshToken: null,
@@ -208,7 +209,7 @@ describe('Credential Service', () => {
 
       const result = await getDecryptedCredential(mockIntegrationId, mockTenantId);
 
-      expect(mockFindActive).toHaveBeenCalledWith(mockIntegrationId, mockTenantId);
+      expect(mockFindActive).toHaveBeenCalledWith(mockIntegrationId, mockTenantId, undefined);
       expect(decryptJson).toHaveBeenCalled();
       expect(result).toBeDefined();
       expect(result!.data).toEqual(oauthData);

@@ -19,6 +19,7 @@ import type { IntegrationCredential, Prisma } from '@prisma/client';
 export interface CreateCredentialInput {
   integrationId: string;
   tenantId: string;
+  connectionId?: string; // Optional for multi-app connections
   credentialType: CredentialType;
   encryptedData: Buffer | Uint8Array;
   encryptedRefreshToken?: Buffer | Uint8Array;
@@ -63,6 +64,7 @@ export async function createCredential(
       data: {
         integrationId: input.integrationId,
         tenantId: input.tenantId,
+        connectionId: input.connectionId ?? null,
         credentialType: input.credentialType,
         encryptedData: new Uint8Array(input.encryptedData),
         encryptedRefreshToken: input.encryptedRefreshToken
@@ -120,13 +122,16 @@ export async function findCredentialByIdAndTenant(
  */
 export async function findActiveCredentialForIntegration(
   integrationId: string,
-  tenantId: string
+  tenantId: string,
+  connectionId?: string
 ): Promise<IntegrationCredential | null> {
   return prisma.integrationCredential.findFirst({
     where: {
       integrationId,
       tenantId,
       status: CredentialStatus.active,
+      // If connectionId is provided, filter by it; otherwise get any active credential
+      ...(connectionId !== undefined && { connectionId }),
     },
     orderBy: {
       createdAt: 'desc',
@@ -139,12 +144,15 @@ export async function findActiveCredentialForIntegration(
  */
 export async function findCredentialsByIntegration(
   integrationId: string,
-  tenantId: string
+  tenantId: string,
+  connectionId?: string
 ): Promise<IntegrationCredential[]> {
   return prisma.integrationCredential.findMany({
     where: {
       integrationId,
       tenantId,
+      // If connectionId is provided, filter by it
+      ...(connectionId !== undefined && { connectionId }),
     },
     orderBy: {
       createdAt: 'desc',

@@ -48,6 +48,13 @@ enum CredentialStatus {
   needs_reauth
 }
 
+/// Status of a connection
+enum ConnectionStatus {
+  active
+  error
+  disabled
+}
+
 /// HTTP methods for action endpoints
 enum HttpMethod {
   GET
@@ -89,6 +96,7 @@ model Tenant {
 
   // Relations
   integrations           Integration[]
+  connections            Connection[]
   integrationCredentials IntegrationCredential[]
   fieldMappings          FieldMapping[]
   requestLogs            RequestLog[]
@@ -118,6 +126,7 @@ model Integration {
   tenant      Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   actions     Action[]
   credentials IntegrationCredential[]
+  connections Connection[]
   requestLogs RequestLog[]
 
   // Indexes
@@ -125,6 +134,34 @@ model Integration {
   @@index([tenantId], name: "integrations_tenant_id_idx")
   @@index([status], name: "integrations_status_idx")
   @@map("integrations")
+}
+
+/// Connection - links a consuming app to an integration with its own credentials
+model Connection {
+  id            String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String           @map("tenant_id") @db.Uuid
+  integrationId String           @map("integration_id") @db.Uuid
+  name          String           @db.VarChar(255)
+  slug          String           @db.VarChar(100)
+  baseUrl       String?          @map("base_url") @db.Text
+  isPrimary     Boolean          @default(false) @map("is_primary")
+  status        ConnectionStatus @default(active)
+  metadata      Json             @default("{}")
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  tenant      Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  integration Integration             @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  credentials IntegrationCredential[]
+  requestLogs RequestLog[]
+
+  // Indexes
+  @@unique([tenantId, integrationId, slug], name: "connections_tenant_integration_slug_idx")
+  @@index([tenantId], name: "connections_tenant_id_idx")
+  @@index([integrationId], name: "connections_integration_id_idx")
+  @@index([status], name: "connections_status_idx")
+  @@map("connections")
 }
 
 /// Action definitions - typed operations within an integration
@@ -165,6 +202,7 @@ model IntegrationCredential {
   id                    String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   integrationId         String           @map("integration_id") @db.Uuid
   tenantId              String           @map("tenant_id") @db.Uuid
+  connectionId          String?          @map("connection_id") @db.Uuid
   credentialType        CredentialType   @map("credential_type")
   encryptedData         Bytes            @map("encrypted_data")
   expiresAt             DateTime?        @map("expires_at")
@@ -177,10 +215,12 @@ model IntegrationCredential {
   // Relations
   integration Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
   tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  connection  Connection? @relation(fields: [connectionId], references: [id], onDelete: Cascade)
 
   // Indexes
   @@index([integrationId], name: "credentials_integration_id_idx")
   @@index([tenantId], name: "credentials_tenant_id_idx")
+  @@index([connectionId], name: "credentials_connection_id_idx")
   @@index([expiresAt], name: "credentials_expires_at_idx")
   @@map("integration_credentials")
 }
@@ -211,6 +251,7 @@ model RequestLog {
   tenantId        String   @map("tenant_id") @db.Uuid
   integrationId   String   @map("integration_id") @db.Uuid
   actionId        String   @map("action_id") @db.Uuid
+  connectionId    String?  @map("connection_id") @db.Uuid
   requestSummary  Json     @map("request_summary")
   responseSummary Json?    @map("response_summary")
   statusCode      Int?     @map("status_code")
@@ -223,11 +264,13 @@ model RequestLog {
   tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   integration Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
   action      Action      @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  connection  Connection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
 
   // Indexes
   @@index([tenantId, createdAt(sort: Desc)], name: "logs_tenant_created_idx")
   @@index([integrationId, createdAt(sort: Desc)], name: "logs_integration_created_idx")
   @@index([actionId, createdAt(sort: Desc)], name: "logs_action_created_idx")
+  @@index([connectionId, createdAt(sort: Desc)], name: "logs_connection_created_idx")
   @@map("request_logs")
 }
 

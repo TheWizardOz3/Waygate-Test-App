@@ -83,12 +83,17 @@ interface OAuthIntegrationConfig {
 /**
  * Initiates an OAuth connection for an integration
  *
+ * @param integrationId - The integration to connect
+ * @param tenantId - The tenant initiating the connection
+ * @param redirectAfterAuth - Optional URL to redirect to after auth completes
+ * @param connectionId - Optional connection ID for multi-app connections
  * @returns The authorization URL to redirect the user to
  */
 export async function initiateOAuthConnection(
   integrationId: string,
   tenantId: string,
-  redirectAfterAuth?: string
+  redirectAfterAuth?: string,
+  connectionId?: string
 ): Promise<{ authorizationUrl: string; state: string }> {
   // Get the integration
   const integration = await prisma.integration.findFirst({
@@ -138,8 +143,13 @@ export async function initiateOAuthConnection(
     redirectUri
   );
 
-  // Generate authorization URL
-  const { url, state } = provider.getAuthorizationUrl(integrationId, tenantId, redirectAfterAuth);
+  // Generate authorization URL (with optional connectionId for multi-app support)
+  const { url, state } = provider.getAuthorizationUrl(
+    integrationId,
+    tenantId,
+    redirectAfterAuth,
+    connectionId
+  );
 
   // Store the state for callback validation
   oauthStateStore.set(state.state, state);
@@ -159,6 +169,7 @@ export async function handleOAuthCallback(
 ): Promise<{
   integrationId: string;
   tenantId: string;
+  connectionId?: string;
   redirectUrl?: string;
 }> {
   // Retrieve and validate the stored state
@@ -222,14 +233,19 @@ export async function handleOAuthCallback(
     throw error;
   }
 
-  // Store the credentials
-  await storeOAuth2Credential(storedState.tenantId, storedState.integrationId, {
-    accessToken: tokens.accessToken,
-    refreshToken: tokens.refreshToken,
-    tokenType: tokens.tokenType,
-    expiresIn: tokens.expiresIn,
-    scopes: tokens.scope?.split(' '),
-  });
+  // Store the credentials (with optional connectionId for multi-app support)
+  await storeOAuth2Credential(
+    storedState.tenantId,
+    storedState.integrationId,
+    {
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      tokenType: tokens.tokenType,
+      expiresIn: tokens.expiresIn,
+      scopes: tokens.scope?.split(' '),
+    },
+    storedState.connectionId
+  );
 
   // Update integration status to active
   await prisma.integration.update({
@@ -237,9 +253,18 @@ export async function handleOAuthCallback(
     data: { status: 'active' },
   });
 
+  // Update connection status to active if connectionId provided
+  if (storedState.connectionId) {
+    await prisma.connection.update({
+      where: { id: storedState.connectionId },
+      data: { status: 'active' },
+    });
+  }
+
   return {
     integrationId: storedState.integrationId,
     tenantId: storedState.tenantId,
+    connectionId: storedState.connectionId,
     redirectUrl: storedState.redirectAfterAuth,
   };
 }

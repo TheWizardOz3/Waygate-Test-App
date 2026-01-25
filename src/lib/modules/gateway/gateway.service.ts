@@ -70,6 +70,7 @@ import {
   type MappingResult,
   type FullMappingResult,
 } from '../execution/mapping/server';
+import { resolveConnection } from '../connections';
 
 // =============================================================================
 // Types
@@ -84,6 +85,8 @@ export interface InvocationContext {
   integrationSlug: string;
   actionSlug: string;
   startTime: number;
+  /** Connection ID for multi-app connections */
+  connectionId?: string;
 }
 
 /**
@@ -171,11 +174,16 @@ export async function invokeAction(
     integrationSlug,
     actionSlug,
     startTime,
+    connectionId: options.connectionId,
   };
 
   try {
     // 1. Resolve integration and action
     const { integration, action } = await resolveAction(tenantId, integrationSlug, actionSlug);
+
+    // 1b. Resolve connection (defaults to primary/first active if not specified)
+    const connection = await resolveConnection(tenantId, integration.id, options.connectionId);
+    context.connectionId = connection.id;
 
     // 2. Apply INPUT mapping (transform request params before sending)
     let inputMappingResult: FullMappingResult | undefined;
@@ -202,9 +210,10 @@ export async function invokeAction(
     }
 
     // 4. Get and validate credentials (skip for 'none' auth type)
+    // Use the resolved connection's credentials
     let credential: DecryptedCredential | null = null;
     if (integration.authType !== 'none') {
-      credential = await getCredential(tenantId, integration.id);
+      credential = await getCredential(tenantId, integration.id, connection.id);
       validateCredential(credential);
     }
 
@@ -251,8 +260,16 @@ export async function invokeAction(
       }
     }
 
-    // 9. Log the request/response
-    await logInvocation(context, integration.id, action.id, request, url, executionResult);
+    // 9. Log the request/response (with connection ID for multi-app tracking)
+    await logInvocation(
+      context,
+      integration.id,
+      action.id,
+      connection.id,
+      request,
+      url,
+      executionResult
+    );
 
     // 10. Format and return response
     if (executionResult.success) {
@@ -349,9 +366,10 @@ function formatValidationError(error: ValidationError): ValidationErrorDetail {
  */
 async function getCredential(
   tenantId: string,
-  integrationId: string
+  integrationId: string,
+  connectionId?: string
 ): Promise<DecryptedCredential | null> {
-  return getDecryptedCredential(integrationId, tenantId);
+  return getDecryptedCredential(integrationId, tenantId, connectionId);
 }
 
 /**
@@ -700,6 +718,7 @@ async function logInvocation(
   context: InvocationContext,
   integrationId: string,
   actionId: string,
+  connectionId: string,
   request: HttpClientRequest,
   url: string,
   result: ExecutionResultWithMetrics<unknown>
@@ -709,6 +728,7 @@ async function logInvocation(
       tenantId: context.tenantId,
       integrationId, // Must be UUID for database FK constraint
       actionId,
+      connectionId, // For multi-app connection tracking
       request: {
         method: request.method,
         url,

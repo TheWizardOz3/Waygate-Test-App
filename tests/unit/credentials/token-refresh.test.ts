@@ -86,6 +86,7 @@ describe('Token Refresh Service', () => {
     id: mockCredentialId,
     tenantId: mockTenantId,
     integrationId: mockIntegrationId,
+    connectionId: null, // Added for multi-app connections support
     credentialType: CredentialType.oauth2_tokens,
     encryptedData: new Uint8Array(Buffer.from(JSON.stringify({ accessToken: 'old-token' }))),
     encryptedRefreshToken: new Uint8Array(

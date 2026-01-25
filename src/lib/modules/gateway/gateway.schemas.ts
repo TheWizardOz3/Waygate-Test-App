@@ -102,6 +102,8 @@ export const GatewayInvokeOptionsSchema = z.object({
   validation: GatewayValidationOptionsSchema.optional(),
   /** Field mapping options */
   mapping: GatewayMappingOptionsSchema.optional(),
+  /** Connection ID for multi-app connections (uses default/primary if not specified) */
+  connectionId: z.string().uuid().optional(),
 });
 
 export type GatewayInvokeOptions = z.infer<typeof GatewayInvokeOptionsSchema>;

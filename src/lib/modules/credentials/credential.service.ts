@@ -71,6 +71,11 @@ export interface DecryptedCredential<T extends CredentialData = CredentialData> 
 
 /**
  * Stores OAuth2 credentials (access token, refresh token, etc.)
+ *
+ * @param tenantId - The tenant ID
+ * @param integrationId - The integration ID
+ * @param data - OAuth2 credential data
+ * @param connectionId - Optional connection ID for multi-app connections
  */
 export async function storeOAuth2Credential(
   tenantId: string,
@@ -81,7 +86,8 @@ export async function storeOAuth2Credential(
     tokenType?: string;
     expiresIn?: number; // seconds
     scopes?: string[];
-  }
+  },
+  connectionId?: string
 ): Promise<IntegrationCredential> {
   // Validate the credential data
   const credentialData: OAuth2CredentialData = {
@@ -116,6 +122,7 @@ export async function storeOAuth2Credential(
   return createCredential({
     integrationId,
     tenantId,
+    connectionId,
     credentialType: CredentialType.oauth2_tokens,
     encryptedData,
     encryptedRefreshToken,
@@ -126,6 +133,11 @@ export async function storeOAuth2Credential(
 
 /**
  * Stores API Key credentials
+ *
+ * @param tenantId - The tenant ID
+ * @param integrationId - The integration ID
+ * @param data - API key credential data
+ * @param connectionId - Optional connection ID for multi-app connections
  */
 export async function storeApiKeyCredential(
   tenantId: string,
@@ -136,7 +148,8 @@ export async function storeApiKeyCredential(
     paramName: string;
     prefix?: string; // e.g., "Bearer" - empty for Supabase
     baseUrl?: string; // Per-credential base URL (for user-specific APIs like Supabase)
-  }
+  },
+  connectionId?: string
 ): Promise<IntegrationCredential> {
   const parsed = ApiKeyCredentialSchema.safeParse(data);
   if (!parsed.success) {
@@ -151,6 +164,7 @@ export async function storeApiKeyCredential(
   return createCredential({
     integrationId,
     tenantId,
+    connectionId,
     credentialType: CredentialType.api_key,
     encryptedData,
   });
@@ -158,6 +172,11 @@ export async function storeApiKeyCredential(
 
 /**
  * Stores Basic Auth credentials
+ *
+ * @param tenantId - The tenant ID
+ * @param integrationId - The integration ID
+ * @param data - Basic auth credential data
+ * @param connectionId - Optional connection ID for multi-app connections
  */
 export async function storeBasicCredential(
   tenantId: string,
@@ -165,7 +184,8 @@ export async function storeBasicCredential(
   data: {
     username: string;
     password: string;
-  }
+  },
+  connectionId?: string
 ): Promise<IntegrationCredential> {
   const parsed = BasicCredentialSchema.safeParse(data);
   if (!parsed.success) {
@@ -180,6 +200,7 @@ export async function storeBasicCredential(
   return createCredential({
     integrationId,
     tenantId,
+    connectionId,
     credentialType: CredentialType.basic,
     encryptedData,
   });
@@ -187,6 +208,11 @@ export async function storeBasicCredential(
 
 /**
  * Stores Bearer Token credentials
+ *
+ * @param tenantId - The tenant ID
+ * @param integrationId - The integration ID
+ * @param data - Bearer token credential data
+ * @param connectionId - Optional connection ID for multi-app connections
  */
 export async function storeBearerCredential(
   tenantId: string,
@@ -194,7 +220,8 @@ export async function storeBearerCredential(
   data: {
     token: string;
     baseUrl?: string; // Per-credential base URL (for user-specific APIs)
-  }
+  },
+  connectionId?: string
 ): Promise<IntegrationCredential> {
   const parsed = BearerCredentialSchema.safeParse(data);
   if (!parsed.success) {
@@ -209,6 +236,7 @@ export async function storeBearerCredential(
   return createCredential({
     integrationId,
     tenantId,
+    connectionId,
     credentialType: CredentialType.bearer,
     encryptedData,
   });
@@ -221,12 +249,21 @@ export async function storeBearerCredential(
 /**
  * Gets the active credential for an integration, decrypted
  * Returns null if no active credential exists
+ *
+ * @param integrationId - The integration ID
+ * @param tenantId - The tenant ID
+ * @param connectionId - Optional connection ID for multi-app connections
  */
 export async function getDecryptedCredential(
   integrationId: string,
-  tenantId: string
+  tenantId: string,
+  connectionId?: string
 ): Promise<DecryptedCredential | null> {
-  const credential = await findActiveCredentialForIntegration(integrationId, tenantId);
+  const credential = await findActiveCredentialForIntegration(
+    integrationId,
+    tenantId,
+    connectionId
+  );
 
   if (!credential) {
     return null;

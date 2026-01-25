@@ -249,6 +249,7 @@ export async function logRequest(input: CreateRequestLogInput): Promise<RequestL
     tenantId: data.tenantId,
     integrationId: data.integrationId,
     actionId: data.actionId,
+    connectionId: data.connectionId,
     requestSummary: data.requestSummary as CreateRequestLogDbInput['requestSummary'],
     responseSummary: data.responseSummary as CreateRequestLogDbInput['responseSummary'],
     statusCode: data.statusCode,
@@ -268,6 +269,7 @@ export async function logRequestResponse(params: {
   tenantId: string;
   integrationId: string;
   actionId: string;
+  connectionId?: string; // For multi-app connection tracking
   request: {
     method: string;
     url: string;
@@ -291,6 +293,7 @@ export async function logRequestResponse(params: {
     tenantId: params.tenantId,
     integrationId: params.integrationId,
     actionId: params.actionId,
+    connectionId: params.connectionId,
     requestSummary,
     responseSummary,
     statusCode: params.response?.statusCode,

@@ -63,6 +63,7 @@ async function main() {
   await prisma.requestLog.deleteMany({});
   await prisma.fieldMapping.deleteMany({});
   await prisma.integrationCredential.deleteMany({});
+  await prisma.connection.deleteMany({});
   await prisma.action.deleteMany({});
   await prisma.integration.deleteMany({});
   await prisma.tenant.deleteMany({});
@@ -107,6 +108,23 @@ async function main() {
     },
   });
   console.log(`   ✓ Integration created: ${slackIntegration.name} (${slackIntegration.slug})`);
+
+  // Create default connection for the integration
+  console.log('🔗 Creating default connection...');
+  const defaultConnection = await prisma.connection.create({
+    data: {
+      tenantId: tenant.id,
+      integrationId: slackIntegration.id,
+      name: 'Default',
+      slug: 'default',
+      isPrimary: true,
+      status: 'active',
+      metadata: {
+        description: 'Default connection created during seed',
+      },
+    },
+  });
+  console.log(`   ✓ Connection created: ${defaultConnection.name} (${defaultConnection.slug})`);
 
   // Create sample actions
   console.log('⚡ Creating sample actions...');
@@ -398,6 +416,7 @@ async function main() {
   console.log('📋 Summary:');
   console.log(`   - Tenants: 1`);
   console.log(`   - Integrations: 1`);
+  console.log(`   - Connections: 1`);
   console.log(`   - Actions: ${actions.length}`);
   console.log('\n🔑 Test API Key: ' + TEST_API_KEY);
   console.log('   Use this key in the Authorization header:');

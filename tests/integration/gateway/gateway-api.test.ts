@@ -99,6 +99,7 @@ const mockCredential = {
   id: TEST_CREDENTIAL_ID,
   integrationId: TEST_INTEGRATION_ID,
   tenantId: TEST_TENANT_ID,
+  connectionId: null,
   credentialType: CredentialType.oauth2_tokens,
   encryptedData: new Uint8Array([1, 2, 3]),
   encryptedRefreshToken: null,
@@ -303,6 +304,7 @@ describe('Gateway API Integration Tests', () => {
           retryCount: 0,
           error: null,
           createdAt: new Date(),
+          connectionId: null,
         },
       ];
 
@@ -440,6 +442,7 @@ describe('Gateway API Integration Tests', () => {
         tenantId: TEST_TENANT_ID,
         integrationId: TEST_INTEGRATION_ID,
         actionId: TEST_ACTION_ID,
+        connectionId: null,
         requestSummary: {},
         responseSummary: null,
         statusCode: null,

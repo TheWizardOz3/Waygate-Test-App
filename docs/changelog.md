@@ -14,6 +14,7 @@
 
 | Version | Date       | Type       | Summary                                                            |
 | ------- | ---------- | ---------- | ------------------------------------------------------------------ |
+| 0.7.0   | 2026-01-25 | minor      | Multi-App Connections - V0.75 Feature #1 complete                  |
 | 0.6.2   | 2026-01-05 | patch      | UI Polish - Linear-style design, live data in Overview tab         |
 | 0.6.1   | 2026-01-04 | patch      | AI Scraper reliability fixes - simplified prompts, Gemini 3 tuning |
 | 0.6.0   | 2026-01-04 | minor      | Roadmap restructure - V0.5 complete, new milestone structure       |
@@ -67,6 +68,68 @@
 - {{Breaking change — reference decision_log entry}}
 - **Migration:** {{Brief migration instruction or link to decision_log}}
 ```
+
+---
+
+## [0.7.0] - 2026-01-25
+
+### Added
+
+- **Multi-App Connections Feature** (V0.75 Feature #1): Enables multiple consuming applications to connect to the same integration with separate credentials, base URLs, and configurations.
+
+#### Database & Schema
+
+- **Connection Model**: New `connections` table with `id`, `tenantId`, `integrationId`, `name`, `slug`, `baseUrl`, `isPrimary`, `status`, `metadata`, timestamps
+- **ConnectionStatus Enum**: `active`, `error`, `disabled` states for connection health
+- **IntegrationCredential.connectionId**: Foreign key linking credentials to connections
+- **RequestLog.connectionId**: Foreign key for per-connection request tracking
+- **Migration Script**: Auto-creates "Default" connections for existing integrations and links credentials
+
+#### Backend Services
+
+- **Connection Repository**: `createConnection`, `findConnectionById`, `findPrimaryConnection`, `createDefaultConnectionIfNeeded`, etc.
+- **Connection Service**: Business logic with tenant scoping, validation, `resolveConnection` for default fallback
+- **API Routes**:
+  - `GET/POST /api/v1/integrations/:id/connections` - List/create connections
+  - `GET/PATCH/DELETE /api/v1/connections/:id` - Read/update/delete
+  - `POST /api/v1/connections/:id/connect` - Initiate OAuth
+  - `POST /api/v1/connections/:id/disconnect` - Revoke credentials
+- **Gateway Integration**: `X-Waygate-Connection-Id` header support, connection-aware credential resolution
+- **OAuth Flow Updates**: Connection-aware OAuth state, callbacks store credentials per connection
+- **Credential Service**: `connectionId` support in storage and retrieval functions
+- **Token Refresh**: `connectionId` in refresh events and logging
+
+#### UI Components
+
+- **ConnectionList**: Grid view with cards, create dialog, delete confirmation
+- **ConnectionCard**: Status badge, primary indicator, quick actions menu
+- **ConnectionDetail**: Slide-out sheet with credentials, config, recent activity
+- **ConnectionCredentialPanel**: Connect/disconnect/refresh for per-connection credentials
+- **CreateConnectionDialog**: Form with auto-slug generation
+- **EditConnectionDialog**: Update connection settings
+- **DeleteConnectionDialog**: Confirmation with warning
+- **ConnectionStatusBadge**: Active/error/disabled visual states
+- **ConnectionHealthBadge**: Credential health with tooltips
+- **ConnectionInfoBanner**: Feature explanation for first-time users
+- **Connections Tab**: Added to Integration detail page
+
+#### Hooks
+
+- **useConnections**: List connections for integration
+- **useConnection**: Fetch single connection
+- **useCreateConnection / useUpdateConnection / useDeleteConnection**: CRUD mutations
+- **useConnectConnection / useDisconnectConnection**: OAuth flow mutations
+
+### Changed
+
+- **Gateway API**: Now accepts optional `connectionId` in invocation options
+- **Credential Resolution**: Falls back to primary/first active connection if no ID specified
+- **Request Logging**: Includes `connectionId` for per-connection analytics
+
+### Notes
+
+- **Backward Compatibility**: Existing integrations continue working - default connections are auto-created on first access
+- **No Breaking Changes**: All APIs remain backward compatible; `connectionId` is optional everywhere
 
 ---
 

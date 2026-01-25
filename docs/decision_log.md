@@ -37,6 +37,7 @@
 | ADR-021 | 2026-01-04 | ui       | active  | Hash-based tag colors for consistent categorization           |
 | ADR-022 | 2026-01-04 | api      | active  | Enriched log responses with integration/action names          |
 | ADR-023 | 2026-01-04 | arch     | active  | Simplified flat-schema prompts for Gemini endpoint extraction |
+| ADR-024 | 2026-01-25 | arch     | active  | Multi-App Connections with Connection entity                  |
 
 **Categories:** `arch` | `data` | `api` | `ui` | `test` | `infra` | `error`
 
@@ -77,6 +78,68 @@
 ## Log Entries
 
 <!-- Add new entries below this line, newest first -->
+
+### ADR-024: Multi-App Connections with Connection Entity
+
+**Date:** 2026-01-25 | **Category:** arch | **Status:** active
+
+#### Trigger
+
+Platform needed to support multiple consuming applications connecting to the same external API integration with separate credentials. Use cases:
+
+1. Different environments (dev, staging, production) with separate API keys
+2. Multiple clients/customers using the same integration with their own credentials
+3. Credential isolation between different applications using Waygate
+
+Previously, credentials were linked directly to integrations, making it impossible to have multiple credential sets per integration.
+
+#### Decision
+
+1. **Connection Entity**: Introduced new `Connection` model linking consuming apps to integrations with:
+   - `tenantId`, `integrationId` - relationship keys
+   - `name`, `slug` - human-readable and URL-safe identifiers
+   - `baseUrl` - optional per-connection API base URL override
+   - `isPrimary` - flag for default connection fallback
+   - `status` - `active`, `error`, `disabled` enum
+   - `metadata` - extensible JSON for future use
+
+2. **Credential Linking**: Modified `IntegrationCredential` to include `connectionId` foreign key (nullable for backward compatibility)
+
+3. **Connection Resolution**: Gateway API resolves connections via:
+   - Explicit `X-Waygate-Connection-Id` header
+   - Fallback to primary connection
+   - Auto-create default connection if none exists
+
+4. **Backward Compatibility**: All APIs remain backward compatible - `connectionId` is optional everywhere, existing integrations auto-get a "Default" connection on first access
+
+#### Rationale
+
+- **Entity approach over config map**: A dedicated `Connection` entity provides proper relationships, indexes, and query capabilities vs. storing credentials in a JSON config
+- **Nullable connectionId**: Allows gradual migration without breaking existing data or APIs
+- **Auto-create default**: Eliminates migration friction - legacy integrations just work
+- **Primary flag**: Enables explicit default selection while supporting multiple connections
+
+#### Supersedes
+
+N/A - New capability
+
+#### Migration
+
+- **Database migration**: `prisma/migrations/20260125000000_add_connections/migration.sql`
+- **Auto-migration**: Script creates "Default" connection for existing integrations and links credentials
+- **No breaking changes**: Existing API calls work without modification
+- **Verify:** Existing integrations should continue working, new `Connections` tab appears in UI
+
+#### AI Instructions
+
+When working with credentials:
+
+- Always consider if a `connectionId` should be passed (or default to null for legacy)
+- Connection resolution happens in `gateway.service.ts` via `resolveConnection()`
+- Use `ensureDefaultConnection()` or `getDefaultConnection()` for backward-compatible access
+- Never require `connectionId` - always provide fallback to default
+
+---
 
 ### ADR-023: Simplified Flat-Schema Prompts for Gemini Endpoint Extraction
 

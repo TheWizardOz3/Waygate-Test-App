@@ -53,6 +53,7 @@ export interface RefreshResult {
   credentialId: string;
   integrationId: string;
   tenantId: string;
+  connectionId?: string | null; // For multi-app connection tracking
   success: boolean;
   rotatedRefreshToken: boolean;
   retryCount: number;
@@ -83,6 +84,7 @@ export interface TokenRefreshEvent {
   credentialId: string;
   integrationId: string;
   tenantId: string;
+  connectionId?: string | null; // For multi-app connection tracking
   status: 'success' | 'failed' | 'skipped';
   retryCount: number;
   rotatedRefreshToken: boolean;
@@ -150,6 +152,11 @@ function logRefreshEvent(event: TokenRefreshEvent): void {
     durationMs: event.durationMs,
   };
 
+  // Include connectionId if present (for multi-app tracking)
+  if (event.connectionId) {
+    context.connectionId = event.connectionId;
+  }
+
   // Include error details if present (already sanitized)
   if (event.error) {
     context.errorCode = event.error.code;
@@ -159,7 +166,8 @@ function logRefreshEvent(event: TokenRefreshEvent): void {
   const structuredLog = createStructuredLog(level, message, 'TOKEN_REFRESH', context);
 
   // Human-readable message for development/debugging
-  const humanMessage = `[TOKEN_REFRESH] ${event.status.toUpperCase()} - credential=${event.credentialId} integration=${event.integrationId} retries=${event.retryCount} duration=${event.durationMs}ms${event.rotatedRefreshToken ? ' (refresh token rotated)' : ''}${event.error ? ` error=${event.error.code}` : ''}`;
+  const connectionSuffix = event.connectionId ? ` connection=${event.connectionId}` : '';
+  const humanMessage = `[TOKEN_REFRESH] ${event.status.toUpperCase()} - credential=${event.credentialId} integration=${event.integrationId}${connectionSuffix} retries=${event.retryCount} duration=${event.durationMs}ms${event.rotatedRefreshToken ? ' (refresh token rotated)' : ''}${event.error ? ` error=${event.error.code}` : ''}`;
 
   // Log based on level
   if (level === 'error') {
@@ -289,6 +297,7 @@ async function refreshSingleCredentialWithLock(
       credentialId: credential.id,
       integrationId: credential.integrationId,
       tenantId: credential.tenantId,
+      connectionId: credential.connectionId,
       status: 'skipped',
       retryCount: 0,
       rotatedRefreshToken: false,
@@ -304,6 +313,7 @@ async function refreshSingleCredentialWithLock(
       credentialId: credential.id,
       integrationId: credential.integrationId,
       tenantId: credential.tenantId,
+      connectionId: credential.connectionId,
       success: false,
       rotatedRefreshToken: false,
       retryCount: 0,
@@ -342,6 +352,7 @@ export async function refreshSingleCredential(
       credentialId: credential.id,
       integrationId: credential.integrationId,
       tenantId: credential.tenantId,
+      connectionId: credential.connectionId,
       status: 'failed',
       retryCount: 0,
       rotatedRefreshToken: false,
@@ -357,6 +368,7 @@ export async function refreshSingleCredential(
       credentialId: credential.id,
       integrationId: credential.integrationId,
       tenantId: credential.tenantId,
+      connectionId: credential.connectionId,
       success: false,
       rotatedRefreshToken: false,
       retryCount: 0,
@@ -372,6 +384,7 @@ export async function refreshSingleCredential(
       credentialId: credential.id,
       integrationId: credential.integrationId,
       tenantId: credential.tenantId,
+      connectionId: credential.connectionId,
       status: 'failed',
       retryCount: 0,
       rotatedRefreshToken: false,
@@ -387,6 +400,7 @@ export async function refreshSingleCredential(
       credentialId: credential.id,
       integrationId: credential.integrationId,
       tenantId: credential.tenantId,
+      connectionId: credential.connectionId,
       success: false,
       rotatedRefreshToken: false,
       retryCount: 0,
@@ -412,6 +426,7 @@ export async function refreshSingleCredential(
         credentialId: credential.id,
         integrationId: credential.integrationId,
         tenantId: credential.tenantId,
+        connectionId: credential.connectionId,
         status: 'success',
         retryCount,
         rotatedRefreshToken,
@@ -423,6 +438,7 @@ export async function refreshSingleCredential(
         credentialId: credential.id,
         integrationId: credential.integrationId,
         tenantId: credential.tenantId,
+        connectionId: credential.connectionId,
         success: true,
         rotatedRefreshToken,
         retryCount,
@@ -451,6 +467,7 @@ export async function refreshSingleCredential(
     credentialId: credential.id,
     integrationId: credential.integrationId,
     tenantId: credential.tenantId,
+    connectionId: credential.connectionId,
     status: 'failed',
     retryCount,
     rotatedRefreshToken: false,
@@ -463,6 +480,7 @@ export async function refreshSingleCredential(
     credentialId: credential.id,
     integrationId: credential.integrationId,
     tenantId: credential.tenantId,
+    connectionId: credential.connectionId,
     success: false,
     rotatedRefreshToken: false,
     retryCount,

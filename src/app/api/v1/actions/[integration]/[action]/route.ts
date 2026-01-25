@@ -183,6 +183,7 @@ function extractSlugsFromUrl(url: string): {
  * - X-Waygate-Include-Raw: "true" to include raw response from external API
  * - X-Waygate-Validation-Mode: "strict" | "warn" | "lenient" - override response validation mode
  * - X-Waygate-Bypass-Response-Validation: "true" to skip response validation entirely
+ * - X-Waygate-Connection-Id: UUID of the connection to use (for multi-app connections)
  */
 function parseInvocationOptions(request: NextRequest): GatewayInvokeOptions {
   const options: GatewayInvokeOptions = {};
@@ -230,6 +231,12 @@ function parseInvocationOptions(request: NextRequest): GatewayInvokeOptions {
       ...options.validation,
       bypassValidation: true,
     };
+  }
+
+  // Connection ID for multi-app connections
+  const connectionId = request.headers.get('X-Waygate-Connection-Id');
+  if (connectionId) {
+    options.connectionId = connectionId;
   }
 
   // Validate options

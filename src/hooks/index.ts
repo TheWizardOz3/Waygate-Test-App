@@ -54,3 +54,15 @@ export {
 
 // Tag hooks
 export { useTags, useIntegrationTags, useActionTags, tagKeys } from './useTags';
+
+// Connection hooks
+export {
+  useConnections,
+  useConnection,
+  useCreateConnection,
+  useUpdateConnection,
+  useDeleteConnection,
+  useConnectConnection,
+  useDisconnectConnection,
+  connectionKeys,
+} from './useConnections';

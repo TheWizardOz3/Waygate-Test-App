@@ -103,6 +103,7 @@ export const CreateRequestLogInputSchema = z.object({
   tenantId: z.string().uuid(),
   integrationId: z.string().uuid(),
   actionId: z.string().uuid(),
+  connectionId: z.string().uuid().optional(), // For multi-app connection tracking
   requestSummary: RequestSummarySchema,
   responseSummary: ResponseSummarySchema.optional(),
   statusCode: z.number().int().optional(),

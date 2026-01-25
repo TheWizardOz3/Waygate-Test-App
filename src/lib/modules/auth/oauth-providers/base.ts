@@ -33,6 +33,7 @@ export interface OAuthState {
   codeVerifier?: string; // For PKCE
   integrationId: string;
   tenantId: string;
+  connectionId?: string; // For multi-app connections
   redirectAfterAuth?: string;
   createdAt: Date;
 }
@@ -98,7 +99,8 @@ export abstract class OAuthProvider {
   getAuthorizationUrl(
     integrationId: string,
     tenantId: string,
-    redirectAfterAuth?: string
+    redirectAfterAuth?: string,
+    connectionId?: string
   ): AuthorizationUrlResult {
     const state = generateState();
     const params = new URLSearchParams({
@@ -129,6 +131,7 @@ export abstract class OAuthProvider {
         codeVerifier,
         integrationId,
         tenantId,
+        connectionId,
         redirectAfterAuth,
         createdAt: new Date(),
       },

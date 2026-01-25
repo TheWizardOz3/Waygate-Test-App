@@ -4,12 +4,13 @@ import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle, LayoutDashboard, Zap, ScrollText } from 'lucide-react';
+import { AlertCircle, LayoutDashboard, Zap, ScrollText, Plug } from 'lucide-react';
 import { useIntegration } from '@/hooks';
 import { IntegrationHeader } from './IntegrationHeader';
 import { IntegrationOverview } from './IntegrationOverview';
 import { IntegrationActionsTab } from './IntegrationActionsTab';
 import { IntegrationLogsTab } from './IntegrationLogsTab';
+import { ConnectionList } from '@/components/features/connections';
 
 interface IntegrationDetailProps {
   integrationId: string;
@@ -64,6 +65,13 @@ export function IntegrationDetail({ integrationId }: IntegrationDetailProps) {
             <ScrollText className="h-4 w-4" />
             Logs
           </TabsTrigger>
+          <TabsTrigger
+            value="connections"
+            className="relative gap-2 rounded-none border-b-2 border-transparent px-4 pb-3 pt-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+          >
+            <Plug className="h-4 w-4" />
+            Connections
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="actions" className="mt-6 space-y-4">
@@ -76,6 +84,10 @@ export function IntegrationDetail({ integrationId }: IntegrationDetailProps) {
 
         <TabsContent value="logs" className="mt-6 space-y-4">
           <IntegrationLogsTab integrationId={integrationId} />
+        </TabsContent>
+
+        <TabsContent value="connections" className="mt-6 space-y-4">
+          <ConnectionList integrationId={integrationId} />
         </TabsContent>
       </Tabs>
     </div>
