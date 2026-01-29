@@ -9,13 +9,16 @@ import {
   Clock,
   CheckCircle2,
   AlertTriangle,
+  XCircle,
   Activity,
   Key,
   ArrowRight,
   Settings2,
+  Link2,
+  HelpCircle,
 } from 'lucide-react';
 import { CredentialsPanel } from './CredentialsPanel';
-import { useActions, useLogs, useLogStats } from '@/hooks';
+import { useActions, useLogs, useLogStats, useConnections } from '@/hooks';
 import type { IntegrationResponse } from '@/lib/modules/integrations/integration.schemas';
 import { cn } from '@/lib/utils';
 
@@ -33,11 +36,22 @@ export function IntegrationOverview({ integration }: IntegrationOverviewProps) {
     integrationId: integration.id,
     limit: 5,
   });
+  const { data: connectionsData, isLoading: connectionsLoading } = useConnections(integration.id);
 
   const totalActions = actionsData?.actions?.length ?? 0;
   const totalRequests = logStats?.totalRequests ?? 0;
   const successRate = logStats?.successRate ?? 0;
   const avgLatency = logStats?.averageLatency ?? 0;
+
+  // Aggregate connection health
+  const connections = connectionsData?.connections ?? [];
+  const healthSummary = {
+    total: connections.length,
+    healthy: connections.filter((c) => c.healthStatus === 'healthy').length,
+    degraded: connections.filter((c) => c.healthStatus === 'degraded').length,
+    unhealthy: connections.filter((c) => c.healthStatus === 'unhealthy').length,
+    unknown: connections.filter((c) => !c.healthStatus).length,
+  };
 
   return (
     <div className="space-y-8">
@@ -87,6 +101,74 @@ export function IntegrationOverview({ integration }: IntegrationOverviewProps) {
         />
       </div>
 
+      {/* Connection Health Summary */}
+      <div className="space-y-4 rounded-lg border bg-card p-5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Link2 className="h-4 w-4 text-muted-foreground" />
+            <div>
+              <h3 className="font-medium">Connection Health</h3>
+              <p className="text-xs text-muted-foreground">Health status across all connections</p>
+            </div>
+          </div>
+          <Link
+            href={`/integrations/${integration.id}?tab=connections`}
+            className="flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Manage connections
+            <ArrowRight className="h-3 w-3" />
+          </Link>
+        </div>
+
+        {connectionsLoading ? (
+          <div className="grid grid-cols-4 gap-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-16 rounded-lg" />
+            ))}
+          </div>
+        ) : healthSummary.total === 0 ? (
+          <div className="py-6 text-center text-muted-foreground">
+            <Link2 className="mx-auto mb-2 h-8 w-8 opacity-50" />
+            <p>No connections configured</p>
+            <p className="mt-1 text-xs">
+              <Link
+                href={`/integrations/${integration.id}?tab=connections`}
+                className="text-primary hover:underline"
+              >
+                Create your first connection
+              </Link>
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <HealthStatCard
+              label="Healthy"
+              value={healthSummary.healthy}
+              icon={<CheckCircle2 className="h-4 w-4" />}
+              variant="success"
+            />
+            <HealthStatCard
+              label="Degraded"
+              value={healthSummary.degraded}
+              icon={<AlertTriangle className="h-4 w-4" />}
+              variant="warning"
+            />
+            <HealthStatCard
+              label="Unhealthy"
+              value={healthSummary.unhealthy}
+              icon={<XCircle className="h-4 w-4" />}
+              variant="danger"
+            />
+            <HealthStatCard
+              label="Pending"
+              value={healthSummary.unknown}
+              icon={<HelpCircle className="h-4 w-4" />}
+              variant="muted"
+            />
+          </div>
+        )}
+      </div>
+
       {/* Two column layout for details - Linear style sections */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Credentials Panel */}
@@ -127,10 +209,33 @@ export function IntegrationOverview({ integration }: IntegrationOverviewProps) {
                     ? 'OAuth 2.0'
                     : integration.authType === 'api_key'
                       ? 'API Key'
-                      : integration.authType === 'none'
-                        ? 'No Auth Required'
-                        : integration.authType}
+                      : integration.authType === 'basic'
+                        ? 'Basic Auth'
+                        : integration.authType === 'bearer'
+                          ? 'Bearer Token'
+                          : integration.authType === 'none'
+                            ? 'No Auth Required'
+                            : integration.authType}
                 </Badge>
+                {/* Show setup status indicator based on integration status */}
+                {integration.authType !== 'none' && integration.status === 'draft' && (
+                  <Badge
+                    variant="outline"
+                    className="gap-1 border-amber-500/30 bg-amber-500/10 text-amber-600"
+                  >
+                    <AlertTriangle className="h-3 w-3" />
+                    Setup Required
+                  </Badge>
+                )}
+                {integration.authType !== 'none' && integration.status === 'active' && (
+                  <Badge
+                    variant="outline"
+                    className="gap-1 border-emerald-500/30 bg-emerald-500/10 text-emerald-600"
+                  >
+                    <CheckCircle2 className="h-3 w-3" />
+                    Configured
+                  </Badge>
+                )}
               </div>
             </div>
 
@@ -216,6 +321,50 @@ function CompactStat({ label, value, icon, variant = 'default', loading }: Compa
             {value}
           </p>
         )}
+      </div>
+    </div>
+  );
+}
+
+interface HealthStatCardProps {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  variant: 'success' | 'warning' | 'danger' | 'muted';
+}
+
+function HealthStatCard({ label, value, icon, variant }: HealthStatCardProps) {
+  const variantStyles = {
+    success: {
+      bg: 'bg-emerald-500/10',
+      text: 'text-emerald-600 dark:text-emerald-400',
+      icon: 'text-emerald-600 dark:text-emerald-400',
+    },
+    warning: {
+      bg: 'bg-amber-500/10',
+      text: 'text-amber-600 dark:text-amber-400',
+      icon: 'text-amber-600 dark:text-amber-400',
+    },
+    danger: {
+      bg: 'bg-red-500/10',
+      text: 'text-red-600 dark:text-red-400',
+      icon: 'text-red-600 dark:text-red-400',
+    },
+    muted: {
+      bg: 'bg-muted/50',
+      text: 'text-muted-foreground',
+      icon: 'text-muted-foreground',
+    },
+  };
+
+  const styles = variantStyles[variant];
+
+  return (
+    <div className={cn('flex items-center gap-3 rounded-lg p-4', styles.bg)}>
+      <div className={styles.icon}>{icon}</div>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-medium text-muted-foreground">{label}</p>
+        <p className={cn('text-xl font-semibold tabular-nums', styles.text)}>{value}</p>
       </div>
     </div>
   );

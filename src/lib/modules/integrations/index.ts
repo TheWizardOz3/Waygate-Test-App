@@ -28,6 +28,7 @@ export {
   IntegrationResponseSchema,
   ListIntegrationsResponseSchema,
   IntegrationSummarySchema,
+  IntegrationConnectionHealthSummarySchema,
   // Helper functions
   toIntegrationResponse,
   // Error codes
@@ -45,6 +46,7 @@ export type {
   IntegrationResponse,
   ListIntegrationsResponse,
   IntegrationSummary,
+  IntegrationConnectionHealthSummary,
 } from './integration.schemas';
 
 // =============================================================================
@@ -60,6 +62,8 @@ export {
   findIntegrationsPaginated,
   findAllIntegrationsForTenant,
   findIntegrationsWithCounts,
+  findIntegrationsWithCountsAndHealth,
+  getIntegrationConnectionHealthSummary,
   isSlugTaken,
   updateIntegration as updateIntegrationDb,
   updateIntegrationStatus,
@@ -74,6 +78,7 @@ export type {
   IntegrationPaginationOptions,
   PaginatedIntegrations,
   IntegrationWithCounts,
+  IntegrationWithCountsAndHealth,
 } from './integration.repository';
 
 // =============================================================================
@@ -93,6 +98,8 @@ export {
   listIntegrations,
   getAllIntegrations,
   getIntegrationsWithCounts,
+  getIntegrationsWithCountsAndHealth,
+  getIntegrationHealthSummary,
   // Update
   updateIntegration,
   activateIntegration,

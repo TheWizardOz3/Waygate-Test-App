@@ -75,6 +75,24 @@ export interface IntegrationWithCounts extends Integration {
   };
 }
 
+/**
+ * Connection health summary for an integration
+ */
+export interface IntegrationConnectionHealthSummary {
+  totalConnections: number;
+  healthy: number;
+  degraded: number;
+  unhealthy: number;
+  unknown: number;
+}
+
+/**
+ * Integration with counts and connection health
+ */
+export interface IntegrationWithCountsAndHealth extends IntegrationWithCounts {
+  connectionHealth: IntegrationConnectionHealthSummary;
+}
+
 // =============================================================================
 // Create Operations
 // =============================================================================
@@ -293,6 +311,99 @@ export async function findIntegrationsWithCounts(
     integrations,
     nextCursor,
     totalCount,
+  };
+}
+
+/**
+ * Gets integrations with their action counts and connection health summary
+ */
+export async function findIntegrationsWithCountsAndHealth(
+  tenantId: string,
+  pagination: IntegrationPaginationOptions = {}
+): Promise<{
+  integrations: IntegrationWithCountsAndHealth[];
+  nextCursor: string | null;
+  totalCount: number;
+}> {
+  const { cursor, limit = 20 } = pagination;
+
+  const totalCount = await prisma.integration.count({ where: { tenantId } });
+
+  const integrations = await prisma.integration.findMany({
+    where: { tenantId },
+    take: limit + 1,
+    orderBy: { createdAt: 'desc' },
+    include: {
+      _count: {
+        select: {
+          actions: true,
+          credentials: true,
+        },
+      },
+      connections: {
+        select: {
+          healthStatus: true,
+        },
+      },
+    },
+    ...(cursor && {
+      cursor: { id: cursor },
+      skip: 1,
+    }),
+  });
+
+  const hasMore = integrations.length > limit;
+  if (hasMore) {
+    integrations.pop();
+  }
+
+  const nextCursor =
+    hasMore && integrations.length > 0 ? integrations[integrations.length - 1].id : null;
+
+  // Transform to include connection health summary
+  const integrationsWithHealth: IntegrationWithCountsAndHealth[] = integrations.map((int) => {
+    const connections = int.connections || [];
+    const healthSummary: IntegrationConnectionHealthSummary = {
+      totalConnections: connections.length,
+      healthy: connections.filter((c) => c.healthStatus === 'healthy').length,
+      degraded: connections.filter((c) => c.healthStatus === 'degraded').length,
+      unhealthy: connections.filter((c) => c.healthStatus === 'unhealthy').length,
+      unknown: connections.filter((c) => !c.healthStatus).length,
+    };
+
+    // Remove connections from the object and add connectionHealth
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { connections: _omitted, ...integrationWithoutConnections } = int;
+    return {
+      ...integrationWithoutConnections,
+      connectionHealth: healthSummary,
+    };
+  });
+
+  return {
+    integrations: integrationsWithHealth,
+    nextCursor,
+    totalCount,
+  };
+}
+
+/**
+ * Gets connection health summary for a single integration
+ */
+export async function getIntegrationConnectionHealthSummary(
+  integrationId: string
+): Promise<IntegrationConnectionHealthSummary> {
+  const connections = await prisma.connection.findMany({
+    where: { integrationId },
+    select: { healthStatus: true },
+  });
+
+  return {
+    totalConnections: connections.length,
+    healthy: connections.filter((c) => c.healthStatus === 'healthy').length,
+    degraded: connections.filter((c) => c.healthStatus === 'degraded').length,
+    unhealthy: connections.filter((c) => c.healthStatus === 'unhealthy').length,
+    unknown: connections.filter((c) => !c.healthStatus).length,
   };
 }
 

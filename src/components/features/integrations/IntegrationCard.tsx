@@ -14,7 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { IntegrationStatusBadge } from './IntegrationStatusBadge';
+import { IntegrationHealthBadge } from './IntegrationStatusBadge';
 import { TagList } from '@/components/ui/tag-badge';
 import { cn } from '@/lib/utils';
 import type { IntegrationSummary } from '@/lib/modules/integrations/integration.schemas';
@@ -66,9 +66,13 @@ export function IntegrationCard({ integration, onDelete, className }: Integratio
             </div>
           </div>
 
-          {/* Status Badge & Arrow */}
+          {/* Health/Status Badge & Arrow */}
           <div className="flex items-center gap-2">
-            <IntegrationStatusBadge status={status} size="sm" />
+            <IntegrationHealthBadge
+              integrationStatus={status}
+              connectionHealth={integration.connectionHealth}
+              size="sm"
+            />
             <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
           </div>
         </div>

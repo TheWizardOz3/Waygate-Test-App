@@ -15,6 +15,8 @@ import {
   findIntegrationsPaginated,
   findAllIntegrationsForTenant,
   findIntegrationsWithCounts,
+  findIntegrationsWithCountsAndHealth,
+  getIntegrationConnectionHealthSummary,
   isSlugTaken,
   updateIntegration as repoUpdateIntegration,
   updateIntegrationStatus,
@@ -24,6 +26,7 @@ import {
   type CreateIntegrationDbInput,
   type UpdateIntegrationDbInput,
   type IntegrationPaginationOptions,
+  type IntegrationConnectionHealthSummary,
 } from './integration.repository';
 import { getCredentialStatus, isCredentialExpired } from '../credentials/credential.service';
 import { findActiveCredentialForIntegration } from '../credentials/credential.repository';
@@ -405,6 +408,66 @@ export async function getIntegrationsWithCounts(
       totalCount: result.totalCount,
     },
   };
+}
+
+/**
+ * Gets integrations with action counts and connection health summary
+ * Used for integration list views that need health status
+ */
+export async function getIntegrationsWithCountsAndHealth(
+  tenantId: string,
+  query: Partial<ListIntegrationsQuery> = {}
+): Promise<{
+  integrations: (IntegrationResponse & {
+    actionCount: number;
+    connectionHealth: IntegrationConnectionHealthSummary;
+  })[];
+  pagination: { cursor: string | null; hasMore: boolean; totalCount: number };
+}> {
+  const parsed = ListIntegrationsQuerySchema.safeParse(query);
+  if (!parsed.success) {
+    throw new IntegrationError(
+      IntegrationErrorCodes.INVALID_AUTH_CONFIG,
+      `Invalid query parameters: ${parsed.error.message}`
+    );
+  }
+
+  const { cursor, limit } = parsed.data;
+
+  const result = await findIntegrationsWithCountsAndHealth(tenantId, { cursor, limit });
+
+  return {
+    integrations: result.integrations.map((int) => ({
+      ...toIntegrationResponse(int),
+      actionCount: int._count.actions,
+      connectionHealth: int.connectionHealth,
+    })),
+    pagination: {
+      cursor: result.nextCursor,
+      hasMore: result.nextCursor !== null,
+      totalCount: result.totalCount,
+    },
+  };
+}
+
+/**
+ * Gets the connection health summary for a single integration
+ */
+export async function getIntegrationHealthSummary(
+  tenantId: string,
+  integrationId: string
+): Promise<IntegrationConnectionHealthSummary> {
+  // Verify integration exists and belongs to tenant
+  const integration = await findIntegrationByIdAndTenant(integrationId, tenantId);
+  if (!integration) {
+    throw new IntegrationError(
+      IntegrationErrorCodes.INTEGRATION_NOT_FOUND,
+      'Integration not found',
+      404
+    );
+  }
+
+  return getIntegrationConnectionHealthSummary(integrationId);
 }
 
 // =============================================================================

@@ -220,10 +220,26 @@ export const ListIntegrationsResponseSchema = z.object({
 export type ListIntegrationsResponse = z.infer<typeof ListIntegrationsResponseSchema>;
 
 /**
- * Integration with action count (for list views)
+ * Connection health summary for an integration
+ */
+export const IntegrationConnectionHealthSummarySchema = z.object({
+  totalConnections: z.number().int(),
+  healthy: z.number().int(),
+  degraded: z.number().int(),
+  unhealthy: z.number().int(),
+  unknown: z.number().int(),
+});
+
+export type IntegrationConnectionHealthSummary = z.infer<
+  typeof IntegrationConnectionHealthSummarySchema
+>;
+
+/**
+ * Integration with action count and optional health data (for list views)
  */
 export const IntegrationSummarySchema = IntegrationResponseSchema.extend({
   actionCount: z.number().int(),
+  connectionHealth: IntegrationConnectionHealthSummarySchema.optional(),
 });
 
 export type IntegrationSummary = z.infer<typeof IntegrationSummarySchema>;

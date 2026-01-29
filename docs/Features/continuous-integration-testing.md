@@ -415,14 +415,27 @@ GET /api/v1/health-checks/summary
 
 ## UI Design
 
-### Connection List Updates
+### Integration List Page ✅
+
+- Health-aware status badge replaces simple "Active" status
+- Shows aggregate connection health: "Healthy", "X Unhealthy", "Pending", "Draft", or "No Connections"
+- Color coding: Green (healthy), Yellow (degraded), Red (unhealthy), Gray (pending/unknown)
+
+### Integration Overview Page ✅
+
+- Connection Health section showing aggregate health counts:
+  - Healthy, Degraded, Unhealthy, Pending counts
+  - Link to Connections tab for management
+  - Empty state prompts connection creation
+
+### Connection List Updates ✅
 
 - Add health status badge to each connection card/row
 - Color coding: Green (healthy), Yellow (degraded), Red (unhealthy)
 - Show "Last checked: X minutes ago" timestamp
 - Quick action button to trigger manual health check
 
-### Connection Detail Page
+### Connection Detail Page ✅
 
 - New "Health" tab or section showing:
   - Current health status with detailed breakdown

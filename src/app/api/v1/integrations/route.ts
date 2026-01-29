@@ -15,7 +15,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withApiAuth } from '@/lib/api/middleware/auth';
 import {
   listIntegrations,
-  getIntegrationsWithCounts,
+  getIntegrationsWithCountsAndHealth,
   createIntegration,
   IntegrationError,
 } from '@/lib/modules/integrations';
@@ -54,7 +54,8 @@ export const GET = withApiAuth(async (request: NextRequest, { tenant }) => {
 
     let result;
     if (withCounts) {
-      result = await getIntegrationsWithCounts(tenant.id, cleanQuery);
+      // Always include health data when fetching with counts
+      result = await getIntegrationsWithCountsAndHealth(tenant.id, cleanQuery);
     } else {
       result = await listIntegrations(tenant.id, cleanQuery);
     }

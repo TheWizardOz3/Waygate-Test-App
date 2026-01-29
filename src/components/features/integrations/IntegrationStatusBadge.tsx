@@ -162,3 +162,135 @@ export function CredentialStatusBadge({ status, className }: CredentialStatusBad
     </span>
   );
 }
+
+// =============================================================================
+// Integration Health Badge
+// =============================================================================
+
+interface ConnectionHealthSummary {
+  totalConnections: number;
+  healthy: number;
+  degraded: number;
+  unhealthy: number;
+  unknown: number;
+}
+
+export interface IntegrationHealthBadgeProps {
+  integrationStatus: IntegrationStatus;
+  connectionHealth?: ConnectionHealthSummary;
+  size?: 'sm' | 'md' | 'lg';
+  className?: string;
+}
+
+/**
+ * Health-aware status badge for integrations.
+ * Shows:
+ * - "Healthy" when all connections are healthy
+ * - "X Healthy, Y Unhealthy" when there are mixed health states
+ * - "No Connections" when there are no connections
+ * - "Draft" when the integration is in draft status
+ */
+export function IntegrationHealthBadge({
+  integrationStatus,
+  connectionHealth,
+  size = 'sm',
+  className,
+}: IntegrationHealthBadgeProps) {
+  // If draft, show Draft badge
+  if (integrationStatus === 'draft') {
+    return <IntegrationStatusBadge status="draft" size={size} className={className} />;
+  }
+
+  // If disabled, show Disabled badge
+  if (integrationStatus === 'disabled') {
+    return <IntegrationStatusBadge status="disabled" size={size} className={className} />;
+  }
+
+  // If no health data or no connections, show the regular status badge
+  if (!connectionHealth || connectionHealth.totalConnections === 0) {
+    // For active integrations with no connections yet
+    if (integrationStatus === 'active') {
+      return (
+        <span
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground',
+            className
+          )}
+          title="No connections configured yet"
+        >
+          <CheckCircle2 className="h-3 w-3" />
+          No Connections
+        </span>
+      );
+    }
+    return <IntegrationStatusBadge status={integrationStatus} size={size} className={className} />;
+  }
+
+  const { healthy, degraded, unhealthy } = connectionHealth;
+  const hasIssues = degraded > 0 || unhealthy > 0;
+
+  // All healthy
+  if (!hasIssues && healthy > 0) {
+    return (
+      <span
+        className={cn(
+          'inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success',
+          className
+        )}
+        title={`All ${healthy} connection${healthy > 1 ? 's' : ''} healthy`}
+      >
+        <CheckCircle2 className="h-3 w-3" />
+        Healthy
+      </span>
+    );
+  }
+
+  // Some unhealthy
+  if (unhealthy > 0) {
+    const healthyText = healthy > 0 ? `${healthy} Healthy, ` : '';
+    const degradedText = degraded > 0 ? `${degraded} Degraded, ` : '';
+    return (
+      <span
+        className={cn(
+          'inline-flex items-center gap-1.5 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive',
+          className
+        )}
+        title={`${healthyText}${degradedText}${unhealthy} Unhealthy`}
+      >
+        <AlertCircle className="h-3 w-3" />
+        {unhealthy} Unhealthy
+      </span>
+    );
+  }
+
+  // Some degraded but none unhealthy
+  if (degraded > 0) {
+    const healthyText = healthy > 0 ? `${healthy} Healthy, ` : '';
+    return (
+      <span
+        className={cn(
+          'inline-flex items-center gap-1.5 rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning',
+          className
+        )}
+        title={`${healthyText}${degraded} Degraded`}
+      >
+        <AlertCircle className="h-3 w-3" />
+        {degraded} Degraded
+      </span>
+    );
+  }
+
+  // No health data yet (all unknown)
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground',
+        className
+      )}
+      title="Health checks have not run yet"
+    >
+      <Clock className="h-3 w-3" />
+      Pending
+    </span>
+  );
+}

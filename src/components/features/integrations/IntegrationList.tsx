@@ -40,7 +40,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 import { IntegrationCard, IntegrationCardSkeleton } from './IntegrationCard';
-import { IntegrationStatusBadge } from './IntegrationStatusBadge';
+import { IntegrationHealthBadge } from './IntegrationStatusBadge';
 import { IntegrationEmptyState, IntegrationNoResults } from './IntegrationEmptyState';
 import { TagFilter } from './TagFilter';
 import { TagList } from '@/components/ui/tag-badge';
@@ -285,7 +285,7 @@ function IntegrationTable({ integrations, onDelete }: IntegrationTableProps) {
             <TableHead className="w-[300px]">Integration</TableHead>
             <TableHead>Slug</TableHead>
             <TableHead>Tags</TableHead>
-            <TableHead>Status</TableHead>
+            <TableHead>Health</TableHead>
             <TableHead className="w-[40px]"></TableHead>
           </TableRow>
         </TableHeader>
@@ -317,7 +317,11 @@ function IntegrationTable({ integrations, onDelete }: IntegrationTableProps) {
                 <TagList tags={integration.tags} size="sm" maxVisible={2} />
               </TableCell>
               <TableCell>
-                <IntegrationStatusBadge status={integration.status} size="sm" />
+                <IntegrationHealthBadge
+                  integrationStatus={integration.status}
+                  connectionHealth={integration.connectionHealth}
+                  size="sm"
+                />
               </TableCell>
               <TableCell>
                 <DropdownMenu>
@@ -375,7 +379,7 @@ function IntegrationTableSkeleton() {
             <TableHead className="w-[300px]">Integration</TableHead>
             <TableHead>Slug</TableHead>
             <TableHead>Tags</TableHead>
-            <TableHead>Status</TableHead>
+            <TableHead>Health</TableHead>
             <TableHead className="w-[40px]"></TableHead>
           </TableRow>
         </TableHeader>
