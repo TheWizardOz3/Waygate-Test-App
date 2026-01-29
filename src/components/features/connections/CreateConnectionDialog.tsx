@@ -23,6 +23,7 @@ interface CreateConnectionDialogProps {
   integrationId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
 }
 
 type ConnectorType = 'platform' | 'custom';
@@ -32,6 +33,7 @@ export function CreateConnectionDialog({
   integrationId,
   open,
   onOpenChange,
+  onSuccess,
 }: CreateConnectionDialogProps) {
   const createMutation = useCreateConnection(integrationId);
 
@@ -106,6 +108,7 @@ export function CreateConnectionDialog({
       toast.success('Connection created', {
         description: `${name} has been created successfully.`,
       });
+      onSuccess?.();
       handleClose();
     } catch (error) {
       toast.error('Failed to create connection', {

@@ -9,6 +9,8 @@ export {
 export { ConnectionCard, ConnectionCardSkeleton } from './ConnectionCard';
 export { ConnectionList } from './ConnectionList';
 export { ConnectionDetail } from './ConnectionDetail';
+export { ConnectionDetailInline, ConnectionDetailInlineSkeleton } from './ConnectionDetailInline';
+export { ConnectionSelector } from './ConnectionSelector';
 export { ConnectionCredentialPanel } from './ConnectionCredentialPanel';
 export { ConnectionInfoBanner } from './ConnectionInfoBanner';
 export { CreateConnectionDialog } from './CreateConnectionDialog';

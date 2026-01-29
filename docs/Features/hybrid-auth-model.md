@@ -213,9 +213,26 @@ POST /api/v1/integrations/int_abc123/connections
 
 ## UI Design
 
+### Connection Management UX
+
+The Connections tab uses an inline layout for a consistent configuration experience:
+
+1. **Connection Selector** - Dropdown at the top to switch between connections
+   - Shows connection name, status, and health indicator
+   - Highlights primary connection with star badge
+   - Quick access to add new connections
+
+2. **Inline Configuration** - All connection settings displayed directly in the tab
+   - Credentials panel with connect/disconnect/refresh actions
+   - Health status section
+   - Field mappings per-action
+   - Preamble template for LLM responses
+   - Configuration details (base URL, connector type, timestamps)
+   - Recent activity log
+
 ### Connection Creation Flow
 
-Update the "Add Connection" dialog with connector type selection:
+Multi-step dialog with connector type selection:
 
 1. **Step 1: Choose Connection Type**
    - "Use Waygate's App" (platform) - recommended, one-click
@@ -230,11 +247,12 @@ Update the "Add Connection" dialog with connector type selection:
    - Platform: Direct redirect to provider OAuth
    - Custom: Show credential input form first, then OAuth
 
-### Connection Card Indicators
+### Connection Indicators
 
-- Badge showing "Waygate App" vs "Custom App"
-- Different icon/color for platform vs custom connections
-- Certification status visible for platform connections
+- **Connector Type Badge**: "Waygate App" (violet) vs "Custom App" (gray)
+- **Health Status Dot**: Green (healthy), Yellow (degraded), Red (unhealthy)
+- **Primary Badge**: Amber star for the default connection
+- **Status Badge**: Active (emerald), Error (red), Disabled (gray)
 
 ### Platform Connector List (Settings)
 
@@ -376,6 +394,8 @@ New settings page section showing:
 | `src/app/api/v1/platform-connectors/[slug]/route.ts`                   | Get platform connector API                     |
 | `src/components/features/connections/PlatformConnectorSelect.tsx`      | Platform connector selection UI                |
 | `src/components/features/connections/ConnectorTypeBadge.tsx`           | Badge components for connector type            |
+| `src/components/features/connections/ConnectionSelector.tsx`           | Dropdown to switch between connections         |
+| `src/components/features/connections/ConnectionDetailInline.tsx`       | Inline connection config (non-modal)           |
 | `src/hooks/usePlatformConnectors.ts`                                   | React Query hooks                              |
 | `tests/unit/platform-connectors/platform-connector-schemas.test.ts`    | Schema unit tests (27 tests)                   |
 | `tests/unit/connections/connection-platform-mode.test.ts`              | Connection platform mode tests (16 tests)      |
@@ -393,10 +413,12 @@ New settings page section showing:
 | `src/lib/modules/credentials/credential.service.ts`                 | Store credential source                                             |
 | `src/lib/modules/auth/oauth-providers/base.ts`                      | OAuthState with platform context                                    |
 | `src/lib/modules/auth/auth.service.ts`                              | Platform credential retrieval in OAuth flow                         |
-| `src/components/features/connections/CreateConnectionDialog.tsx`    | Multi-step flow with type selection                                 |
+| `src/components/features/connections/CreateConnectionDialog.tsx`    | Multi-step flow with type selection, onSuccess callback             |
 | `src/components/features/connections/ConnectionCard.tsx`            | ConnectorTypeBadge display                                          |
-| `src/components/features/connections/ConnectionDetail.tsx`          | Connector type section                                              |
+| `src/components/features/connections/ConnectionDetail.tsx`          | Connector type section (kept for backwards compatibility)           |
+| `src/components/features/connections/ConnectionList.tsx`            | Inline layout with selector instead of grid + sheet                 |
 | `src/components/features/connections/ConnectionCredentialPanel.tsx` | Streamlined platform connect button                                 |
+| `src/components/features/connections/index.ts`                      | Export new components                                               |
 | `docs/architecture.md`                                              | Platform connector environment variables                            |
 
 ### Test Coverage

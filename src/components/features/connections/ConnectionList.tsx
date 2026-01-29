@@ -1,22 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Plus, Plug } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
-import {
-  useConnections,
-  useConnectConnection,
-  useDisconnectConnection,
-  useDeleteConnection,
-  useIntegration,
-} from '@/hooks';
-import { ConnectionCard, ConnectionCardSkeleton } from './ConnectionCard';
-import { ConnectionDetail } from './ConnectionDetail';
-import { ConnectionInfoBanner } from './ConnectionInfoBanner';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useConnections, useIntegration } from '@/hooks';
+import { ConnectionSelector } from './ConnectionSelector';
+import { ConnectionDetailInline, ConnectionDetailInlineSkeleton } from './ConnectionDetailInline';
 import { CreateConnectionDialog } from './CreateConnectionDialog';
-import { DeleteConnectionDialog } from './DeleteConnectionDialog';
-import { toast } from 'sonner';
 import type { IntegrationResponse } from '@/lib/modules/integrations/integration.schemas';
 
 interface ConnectionListProps {
@@ -26,83 +18,61 @@ interface ConnectionListProps {
 }
 
 /**
- * List of connections for an integration.
- * Shows connection cards with status and quick actions.
+ * Connections management view with inline connection details.
+ * Shows a connection selector at the top and full config inline below.
  */
 export function ConnectionList({
   integrationId,
   integration: integrationProp,
 }: ConnectionListProps) {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [connectionToDelete, setConnectionToDelete] = useState<string | null>(null);
   const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
 
   // Only fetch integration if not passed as prop (avoids redundant queries)
   const { data: fetchedIntegration } = useIntegration(integrationProp ? undefined : integrationId);
   const integration = integrationProp ?? fetchedIntegration;
   const { data, isLoading, isError, refetch } = useConnections(integrationId);
-  const connectMutation = useConnectConnection(integrationId);
-  const disconnectMutation = useDisconnectConnection(integrationId);
-  const deleteMutation = useDeleteConnection(integrationId);
 
-  const handleConnect = async (connectionId: string) => {
-    try {
-      const result = await connectMutation.mutateAsync(connectionId);
-      // Redirect to OAuth provider
-      if (result.authorizationUrl) {
-        window.location.href = result.authorizationUrl;
+  const connections = useMemo(() => data?.connections ?? [], [data?.connections]);
+
+  // Auto-select primary connection or first connection when connections load
+  useEffect(() => {
+    if (connections.length > 0 && !selectedConnectionId) {
+      // Prefer primary connection, otherwise select first
+      const primaryConnection = connections.find((c) => c.isPrimary);
+      setSelectedConnectionId(primaryConnection?.id ?? connections[0].id);
+    }
+  }, [connections, selectedConnectionId]);
+
+  // Clear selection if selected connection is deleted
+  useEffect(() => {
+    if (selectedConnectionId && connections.length > 0) {
+      const stillExists = connections.some((c) => c.id === selectedConnectionId);
+      if (!stillExists) {
+        // Select another connection
+        const primaryConnection = connections.find((c) => c.isPrimary);
+        setSelectedConnectionId(primaryConnection?.id ?? connections[0]?.id ?? null);
       }
-    } catch (error) {
-      toast.error('Failed to initiate connection', {
-        description: error instanceof Error ? error.message : 'Please try again',
-      });
+    } else if (connections.length === 0) {
+      setSelectedConnectionId(null);
     }
-  };
+  }, [connections, selectedConnectionId]);
 
-  const handleDisconnect = async (connectionId: string) => {
-    try {
-      await disconnectMutation.mutateAsync(connectionId);
-      toast.success('Connection disconnected');
-    } catch (error) {
-      toast.error('Failed to disconnect', {
-        description: error instanceof Error ? error.message : 'Please try again',
-      });
-    }
-  };
-
-  const handleDeleteClick = (connectionId: string) => {
-    setConnectionToDelete(connectionId);
-    setDeleteDialogOpen(true);
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!connectionToDelete) return;
-
-    try {
-      await deleteMutation.mutateAsync(connectionToDelete);
-      toast.success('Connection deleted');
-      setDeleteDialogOpen(false);
-      setConnectionToDelete(null);
-    } catch (error) {
-      toast.error('Failed to delete connection', {
-        description: error instanceof Error ? error.message : 'Please try again',
-      });
-    }
+  const handleConnectionCreated = () => {
+    // Refetch to get the new connection, then it will be auto-selected
+    refetch();
   };
 
   if (isLoading) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-6">
+        {/* Selector skeleton */}
         <div className="flex items-center justify-between">
-          <div className="h-8 w-48 animate-pulse rounded bg-muted" />
-          <div className="h-9 w-32 animate-pulse rounded bg-muted" />
+          <Skeleton className="h-10 w-64" />
+          <Skeleton className="h-9 w-32" />
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[...Array(3)].map((_, i) => (
-            <ConnectionCardSkeleton key={i} />
-          ))}
-        </div>
+        {/* Detail skeleton */}
+        <ConnectionDetailInlineSkeleton />
       </div>
     );
   }
@@ -117,54 +87,54 @@ export function ConnectionList({
     );
   }
 
-  const connections = data?.connections ?? [];
-
-  return (
-    <div className="space-y-4">
-      {/* Info Banner for single/default connection */}
-      <ConnectionInfoBanner connectionCount={connections.length} />
-
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold">Connections</h3>
-          <p className="text-sm text-muted-foreground">
-            {connections.length === 0
-              ? 'No connections yet'
-              : `${connections.length} connection${connections.length === 1 ? '' : 's'}`}
-          </p>
-        </div>
-        <Button onClick={() => setCreateDialogOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Connection
-        </Button>
-      </div>
-
-      {/* Empty State */}
-      {connections.length === 0 ? (
+  // Empty state - no connections yet
+  if (connections.length === 0) {
+    return (
+      <div className="space-y-4">
         <EmptyState
           icon={Plug}
           title="No connections"
-          description="Create a connection to link a consuming app with this integration."
+          description="Create a connection to link a consuming app with this integration. Each connection can have its own credentials and configuration."
           action={{
             label: 'Create Connection',
             onClick: () => setCreateDialogOpen(true),
           }}
         />
-      ) : (
-        /* Connection Grid */
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {connections.map((connection) => (
-            <ConnectionCard
-              key={connection.id}
-              connection={connection}
-              onConnect={handleConnect}
-              onDisconnect={handleDisconnect}
-              onDelete={handleDeleteClick}
-              onSelect={setSelectedConnectionId}
-            />
-          ))}
-        </div>
+
+        {/* Create Dialog */}
+        <CreateConnectionDialog
+          integrationId={integrationId}
+          open={createDialogOpen}
+          onOpenChange={setCreateDialogOpen}
+          onSuccess={handleConnectionCreated}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header with connection selector and add button */}
+      <div className="flex items-center justify-between gap-4">
+        <ConnectionSelector
+          connections={connections}
+          selectedConnectionId={selectedConnectionId}
+          onSelect={setSelectedConnectionId}
+          onAddConnection={() => setCreateDialogOpen(true)}
+        />
+        <Button onClick={() => setCreateDialogOpen(true)} variant="outline">
+          <Plus className="mr-2 h-4 w-4" />
+          Add Connection
+        </Button>
+      </div>
+
+      {/* Inline connection detail */}
+      {selectedConnectionId && integration && (
+        <ConnectionDetailInline
+          connectionId={selectedConnectionId}
+          integration={integration}
+          onDeleted={() => refetch()}
+        />
       )}
 
       {/* Create Dialog */}
@@ -172,25 +142,8 @@ export function ConnectionList({
         integrationId={integrationId}
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
+        onSuccess={handleConnectionCreated}
       />
-
-      {/* Delete Confirmation Dialog */}
-      <DeleteConnectionDialog
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
-        onConfirm={handleDeleteConfirm}
-        isDeleting={deleteMutation.isPending}
-      />
-
-      {/* Connection Detail Panel */}
-      {selectedConnectionId && integration && (
-        <ConnectionDetail
-          connectionId={selectedConnectionId}
-          integration={integration}
-          onClose={() => setSelectedConnectionId(null)}
-          onDeleted={() => refetch()}
-        />
-      )}
     </div>
   );
 }
