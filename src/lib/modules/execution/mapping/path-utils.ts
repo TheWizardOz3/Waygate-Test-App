@@ -565,36 +565,42 @@ export function getSchemaFieldPaths(
             type?: string | string[];
             description?: string;
             properties?: Record<string, unknown>;
-            items?: { type?: string | string[]; properties?: Record<string, unknown> };
+            items?: {
+              type?: string | string[];
+              properties?: Record<string, unknown>;
+              required?: string[];
+            };
+            required?: string[];
           }
         >;
         required?: string[];
         items?: {
           type?: string | string[];
           properties?: Record<string, unknown>;
+          required?: string[];
         };
       }
     | null
     | undefined,
   maxDepth: number = 5
 ): SchemaFieldInfo[] {
-  if (!schema || !schema.properties) {
+  if (!schema) {
     return [];
   }
 
   const fields: SchemaFieldInfo[] = [];
-  const requiredFields = new Set(schema.required || []);
+
+  // Type definition for property schemas
+  type PropertySchema = {
+    type?: string | string[];
+    description?: string;
+    properties?: Record<string, unknown>;
+    items?: { type?: string | string[]; properties?: Record<string, unknown>; required?: string[] };
+    required?: string[];
+  };
 
   function traverse(
-    properties: Record<
-      string,
-      {
-        type?: string | string[];
-        description?: string;
-        properties?: Record<string, unknown>;
-        items?: { type?: string | string[]; properties?: Record<string, unknown> };
-      }
-    >,
+    properties: Record<string, PropertySchema>,
     parentPath: string,
     parentRequired: Set<string>,
     depth: number
@@ -619,17 +625,9 @@ export function getSchemaFieldPaths(
 
       // Handle nested objects
       if (fieldType === 'object' && fieldSchema.properties) {
-        const nestedRequired = new Set((fieldSchema as { required?: string[] }).required || []);
+        const nestedRequired = new Set(fieldSchema.required || []);
         traverse(
-          fieldSchema.properties as Record<
-            string,
-            {
-              type?: string | string[];
-              description?: string;
-              properties?: Record<string, unknown>;
-              items?: { type?: string | string[]; properties?: Record<string, unknown> };
-            }
-          >,
+          fieldSchema.properties as Record<string, PropertySchema>,
           fieldPath,
           nestedRequired,
           depth + 1
@@ -642,17 +640,9 @@ export function getSchemaFieldPaths(
         const itemType = Array.isArray(itemsSchema.type) ? itemsSchema.type[0] : itemsSchema.type;
 
         if (itemType === 'object' && itemsSchema.properties) {
-          const nestedRequired = new Set((itemsSchema as { required?: string[] }).required || []);
+          const nestedRequired = new Set(itemsSchema.required || []);
           traverse(
-            itemsSchema.properties as Record<
-              string,
-              {
-                type?: string | string[];
-                description?: string;
-                properties?: Record<string, unknown>;
-                items?: { type?: string | string[]; properties?: Record<string, unknown> };
-              }
-            >,
+            itemsSchema.properties as Record<string, PropertySchema>,
             `${fieldPath}[*]`,
             nestedRequired,
             depth + 1
@@ -662,7 +652,22 @@ export function getSchemaFieldPaths(
     }
   }
 
-  traverse(schema.properties, '', requiredFields, 0);
+  // Handle root-level object with properties
+  if (schema.properties) {
+    const requiredFields = new Set(schema.required || []);
+    traverse(schema.properties as Record<string, PropertySchema>, '', requiredFields, 0);
+  }
+  // Handle root-level array schema (e.g., { type: "array", items: { type: "object", properties: {...} } })
+  else if (schema.type === 'array' && schema.items) {
+    const itemsSchema = schema.items;
+    const itemType = Array.isArray(itemsSchema.type) ? itemsSchema.type[0] : itemsSchema.type;
+
+    if (itemType === 'object' && itemsSchema.properties) {
+      const requiredFields = new Set(itemsSchema.required || []);
+      traverse(itemsSchema.properties as Record<string, PropertySchema>, '$[*]', requiredFields, 0);
+    }
+  }
+
   return fields;
 }
 
