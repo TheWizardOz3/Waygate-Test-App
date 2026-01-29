@@ -18,15 +18,28 @@ import {
   HelpCircle,
 } from 'lucide-react';
 import { CredentialsPanel } from './CredentialsPanel';
-import { useActions, useLogs, useLogStats, useConnections } from '@/hooks';
+import {
+  ConnectionCredentialPanel,
+  ConnectionHealthSection,
+} from '@/components/features/connections';
+import { useActions, useLogs, useLogStats, useConnections, useConnection } from '@/hooks';
 import type { IntegrationResponse } from '@/lib/modules/integrations/integration.schemas';
 import { cn } from '@/lib/utils';
 
 interface IntegrationOverviewProps {
   integration: IntegrationResponse;
+  selectedConnection?: {
+    id: string;
+    name: string;
+    slug: string;
+    status: 'active' | 'error' | 'disabled';
+    healthStatus?: 'healthy' | 'degraded' | 'unhealthy' | null;
+    connectorType: 'platform' | 'custom';
+    isPrimary: boolean;
+  };
 }
 
-export function IntegrationOverview({ integration }: IntegrationOverviewProps) {
+export function IntegrationOverview({ integration, selectedConnection }: IntegrationOverviewProps) {
   // Fetch real data
   const { data: actionsData, isLoading: actionsLoading } = useActions(integration.id);
   const { data: logStats, isLoading: statsLoading } = useLogStats({
@@ -37,6 +50,9 @@ export function IntegrationOverview({ integration }: IntegrationOverviewProps) {
     limit: 5,
   });
   const { data: connectionsData, isLoading: connectionsLoading } = useConnections(integration.id);
+
+  // Fetch full connection data for selected connection
+  const { data: connectionData } = useConnection(selectedConnection?.id);
 
   const totalActions = actionsData?.actions?.length ?? 0;
   const totalRequests = logStats?.totalRequests ?? 0;
@@ -169,10 +185,18 @@ export function IntegrationOverview({ integration }: IntegrationOverviewProps) {
         )}
       </div>
 
+      {/* Selected Connection Auth & Health (when a connection is selected) */}
+      {connectionData && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <ConnectionCredentialPanel connection={connectionData} integration={integration} />
+          <ConnectionHealthSection connectionId={connectionData.id} />
+        </div>
+      )}
+
       {/* Two column layout for details - Linear style sections */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Credentials Panel */}
-        <CredentialsPanel integration={integration} />
+        {/* Credentials Panel - only show when no connection selected */}
+        {!selectedConnection && <CredentialsPanel integration={integration} />}
 
         {/* Configuration Section */}
         <div className="space-y-4 rounded-lg border bg-card p-5">

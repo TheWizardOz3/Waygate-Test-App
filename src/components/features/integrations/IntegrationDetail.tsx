@@ -1,16 +1,26 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle, LayoutDashboard, Zap, ScrollText, Plug } from 'lucide-react';
-import { useIntegration } from '@/hooks';
+import {
+  AlertCircle,
+  LayoutDashboard,
+  Zap,
+  ScrollText,
+  Plug,
+  GitBranch,
+  MessageSquare,
+} from 'lucide-react';
+import { useIntegration, useConnections } from '@/hooks';
 import { IntegrationHeader } from './IntegrationHeader';
 import { IntegrationOverview } from './IntegrationOverview';
 import { IntegrationActionsTab } from './IntegrationActionsTab';
 import { IntegrationLogsTab } from './IntegrationLogsTab';
-import { ConnectionList } from '@/components/features/connections';
+import { IntegrationFieldMappingsTab } from './IntegrationFieldMappingsTab';
+import { IntegrationLLMResponseTab } from './IntegrationLLMResponseTab';
+import { ConnectionList, ConnectionSelector } from '@/components/features/connections';
 
 interface IntegrationDetailProps {
   integrationId: string;
@@ -18,7 +28,36 @@ interface IntegrationDetailProps {
 
 export function IntegrationDetail({ integrationId }: IntegrationDetailProps) {
   const [activeTab, setActiveTab] = useState('actions');
+  const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
+
   const { data: integration, isLoading, isError, error } = useIntegration(integrationId);
+  const { data: connectionsData, isLoading: connectionsLoading } = useConnections(integrationId);
+
+  const connections = useMemo(
+    () => connectionsData?.connections ?? [],
+    [connectionsData?.connections]
+  );
+
+  // Auto-select primary connection or first connection when connections load
+  useEffect(() => {
+    if (connections.length > 0 && !selectedConnectionId) {
+      const primaryConnection = connections.find((c) => c.isPrimary);
+      setSelectedConnectionId(primaryConnection?.id ?? connections[0].id);
+    }
+  }, [connections, selectedConnectionId]);
+
+  // Clear selection if selected connection is deleted
+  useEffect(() => {
+    if (selectedConnectionId && connections.length > 0) {
+      const stillExists = connections.some((c) => c.id === selectedConnectionId);
+      if (!stillExists) {
+        const primaryConnection = connections.find((c) => c.isPrimary);
+        setSelectedConnectionId(primaryConnection?.id ?? connections[0]?.id ?? null);
+      }
+    } else if (connections.length === 0) {
+      setSelectedConnectionId(null);
+    }
+  }, [connections, selectedConnectionId]);
 
   if (isLoading) {
     return <IntegrationDetailSkeleton />;
@@ -36,10 +75,25 @@ export function IntegrationDetail({ integrationId }: IntegrationDetailProps) {
     );
   }
 
+  const selectedConnection = connections.find((c) => c.id === selectedConnectionId);
+
   return (
     <div className="space-y-6">
       {/* Header with integration info and quick actions */}
       <IntegrationHeader integration={integration} />
+
+      {/* Connection Selector - at integration level */}
+      {!connectionsLoading && connections.length > 0 && (
+        <div className="flex items-center gap-3 rounded-lg border bg-muted/30 p-3">
+          <span className="text-sm font-medium text-muted-foreground">Active Connection:</span>
+          <ConnectionSelector
+            connections={connections}
+            selectedConnectionId={selectedConnectionId}
+            onSelect={setSelectedConnectionId}
+            onAddConnection={() => setActiveTab('connections')}
+          />
+        </div>
+      )}
 
       {/* Tabbed content */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
@@ -66,6 +120,20 @@ export function IntegrationDetail({ integrationId }: IntegrationDetailProps) {
             Logs
           </TabsTrigger>
           <TabsTrigger
+            value="mappings"
+            className="relative gap-2 rounded-none border-b-2 border-transparent px-4 pb-3 pt-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+          >
+            <GitBranch className="h-4 w-4" />
+            Field Mappings
+          </TabsTrigger>
+          <TabsTrigger
+            value="llm-response"
+            className="relative gap-2 rounded-none border-b-2 border-transparent px-4 pb-3 pt-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+          >
+            <MessageSquare className="h-4 w-4" />
+            LLM Response
+          </TabsTrigger>
+          <TabsTrigger
             value="connections"
             className="relative gap-2 rounded-none border-b-2 border-transparent px-4 pb-3 pt-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
           >
@@ -79,15 +147,35 @@ export function IntegrationDetail({ integrationId }: IntegrationDetailProps) {
         </TabsContent>
 
         <TabsContent value="overview" className="mt-6 space-y-4">
-          <IntegrationOverview integration={integration} />
+          <IntegrationOverview integration={integration} selectedConnection={selectedConnection} />
         </TabsContent>
 
         <TabsContent value="logs" className="mt-6 space-y-4">
-          <IntegrationLogsTab integrationId={integrationId} />
+          <IntegrationLogsTab integrationId={integrationId} connectionId={selectedConnectionId} />
+        </TabsContent>
+
+        <TabsContent value="mappings" className="mt-6 space-y-4">
+          <IntegrationFieldMappingsTab
+            integrationId={integrationId}
+            connectionId={selectedConnectionId}
+          />
+        </TabsContent>
+
+        <TabsContent value="llm-response" className="mt-6 space-y-4">
+          <IntegrationLLMResponseTab
+            integrationId={integrationId}
+            connectionId={selectedConnectionId}
+            integrationName={integration.name}
+            integrationSlug={integration.slug}
+          />
         </TabsContent>
 
         <TabsContent value="connections" className="mt-6 space-y-4">
-          <ConnectionList integrationId={integrationId} integration={integration} />
+          <ConnectionList
+            integrationId={integrationId}
+            integration={integration}
+            onConnectionSelect={setSelectedConnectionId}
+          />
         </TabsContent>
       </Tabs>
     </div>
@@ -111,8 +199,11 @@ function IntegrationDetailSkeleton() {
         </div>
       </div>
 
+      {/* Connection selector skeleton */}
+      <Skeleton className="h-12 w-80" />
+
       {/* Tabs skeleton */}
-      <Skeleton className="h-10 w-80" />
+      <Skeleton className="h-10 w-full max-w-2xl" />
 
       {/* Content skeleton */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

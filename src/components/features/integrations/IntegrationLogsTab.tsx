@@ -7,19 +7,28 @@ import { ScrollText, ArrowRight, ExternalLink } from 'lucide-react';
 
 interface IntegrationLogsTabProps {
   integrationId: string;
+  connectionId?: string | null;
 }
 
-export function IntegrationLogsTab({ integrationId }: IntegrationLogsTabProps) {
-  // This is a placeholder - the full LogViewer will be built in Phase 9
+export function IntegrationLogsTab({ integrationId, connectionId }: IntegrationLogsTabProps) {
+  // Build the logs URL with optional connection filter
+  const logsUrl = connectionId
+    ? `/logs?integration=${integrationId}&connection=${connectionId}`
+    : `/logs?integration=${integrationId}`;
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
           <CardTitle>Request Logs</CardTitle>
-          <CardDescription>View API request history for this integration</CardDescription>
+          <CardDescription>
+            {connectionId
+              ? 'View API request history for the selected connection'
+              : 'View API request history for this integration'}
+          </CardDescription>
         </div>
         <Button variant="outline" asChild>
-          <Link href={`/logs?integration=${integrationId}`}>
+          <Link href={logsUrl}>
             <ExternalLink className="mr-2 h-4 w-4" />
             View All Logs
           </Link>
@@ -38,7 +47,7 @@ export function IntegrationLogsTab({ integrationId }: IntegrationLogsTabProps) {
             </p>
           </div>
           <Button variant="outline" asChild>
-            <Link href="/logs">
+            <Link href={logsUrl}>
               Go to Logs
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>

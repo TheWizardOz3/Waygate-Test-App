@@ -12,6 +12,8 @@ export { CredentialsPanel } from './CredentialsPanel';
 export { DeleteIntegrationDialog } from './DeleteIntegrationDialog';
 export { IntegrationActionsTab } from './IntegrationActionsTab';
 export { IntegrationLogsTab } from './IntegrationLogsTab';
+export { IntegrationFieldMappingsTab } from './IntegrationFieldMappingsTab';
+export { IntegrationLLMResponseTab } from './IntegrationLLMResponseTab';
 
 // Wizard components
 export * from './wizard';

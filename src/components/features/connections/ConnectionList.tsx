@@ -1,78 +1,94 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Plus, Plug } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useConnections, useIntegration } from '@/hooks';
-import { ConnectionSelector } from './ConnectionSelector';
-import { ConnectionDetailInline, ConnectionDetailInlineSkeleton } from './ConnectionDetailInline';
+import { useConnections, useDeleteConnection, useIntegration } from '@/hooks';
+import { ConnectionCard } from './ConnectionCard';
 import { CreateConnectionDialog } from './CreateConnectionDialog';
+import { EditConnectionDialog } from './EditConnectionDialog';
+import { DeleteConnectionDialog } from './DeleteConnectionDialog';
+import { toast } from 'sonner';
 import type { IntegrationResponse } from '@/lib/modules/integrations/integration.schemas';
+import type { ConnectionResponse } from '@/lib/modules/connections/connection.schemas';
 
 interface ConnectionListProps {
   integrationId: string;
   /** Pass integration to avoid redundant fetch - if not provided, will be fetched */
   integration?: IntegrationResponse;
+  /** Callback when a connection is selected */
+  onConnectionSelect?: (connectionId: string) => void;
 }
 
 /**
- * Connections management view with inline connection details.
- * Shows a connection selector at the top and full config inline below.
+ * Connections management view - shows a grid of connection cards.
+ * Simplified to just list/add/edit/delete. Config is handled by other tabs.
  */
 export function ConnectionList({
   integrationId,
   integration: integrationProp,
+  onConnectionSelect,
 }: ConnectionListProps) {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedConnection, setSelectedConnection] = useState<ConnectionResponse | null>(null);
 
   // Only fetch integration if not passed as prop (avoids redundant queries)
   const { data: fetchedIntegration } = useIntegration(integrationProp ? undefined : integrationId);
   const integration = integrationProp ?? fetchedIntegration;
   const { data, isLoading, isError, refetch } = useConnections(integrationId);
+  const deleteMutation = useDeleteConnection(integrationId);
 
   const connections = useMemo(() => data?.connections ?? [], [data?.connections]);
 
-  // Auto-select primary connection or first connection when connections load
-  useEffect(() => {
-    if (connections.length > 0 && !selectedConnectionId) {
-      // Prefer primary connection, otherwise select first
-      const primaryConnection = connections.find((c) => c.isPrimary);
-      setSelectedConnectionId(primaryConnection?.id ?? connections[0].id);
-    }
-  }, [connections, selectedConnectionId]);
-
-  // Clear selection if selected connection is deleted
-  useEffect(() => {
-    if (selectedConnectionId && connections.length > 0) {
-      const stillExists = connections.some((c) => c.id === selectedConnectionId);
-      if (!stillExists) {
-        // Select another connection
-        const primaryConnection = connections.find((c) => c.isPrimary);
-        setSelectedConnectionId(primaryConnection?.id ?? connections[0]?.id ?? null);
-      }
-    } else if (connections.length === 0) {
-      setSelectedConnectionId(null);
-    }
-  }, [connections, selectedConnectionId]);
-
   const handleConnectionCreated = () => {
-    // Refetch to get the new connection, then it will be auto-selected
     refetch();
+  };
+
+  const handleEdit = (connection: ConnectionResponse) => {
+    setSelectedConnection(connection);
+    setEditDialogOpen(true);
+  };
+
+  const handleDeleteClick = (connection: ConnectionResponse) => {
+    setSelectedConnection(connection);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!selectedConnection) return;
+
+    try {
+      await deleteMutation.mutateAsync(selectedConnection.id);
+      toast.success('Connection deleted');
+      setDeleteDialogOpen(false);
+      setSelectedConnection(null);
+    } catch (error) {
+      toast.error('Failed to delete connection', {
+        description: error instanceof Error ? error.message : 'Please try again',
+      });
+    }
+  };
+
+  const handleCardClick = (connection: ConnectionResponse) => {
+    onConnectionSelect?.(connection.id);
   };
 
   if (isLoading) {
     return (
       <div className="space-y-6">
-        {/* Selector skeleton */}
         <div className="flex items-center justify-between">
-          <Skeleton className="h-10 w-64" />
-          <Skeleton className="h-9 w-32" />
+          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-9 w-36" />
         </div>
-        {/* Detail skeleton */}
-        <ConnectionDetailInlineSkeleton />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-40 rounded-lg" />
+          ))}
+        </div>
       </div>
     );
   }
@@ -101,7 +117,6 @@ export function ConnectionList({
           }}
         />
 
-        {/* Create Dialog */}
         <CreateConnectionDialog
           integrationId={integrationId}
           open={createDialogOpen}
@@ -114,35 +129,61 @@ export function ConnectionList({
 
   return (
     <div className="space-y-6">
-      {/* Header with connection selector and add button */}
-      <div className="flex items-center justify-between gap-4">
-        <ConnectionSelector
-          connections={connections}
-          selectedConnectionId={selectedConnectionId}
-          onSelect={setSelectedConnectionId}
-          onAddConnection={() => setCreateDialogOpen(true)}
-        />
-        <Button onClick={() => setCreateDialogOpen(true)} variant="outline">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-medium">
+            {connections.length} Connection{connections.length !== 1 ? 's' : ''}
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Manage connections for different apps or environments
+          </p>
+        </div>
+        <Button onClick={() => setCreateDialogOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Add Connection
         </Button>
       </div>
 
-      {/* Inline connection detail */}
-      {selectedConnectionId && integration && (
-        <ConnectionDetailInline
-          connectionId={selectedConnectionId}
-          integration={integration}
-          onDeleted={() => refetch()}
-        />
-      )}
+      {/* Connection Grid */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {connections.map((connection) => (
+          <ConnectionCard
+            key={connection.id}
+            connection={connection}
+            onSelect={() => handleCardClick(connection)}
+            onEdit={() => handleEdit(connection)}
+            onDelete={() => handleDeleteClick(connection)}
+          />
+        ))}
+      </div>
 
-      {/* Create Dialog */}
+      {/* Dialogs */}
       <CreateConnectionDialog
         integrationId={integrationId}
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
         onSuccess={handleConnectionCreated}
+      />
+
+      {selectedConnection && integration && (
+        <EditConnectionDialog
+          connection={selectedConnection}
+          integrationId={integrationId}
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+          onSuccess={() => {
+            refetch();
+            setSelectedConnection(null);
+          }}
+        />
+      )}
+
+      <DeleteConnectionDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onConfirm={handleDeleteConfirm}
+        isDeleting={deleteMutation.isPending}
       />
     </div>
   );
