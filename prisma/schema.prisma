@@ -113,6 +113,21 @@ enum HealthCheckTier {
   full_scan    // Tier 3: All actions tested (multiple API calls)
 }
 
+/// Status of reference data items
+enum ReferenceDataStatus {
+  active   // Item exists in external system
+  inactive // Item was soft-deleted (removed from external system)
+  deleted  // Item explicitly deleted by user
+}
+
+/// Status of a reference sync job
+enum SyncJobStatus {
+  pending   // Job created, not yet started
+  syncing   // Job is currently running
+  completed // Job finished successfully
+  failed    // Job failed with error
+}
+
 /// How the health check was triggered
 enum HealthCheckTrigger {
   scheduled // Triggered by cron job
@@ -157,6 +172,8 @@ model Tenant {
   scrapeJobs             ScrapeJob[]
   validationFailures     ValidationFailure[]
   healthChecks           HealthCheck[]
+  referenceData          ReferenceData[]
+  referenceSyncJobs      ReferenceSyncJob[]
 
   @@map("tenants")
 }
@@ -182,11 +199,13 @@ model Integration {
   healthCheckConfig Json @default("{\"enabled\": true, \"credentialCheckMinutes\": 15, \"connectivityCheckHours\": 12, \"fullScanEnabled\": false}") @map("health_check_config")
 
   // Relations
-  tenant      Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  actions     Action[]
-  credentials IntegrationCredential[]
-  connections Connection[]
-  requestLogs RequestLog[]
+  tenant            Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actions           Action[]
+  credentials       IntegrationCredential[]
+  connections       Connection[]
+  requestLogs       RequestLog[]
+  referenceData     ReferenceData[]
+  referenceSyncJobs ReferenceSyncJob[]
 
   // Indexes
   @@unique([tenantId, slug], name: "integrations_tenant_slug_idx")
@@ -259,6 +278,8 @@ model Connection {
   requestLogs           RequestLog[]
   healthChecks          HealthCheck[]
   fieldMappings         FieldMapping[]
+  referenceData         ReferenceData[]
+  referenceSyncJobs     ReferenceSyncJob[]
 
   // Indexes
   @@unique([tenantId, integrationId, slug], name: "connections_tenant_integration_slug_idx")
@@ -298,6 +319,7 @@ model Action {
   validationFailures       ValidationFailure[]
   connectionTestActionFor  Connection[]        @relation("ConnectionTestAction")
   healthChecksAsTestAction HealthCheck[]       @relation("HealthCheckTestAction")
+  referenceDataSyncedBy    ReferenceData[]
 
   // Indexes
   @@unique([integrationId, slug], name: "actions_integration_slug_idx")
@@ -492,4 +514,73 @@ model HealthCheck {
   @@index([checkTier], name: "health_checks_tier_idx")
   @@index([status], name: "health_checks_status_idx")
   @@map("health_checks")
+}
+
+/// Cached reference data from external APIs (users, channels, teams, etc.)
+model ReferenceData {
+  id            String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String              @map("tenant_id") @db.Uuid
+  integrationId String              @map("integration_id") @db.Uuid
+  connectionId  String?             @map("connection_id") @db.Uuid
+
+  dataType      String              @map("data_type") @db.VarChar(100)     // 'users', 'channels', 'repos', etc.
+  externalId    String              @map("external_id") @db.VarChar(255)   // ID from external system
+  name          String              @db.VarChar(500)                        // Display name
+  metadata      Json                @default("{}")                          // Flexible additional fields
+
+  status        ReferenceDataStatus @default(active)
+  lastSyncedAt  DateTime            @map("last_synced_at")
+  syncedByActionId String?          @map("synced_by_action_id") @db.Uuid
+
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
+
+  // Relations
+  tenant        Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  integration   Integration         @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  connection    Connection?         @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  syncedByAction Action?            @relation(fields: [syncedByActionId], references: [id], onDelete: SetNull)
+
+  // Indexes
+  @@unique([integrationId, connectionId, dataType, externalId], name: "reference_data_unique_idx")
+  @@index([tenantId, dataType], name: "reference_data_tenant_type_idx")
+  @@index([integrationId, dataType], name: "reference_data_integration_type_idx")
+  @@index([connectionId, dataType], name: "reference_data_connection_type_idx")
+  @@index([lastSyncedAt], name: "reference_data_last_synced_idx")
+  @@index([status], name: "reference_data_status_idx")
+  @@map("reference_data")
+}
+
+/// Tracks reference data sync jobs
+model ReferenceSyncJob {
+  id            String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String        @map("tenant_id") @db.Uuid
+  integrationId String        @map("integration_id") @db.Uuid
+  connectionId  String?       @map("connection_id") @db.Uuid
+  dataType      String        @map("data_type") @db.VarChar(100)
+
+  status        SyncJobStatus @default(pending)
+  startedAt     DateTime?     @map("started_at")
+  completedAt   DateTime?     @map("completed_at")
+
+  itemsFound    Int           @default(0) @map("items_found")
+  itemsCreated  Int           @default(0) @map("items_created")
+  itemsUpdated  Int           @default(0) @map("items_updated")
+  itemsDeleted  Int           @default(0) @map("items_deleted")
+  itemsFailed   Int           @default(0) @map("items_failed")
+
+  error         Json?                                                       // Error details if failed
+
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  integration   Integration   @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  connection    Connection?   @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([integrationId, status], name: "reference_sync_jobs_integration_status_idx")
+  @@index([tenantId, createdAt(sort: Desc)], name: "reference_sync_jobs_tenant_created_idx")
+  @@index([connectionId, status], name: "reference_sync_jobs_connection_status_idx")
+  @@map("reference_sync_jobs")
 }

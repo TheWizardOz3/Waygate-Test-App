@@ -89,6 +89,7 @@ export function ActionEditor({ integrationId, actionId }: ActionEditorProps) {
         },
         bypassValidation: false,
       },
+      metadata: {} as Record<string, unknown>,
     },
   });
 
@@ -126,6 +127,7 @@ export function ActionEditor({ integrationId, actionId }: ActionEditorProps) {
           },
           bypassValidation: false,
         },
+        metadata: existingAction.metadata ?? {},
       });
     }
   }, [existingAction, form]);
@@ -168,6 +170,7 @@ export function ActionEditor({ integrationId, actionId }: ActionEditorProps) {
           cacheTtlSeconds: data.cacheTtlSeconds,
           retryConfig: data.retryConfig,
           validationConfig: data.validationConfig,
+          metadata: data.metadata,
         };
         await updateAction.mutateAsync(updatePayload);
         toast.success('Action updated successfully');
@@ -187,6 +190,7 @@ export function ActionEditor({ integrationId, actionId }: ActionEditorProps) {
           tags: data.tags ?? [],
           retryConfig: data.retryConfig,
           validationConfig: data.validationConfig,
+          metadata: data.metadata,
         };
         await createAction.mutateAsync(createPayload);
         toast.success('Action created successfully');

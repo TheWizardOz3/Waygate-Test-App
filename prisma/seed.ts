@@ -366,6 +366,15 @@ async function main() {
         metadata: {
           category: 'channels',
           idempotent: true,
+          referenceData: {
+            dataType: 'channels',
+            syncable: true,
+            extractionPath: '$.channels[*]',
+            idField: 'id',
+            nameField: 'name',
+            metadataFields: ['is_private', 'num_members', 'topic', 'purpose'],
+            defaultTtlSeconds: 3600, // Sync every hour
+          },
         },
       },
     }),
@@ -431,6 +440,15 @@ async function main() {
         metadata: {
           category: 'users',
           idempotent: true,
+          referenceData: {
+            dataType: 'users',
+            syncable: true,
+            extractionPath: '$.members[*]',
+            idField: 'id',
+            nameField: 'real_name',
+            metadataFields: ['name', 'email', 'is_admin', 'is_bot', 'profile'],
+            defaultTtlSeconds: 3600, // Sync every hour
+          },
         },
       },
     }),

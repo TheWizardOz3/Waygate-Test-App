@@ -282,6 +282,32 @@ export type ResponseMeta = z.infer<typeof ResponseMetaSchema>;
 // =============================================================================
 
 /**
+ * Reference data item as returned in gateway response
+ * Simplified format for AI context
+ */
+export const ReferenceDataContextItemSchema = z.object({
+  /** External ID from the source system */
+  id: z.string(),
+  /** Display name */
+  name: z.string(),
+  /** Additional metadata fields */
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+export type ReferenceDataContextItem = z.infer<typeof ReferenceDataContextItemSchema>;
+
+/**
+ * Reference data context grouped by data type
+ * Example: { users: [...], channels: [...] }
+ */
+export const ReferenceDataContextSchema = z.record(
+  z.string(),
+  z.array(ReferenceDataContextItemSchema)
+);
+
+export type ReferenceDataContext = z.infer<typeof ReferenceDataContextSchema>;
+
+/**
  * Successful gateway response
  */
 export const GatewaySuccessResponseSchema = z.object({
@@ -292,6 +318,12 @@ export const GatewaySuccessResponseSchema = z.object({
    * Example: "The Search Contacts results from Salesforce are:"
    */
   context: z.string().optional(),
+  /**
+   * Cached reference data for AI context (users, channels, etc.).
+   * Keyed by data type (e.g., "users", "channels").
+   * Only present when reference data is synced for this integration.
+   */
+  referenceData: ReferenceDataContextSchema.optional(),
   /** Response data from the external API */
   data: z.unknown(),
   /** Response metadata with execution metrics */

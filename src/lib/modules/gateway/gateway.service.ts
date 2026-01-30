@@ -72,6 +72,11 @@ import {
 } from '../execution/mapping/server';
 import { applyPreamble, type PreambleResult } from '../execution/preamble';
 import { resolveConnection } from '../connections';
+import {
+  findByTypes as findReferenceDataByTypes,
+  getDataTypes as getReferenceDataTypes,
+} from '../reference-data';
+import type { ReferenceDataContext } from './gateway.schemas';
 
 // =============================================================================
 // Types
@@ -282,7 +287,13 @@ export async function invokeAction(
       );
     }
 
-    // 10. Log the request/response (with connection ID for multi-app tracking)
+    // 10. Fetch reference data for AI context (if synced for this integration)
+    let referenceDataContext: ReferenceDataContext | undefined;
+    if (executionResult.success) {
+      referenceDataContext = await buildReferenceDataContext(integration.id, connection.id);
+    }
+
+    // 12. Log the request/response (with connection ID for multi-app tracking)
     await logInvocation(
       context,
       integration.id,
@@ -293,7 +304,7 @@ export async function invokeAction(
       executionResult
     );
 
-    // 11. Format and return response
+    // 13. Format and return response
     if (executionResult.success) {
       return formatSuccessResponse(
         requestId,
@@ -302,7 +313,8 @@ export async function invokeAction(
         inputMappingResult,
         outputMappingResult,
         finalResponseData,
-        preambleResult
+        preambleResult,
+        referenceDataContext
       );
     } else {
       return formatExecutionErrorResponse(requestId, executionResult);
@@ -788,7 +800,8 @@ function formatSuccessResponse(
   inputMappingResult?: FullMappingResult,
   outputMappingResult?: MappingResult,
   finalData?: unknown,
-  preambleResult?: PreambleResult
+  preambleResult?: PreambleResult,
+  referenceDataContext?: ReferenceDataContext
 ): GatewaySuccessResponse {
   // Use final mapped data, or validated data, or raw data
   const responseData = finalData ?? validationResult?.data ?? result.data;
@@ -857,6 +870,11 @@ function formatSuccessResponse(
   // Add preamble context if applied (for LLM-friendly responses)
   if (preambleResult?.applied && preambleResult.context) {
     response.context = preambleResult.context;
+  }
+
+  // Add reference data context if available (for AI context awareness)
+  if (referenceDataContext && Object.keys(referenceDataContext).length > 0) {
+    response.referenceData = referenceDataContext;
   }
 
   return response;
@@ -1117,4 +1135,61 @@ function generateRequestId(): string {
 export function getHttpStatusForError(response: GatewayErrorResponse): number {
   const code = response.error.code as keyof typeof GatewayErrorCodes;
   return GatewayErrorCodes[code]?.httpStatus ?? 500;
+}
+
+// =============================================================================
+// Reference Data Context
+// =============================================================================
+
+/**
+ * Build reference data context for AI-friendly responses
+ *
+ * Fetches cached reference data (users, channels, etc.) for an integration
+ * and formats it for inclusion in gateway responses. This provides AI agents
+ * with contextual information to resolve names to IDs without additional API calls.
+ *
+ * @param integrationId - The integration to fetch reference data for
+ * @param connectionId - The connection (for connection-specific data)
+ * @returns Reference data grouped by type, or undefined if none exists
+ */
+async function buildReferenceDataContext(
+  integrationId: string,
+  connectionId: string
+): Promise<ReferenceDataContext | undefined> {
+  try {
+    // Get all available data types for this integration/connection
+    const dataTypes = await getReferenceDataTypes(integrationId, connectionId);
+
+    if (dataTypes.length === 0) {
+      return undefined;
+    }
+
+    // Fetch all reference data for these types
+    const referenceData = await findReferenceDataByTypes(integrationId, connectionId, dataTypes);
+
+    if (referenceData.length === 0) {
+      return undefined;
+    }
+
+    // Group by data type and transform to context format
+    const context: ReferenceDataContext = {};
+
+    for (const item of referenceData) {
+      if (!context[item.dataType]) {
+        context[item.dataType] = [];
+      }
+
+      context[item.dataType].push({
+        id: item.externalId,
+        name: item.name,
+        metadata: item.metadata as Record<string, unknown> | undefined,
+      });
+    }
+
+    return context;
+  } catch (error) {
+    // Log but don't fail - reference data is optional enhancement
+    console.warn('[GATEWAY] Failed to fetch reference data context:', error);
+    return undefined;
+  }
 }

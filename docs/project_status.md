@@ -1,6 +1,6 @@
 # Project Status: Waygate
 
-**Last Updated:** 2026-01-28
+**Last Updated:** 2026-01-29
 
 ---
 
@@ -8,13 +8,13 @@
 
 **Goal:** Export Waygate actions as AI-consumable tools for LangChain and MCP.
 
-### Task Status
+### Build Order
 
-| Task                    | Status      | Notes                                   |
-| ----------------------- | ----------- | --------------------------------------- |
-| Reference data sync     | NOT STARTED | Sync reference data for AI tool context |
-| Simple tool export      | NOT STARTED | Export individual actions as AI tools   |
-| Variable/context system | NOT STARTED | Support for dynamic context in AI tools |
+| #   | Feature                 | Status      | Dependencies       | Notes                                                                |
+| --- | ----------------------- | ----------- | ------------------ | -------------------------------------------------------------------- |
+| 1   | Reference data sync     | ✅ COMPLETE | None               | Foundational - syncs reference data (users, channels) for AI context |
+| 2   | Simple tool export      | NOT STARTED | Actions (MVP ✅)   | Core tool generation - exports actions as LangChain/MCP tools        |
+| 3   | Variable/context system | NOT STARTED | Simple tool export | Dynamic context injection for runtime variables in AI tools          |
 
 ### Definition of Done
 

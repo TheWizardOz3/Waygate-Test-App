@@ -12,6 +12,10 @@
     {
       "path": "/api/v1/internal/health-checks/connectivity",
       "schedule": "0 */12 * * *"
+    },
+    {
+      "path": "/api/v1/internal/reference-sync",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

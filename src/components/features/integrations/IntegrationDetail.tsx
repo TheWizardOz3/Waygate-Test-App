@@ -12,6 +12,7 @@ import {
   Plug,
   GitBranch,
   MessageSquare,
+  Database,
 } from 'lucide-react';
 import { useIntegration, useConnections } from '@/hooks';
 import { IntegrationHeader } from './IntegrationHeader';
@@ -20,6 +21,7 @@ import { IntegrationActionsTab } from './IntegrationActionsTab';
 import { IntegrationLogsTab } from './IntegrationLogsTab';
 import { IntegrationFieldMappingsTab } from './IntegrationFieldMappingsTab';
 import { IntegrationLLMResponseTab } from './IntegrationLLMResponseTab';
+import { IntegrationReferenceDataTab } from './IntegrationReferenceDataTab';
 import { ConnectionList, ConnectionSelector } from '@/components/features/connections';
 
 interface IntegrationDetailProps {
@@ -134,6 +136,13 @@ export function IntegrationDetail({ integrationId }: IntegrationDetailProps) {
             LLM Response
           </TabsTrigger>
           <TabsTrigger
+            value="reference-data"
+            className="relative gap-2 rounded-none border-b-2 border-transparent px-4 pb-3 pt-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+          >
+            <Database className="h-4 w-4" />
+            Reference Data
+          </TabsTrigger>
+          <TabsTrigger
             value="connections"
             className="relative gap-2 rounded-none border-b-2 border-transparent px-4 pb-3 pt-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
           >
@@ -167,6 +176,13 @@ export function IntegrationDetail({ integrationId }: IntegrationDetailProps) {
             connectionId={selectedConnectionId}
             integrationName={integration.name}
             integrationSlug={integration.slug}
+          />
+        </TabsContent>
+
+        <TabsContent value="reference-data" className="mt-6 space-y-4">
+          <IntegrationReferenceDataTab
+            integrationId={integrationId}
+            connectionId={selectedConnectionId}
           />
         </TabsContent>
 

@@ -106,3 +106,13 @@ export {
   useInvalidateHealthChecks,
   healthCheckKeys,
 } from './useHealthChecks';
+
+// Reference data hooks
+export {
+  useReferenceData,
+  useSyncJobs,
+  useSyncStatus,
+  useTriggerSync,
+  useInvalidateReferenceData,
+  referenceDataKeys,
+} from './useReferenceData';

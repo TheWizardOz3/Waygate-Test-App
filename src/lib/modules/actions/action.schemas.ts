@@ -8,6 +8,7 @@
 
 import { z } from 'zod';
 import { ValidationConfigSchema } from '../execution/validation';
+import { ActionReferenceDataConfigSchema } from '../reference-data';
 
 // =============================================================================
 // Enums
@@ -178,6 +179,12 @@ export const ActionMetadataSchema = z.object({
   sourceUrl: z.string().url().optional(),
   /** Wishlist match score from AI generation */
   wishlistScore: z.number().min(0).max(1).optional(),
+  /**
+   * Reference data sync configuration.
+   * When set, this action can be used to sync reference data (users, channels, etc.)
+   * for AI context.
+   */
+  referenceData: ActionReferenceDataConfigSchema.optional(),
 });
 
 export type ActionMetadata = z.infer<typeof ActionMetadataSchema>;

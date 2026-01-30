@@ -4,6 +4,14 @@
 
 ---
 
+## [1.0.5] - 2026-01-29
+
+### Added
+
+- **Reference Data Sync**: Integrations can now cache slow-changing reference data (users, channels, repositories, etc.) from external APIs. Configure actions as reference data sources with extraction paths, and Waygate will sync and cache this data for AI tool context. Includes cron-based background sync, manual sync triggers, and UI components for viewing cached data and sync history.
+
+---
+
 ## [1.0.4] - 2026-01-28
 
 ### Improved
