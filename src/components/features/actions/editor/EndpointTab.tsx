@@ -12,6 +12,8 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { VariableAutocompleteInput, VariableHint } from './VariableAutocomplete';
+import { VariableValidationInline } from './VariableValidation';
 import {
   Select,
   SelectContent,
@@ -116,15 +118,19 @@ export function EndpointTab({ form, isEditing, integrationSlug }: EndpointTabPro
               <FormItem className="md:col-span-3">
                 <FormLabel>Endpoint Path</FormLabel>
                 <FormControl>
-                  <Input
-                    placeholder="/api/messages/{channel_id}"
-                    {...field}
-                    className="font-mono"
+                  <VariableAutocompleteInput
+                    value={field.value ?? ''}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    placeholder="/api/${var.api_version}/messages/{channel_id}"
                   />
                 </FormControl>
                 <FormDescription>
-                  Path template. Use {'{param}'} for dynamic segments.
+                  Path template. Use {'{param}'} for dynamic segments or{' '}
+                  <code className="rounded bg-muted px-1">${'{var.name}'}</code> for variables.
                 </FormDescription>
+                <VariableHint />
+                <VariableValidationInline value={field.value} />
                 <FormMessage />
               </FormItem>
             )}

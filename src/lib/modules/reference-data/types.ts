@@ -14,16 +14,22 @@ export interface ActionReferenceDataConfig {
   dataType: string;
   /** Whether this action can be used for syncing reference data */
   syncable: boolean;
-  /** JSONPath expression to extract items from action response */
-  extractionPath: string;
-  /** Field name containing the external ID within each item */
-  idField: string;
-  /** Field name containing the display name within each item */
-  nameField: string;
+  /** Type of sync: 'list' for arrays of items, 'object' for full response caching */
+  syncType: 'list' | 'object';
+  /** JSONPath expression to extract items from action response (for list sync) */
+  extractionPath?: string;
+  /** Field name containing the external ID within each item (for list sync) */
+  idField?: string;
+  /** Field name containing the display name within each item (for list sync) */
+  nameField?: string;
+  /** Multiple fields to search when looking up items (for list sync) */
+  lookupFields?: string[];
+  /** Whether to use fuzzy/partial matching for lookups */
+  fuzzyMatch: boolean;
   /** Additional fields to capture in metadata */
   metadataFields?: string[];
-  /** How often to resync this data type (default: 3600 seconds = 1 hour) */
-  defaultTtlSeconds?: number;
+  /** How often to resync this data type (default: 86400 seconds = 1 day) */
+  defaultTtlSeconds: number;
 }
 
 /**

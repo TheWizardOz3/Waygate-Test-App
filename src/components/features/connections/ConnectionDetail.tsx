@@ -30,6 +30,7 @@ import { ConnectionStatusBadge } from './ConnectionStatusBadge';
 import { ConnectionCredentialPanel } from './ConnectionCredentialPanel';
 import { ConnectionHealthSection } from './ConnectionHealthSection';
 import { ConnectionMappingList, PreambleTemplateInput } from './mappings';
+import { ConnectionVariablesSection } from './ConnectionVariablesSection';
 import { ConnectorTypeBadge } from './ConnectorTypeBadge';
 import { EditConnectionDialog } from './EditConnectionDialog';
 import { DeleteConnectionDialog } from './DeleteConnectionDialog';
@@ -200,6 +201,9 @@ export function ConnectionDetail({
               integrationName={integration.name}
               integrationSlug={integration.slug}
             />
+
+            {/* Connection Variables */}
+            <ConnectionVariablesSection connectionId={connection.id} />
 
             {/* Configuration Card */}
             <Card>

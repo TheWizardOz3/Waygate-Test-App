@@ -4,6 +4,14 @@
 
 ---
 
+## [1.0.7] - 2026-01-31
+
+### Added
+
+- **Variable Context System**: Define reusable variables at tenant and connection levels with support for strings, numbers, booleans, and JSON values. Reference variables in action configurations using `${var.name}` syntax. Built-in runtime variables (`${current_user.id}`, `${connection.workspaceId}`, `${request.timestamp}`) provide dynamic context. Connection-level variables override tenant defaults, enabling per-connection customization. Sensitive variables are encrypted at rest and masked in logs. New Settings → Variables section and connection detail Variables tab for management. Variable autocomplete in action editors helps discover available variables.
+
+---
+
 ## [1.0.6] - 2026-01-30
 
 ### Added

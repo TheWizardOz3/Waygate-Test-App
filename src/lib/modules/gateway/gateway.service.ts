@@ -85,6 +85,17 @@ import {
 } from '../reference-data';
 import type { ReferenceDataContext } from './gateway.schemas';
 
+// Variable resolution imports (Phase 3: Gateway Integration)
+import {
+  resolveTemplate,
+  resolveTemplates,
+  containsVariableReferences,
+  buildRuntimeContext,
+  getEnvironment,
+  summarizeResolution,
+  type VariableResolutionResult,
+} from '../variables';
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -198,6 +209,17 @@ export async function invokeAction(
     const connection = await resolveConnection(tenantId, integration.id, options.connectionId);
     context.connectionId = connection.id;
 
+    // 1.5. Resolve variables in action configuration
+    // This resolves ${var.*}, ${current_user.*}, ${connection.*}, ${request.*} references
+    const variableResolutionResult = await resolveActionVariables(
+      tenantId,
+      connection,
+      action,
+      options
+    );
+    // Use resolved action for subsequent steps
+    const resolvedAction = variableResolutionResult.action;
+
     // 2. Apply INPUT mapping (transform request params before sending)
     // Uses connection-specific mapping overrides if available
     let inputMappingResult: FullMappingResult | undefined;
@@ -262,7 +284,8 @@ export async function invokeAction(
     }
 
     // 5. Build the HTTP request with MAPPED input
-    const { request, url } = buildRequest(integration, action, mappedInput, credential);
+    // Use resolvedAction which has variable references resolved in endpoint, headers, and defaults
+    const { request, url } = buildRequest(integration, resolvedAction, mappedInput, credential);
 
     // 6. Execute the request
     const executionResult = await executeRequest(request, integration.id, options);
@@ -396,6 +419,216 @@ async function resolveAction(
 }
 
 /**
+ * Step 1.5: Resolve variables in action configuration
+ *
+ * Resolves ${var.*}, ${current_user.*}, ${connection.*}, ${request.*} references in:
+ * - Endpoint template (e.g., "/api/${var.api_version}/users")
+ * - Header configurations (from action metadata)
+ * - Default parameter values in inputSchema
+ *
+ * Resolution priority:
+ * 1. Request context (options.variables) - Highest
+ * 2. Connection-level variables
+ * 3. Tenant-level variables
+ * 4. Runtime context (current_user, connection, request)
+ */
+interface VariableResolutionContext {
+  action: Action;
+  endpointResolution?: VariableResolutionResult;
+  headerResolutions?: Record<string, VariableResolutionResult>;
+  defaultResolutions?: Record<string, VariableResolutionResult>;
+  hasResolutions: boolean;
+  totalVariablesResolved: number;
+}
+
+async function resolveActionVariables(
+  tenantId: string,
+  connection: { id: string; name: string; metadata: unknown },
+  action: Action,
+  options: GatewayInvokeOptions
+): Promise<VariableResolutionContext> {
+  const result: VariableResolutionContext = {
+    action: { ...action },
+    hasResolutions: false,
+    totalVariablesResolved: 0,
+  };
+
+  // Check if any variable resolution is needed
+  const hasEndpointVars = containsVariableReferences(action.endpointTemplate);
+  const actionMetadata = action.metadata as Record<string, unknown> | null;
+  const headers = actionMetadata?.headers as Record<string, string> | undefined;
+  const hasHeaderVars = headers
+    ? Object.values(headers).some((v) => containsVariableReferences(v))
+    : false;
+  const inputSchema = action.inputSchema as {
+    properties?: Record<string, { default?: unknown }>;
+  } | null;
+  const hasDefaultVars = inputSchema?.properties
+    ? Object.values(inputSchema.properties).some(
+        (prop) => typeof prop.default === 'string' && containsVariableReferences(prop.default)
+      )
+    : false;
+
+  // Early return if no variable references found
+  if (!hasEndpointVars && !hasHeaderVars && !hasDefaultVars) {
+    return result;
+  }
+
+  // Build runtime context for resolution
+  const connectionMetadata = connection.metadata as Record<string, unknown> | null;
+  const runtimeContext = buildRuntimeContext({
+    currentUser: options.variables?.current_user
+      ? {
+          id: options.variables.current_user.id ?? undefined,
+          email: options.variables.current_user.email ?? undefined,
+          name: options.variables.current_user.name ?? undefined,
+        }
+      : undefined,
+    connection: {
+      id: connection.id,
+      name: connection.name,
+      workspaceId: (connectionMetadata?.workspaceId as string) ?? undefined,
+    },
+    request: {
+      environment: getEnvironment(),
+    },
+  });
+
+  // Build request variables (excluding current_user which is handled separately)
+  const requestVariables = options.variables
+    ? Object.fromEntries(
+        Object.entries(options.variables).filter(([key]) => key !== 'current_user')
+      )
+    : undefined;
+
+  // Common resolution options
+  const resolutionOptions = {
+    tenantId,
+    connectionId: connection.id,
+    environment: getEnvironment(),
+    runtimeContext,
+    requestVariables,
+    throwOnMissing: false, // Non-fatal: continue with empty string for missing vars
+  };
+
+  // Resolve endpoint template
+  if (hasEndpointVars) {
+    try {
+      result.endpointResolution = await resolveTemplate(action.endpointTemplate, resolutionOptions);
+      result.action = {
+        ...result.action,
+        endpointTemplate: result.endpointResolution.resolved,
+      };
+      result.hasResolutions = true;
+      result.totalVariablesResolved += result.endpointResolution.variables.filter(
+        (v) => v.found
+      ).length;
+
+      console.log('[GATEWAY] Endpoint variables resolved:', {
+        original: action.endpointTemplate,
+        resolved: result.endpointResolution.resolved,
+        ...summarizeResolution(result.endpointResolution),
+      });
+    } catch (error) {
+      console.warn('[GATEWAY] Endpoint variable resolution error:', error);
+      // Continue with original template on error
+    }
+  }
+
+  // Resolve header configurations
+  if (hasHeaderVars && headers) {
+    try {
+      const headerTemplates: Record<string, string> = {};
+      for (const [key, value] of Object.entries(headers)) {
+        if (containsVariableReferences(value)) {
+          headerTemplates[key] = value;
+        }
+      }
+
+      const resolvedHeaders = await resolveTemplates(headerTemplates, resolutionOptions);
+      result.headerResolutions = resolvedHeaders;
+
+      // Merge resolved headers into action metadata
+      const newHeaders = { ...headers };
+      for (const [key, resolution] of Object.entries(resolvedHeaders)) {
+        newHeaders[key] = resolution.resolved;
+        result.totalVariablesResolved += resolution.variables.filter((v) => v.found).length;
+      }
+
+      result.action = {
+        ...result.action,
+        metadata: {
+          ...actionMetadata,
+          headers: newHeaders,
+        },
+      };
+      result.hasResolutions = true;
+
+      console.log('[GATEWAY] Header variables resolved:', {
+        headersResolved: Object.keys(resolvedHeaders).length,
+      });
+    } catch (error) {
+      console.warn('[GATEWAY] Header variable resolution error:', error);
+      // Continue with original headers on error
+    }
+  }
+
+  // Resolve default parameter values in inputSchema
+  if (hasDefaultVars && inputSchema?.properties) {
+    try {
+      const defaultTemplates: Record<string, string> = {};
+      for (const [propName, propDef] of Object.entries(inputSchema.properties)) {
+        if (typeof propDef.default === 'string' && containsVariableReferences(propDef.default)) {
+          defaultTemplates[propName] = propDef.default;
+        }
+      }
+
+      const resolvedDefaults = await resolveTemplates(defaultTemplates, resolutionOptions);
+      result.defaultResolutions = resolvedDefaults;
+
+      // Build new inputSchema with resolved defaults
+      const newProperties = { ...inputSchema.properties };
+      for (const [propName, resolution] of Object.entries(resolvedDefaults)) {
+        newProperties[propName] = {
+          ...newProperties[propName],
+          default: resolution.resolved,
+        };
+        result.totalVariablesResolved += resolution.variables.filter((v) => v.found).length;
+      }
+
+      result.action = {
+        ...result.action,
+        inputSchema: {
+          ...inputSchema,
+          properties: newProperties,
+        } as typeof action.inputSchema,
+      };
+      result.hasResolutions = true;
+
+      console.log('[GATEWAY] Default value variables resolved:', {
+        defaultsResolved: Object.keys(resolvedDefaults).length,
+      });
+    } catch (error) {
+      console.warn('[GATEWAY] Default value variable resolution error:', error);
+      // Continue with original defaults on error
+    }
+  }
+
+  if (result.hasResolutions) {
+    console.log('[GATEWAY] Variable resolution complete:', {
+      totalVariablesResolved: result.totalVariablesResolved,
+      endpointResolved: !!result.endpointResolution,
+      headersResolved: result.headerResolutions ? Object.keys(result.headerResolutions).length : 0,
+      defaultsResolved: result.defaultResolutions
+        ? Object.keys(result.defaultResolutions).length
+        : 0,
+    });
+  }
+
+  return result;
+}
+
+/**
  * Step 2: Validate input against action's JSON Schema
  */
 function validateInput(action: Action, input: Record<string, unknown>): ValidationResult {
@@ -516,6 +749,17 @@ function buildRequest(
     'Content-Type': 'application/json',
     Accept: 'application/json',
   };
+
+  // Apply action-level headers from metadata (may contain resolved variable values)
+  const actionMetadata = action.metadata as Record<string, unknown> | null;
+  const actionHeaders = actionMetadata?.headers as Record<string, string> | undefined;
+  if (actionHeaders) {
+    for (const [key, value] of Object.entries(actionHeaders)) {
+      if (typeof value === 'string' && value.trim() !== '') {
+        headers[key] = value;
+      }
+    }
+  }
 
   // Build body (for POST/PUT/PATCH)
   let body: unknown = undefined;

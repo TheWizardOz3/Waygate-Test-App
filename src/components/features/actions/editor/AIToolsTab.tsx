@@ -18,9 +18,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Sparkles, Database, Info, Plus, X, Loader2, ChevronDown } from 'lucide-react';
+import { Sparkles, Database, Info, Loader2, Star } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type { JsonSchema } from '@/lib/modules/actions/action.schemas';
 
 interface AIToolsTabProps {
@@ -167,8 +166,6 @@ function AIToolsTabInner({
   onRegenerateToolDescriptions,
 }: AIToolsTabProps) {
   const [isGenerating, setIsGenerating] = useState(false);
-  const [newMetadataField, setNewMetadataField] = useState('');
-  const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Use useWatch for optimized re-renders - only re-render when these specific values change
   const toolDescription = useWatch({ control: form.control, name: 'toolDescription' });
@@ -311,22 +308,68 @@ function AIToolsTabInner({
     [form]
   );
 
-  const addMetadataField = useCallback(() => {
-    if (newMetadataField.trim() && !metadataFields.includes(newMetadataField.trim())) {
-      updateReferenceData({
-        metadataFields: [...metadataFields, newMetadataField.trim()],
-      });
-      setNewMetadataField('');
+  // Get all cached fields (nameField + metadataFields)
+  const cachedFields = useMemo(() => {
+    const fields = new Set<string>();
+    if (referenceData?.nameField) fields.add(referenceData.nameField);
+    if (metadataFields) {
+      metadataFields.forEach((f: string) => fields.add(f));
     }
-  }, [newMetadataField, metadataFields, updateReferenceData]);
+    return Array.from(fields);
+  }, [referenceData?.nameField, metadataFields]);
 
-  const removeMetadataField = useCallback(
-    (field: string) => {
-      updateReferenceData({
-        metadataFields: metadataFields.filter((f: string) => f !== field),
-      });
+  const toggleCacheField = useCallback(
+    (field: string, checked: boolean) => {
+      const currentNameField = referenceData?.nameField || 'name';
+      const currentMetadataFields = metadataFields || [];
+
+      if (checked) {
+        // Adding a field to cache
+        if (!currentMetadataFields.includes(field) && field !== currentNameField) {
+          updateReferenceData({
+            metadataFields: [...currentMetadataFields, field],
+          });
+        }
+      } else {
+        // Removing a field from cache
+        if (field === currentNameField) {
+          // Can't uncheck the display name field - must choose another first
+          return;
+        }
+        updateReferenceData({
+          metadataFields: currentMetadataFields.filter((f: string) => f !== field),
+          // Also remove from lookup fields if it was there
+          lookupFields: (lookupFields || []).filter((f: string) => f !== field),
+        });
+      }
     },
-    [metadataFields, updateReferenceData]
+    [referenceData?.nameField, metadataFields, lookupFields, updateReferenceData]
+  );
+
+  const setAsDisplayName = useCallback(
+    (field: string) => {
+      const currentNameField = referenceData?.nameField || 'name';
+      const currentMetadataFields = metadataFields || [];
+
+      // Move old nameField to metadataFields (if it's not there and not the same)
+      let newMetadataFields = [...currentMetadataFields];
+      if (
+        currentNameField &&
+        currentNameField !== field &&
+        !newMetadataFields.includes(currentNameField)
+      ) {
+        newMetadataFields.push(currentNameField);
+      }
+      // Remove new nameField from metadataFields
+      newMetadataFields = newMetadataFields.filter((f: string) => f !== field);
+
+      updateReferenceData({
+        nameField: field,
+        metadataFields: newMetadataFields,
+      });
+      setLocalNameField(field);
+    },
+    [referenceData?.nameField, metadataFields, updateReferenceData]
   );
 
   const toggleLookupField = useCallback(
@@ -728,119 +771,136 @@ function AIToolsTabInner({
                     </p>
                   </div>
 
-                  {/* Field Mapping */}
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">ID field</Label>
-                      {availableFields.length > 0 ? (
-                        <Select
-                          value={localIdField}
-                          onValueChange={(value) => {
-                            setLocalIdField(value);
-                            updateReferenceData({ idField: value });
-                          }}
-                        >
-                          <SelectTrigger className="font-mono text-sm">
-                            <SelectValue placeholder="Select ID field" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {availableFields.map((field) => (
-                              <SelectItem key={field} value={field} className="font-mono">
-                                {field}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <Input
-                          placeholder="id"
-                          value={localIdField}
-                          onChange={(e) => setLocalIdField(e.target.value)}
-                          onBlur={() => updateReferenceData({ idField: localIdField })}
-                          className="font-mono text-sm"
-                        />
-                      )}
+                  {/* ID Field */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">ID field</Label>
+                    {availableFields.length > 0 ? (
+                      <Select
+                        value={localIdField}
+                        onValueChange={(value) => {
+                          setLocalIdField(value);
+                          updateReferenceData({ idField: value });
+                        }}
+                      >
+                        <SelectTrigger className="max-w-xs font-mono text-sm">
+                          <SelectValue placeholder="Select ID field" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableFields.map((field) => (
+                            <SelectItem key={field} value={field} className="font-mono">
+                              {field}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        placeholder="id"
+                        value={localIdField}
+                        onChange={(e) => setLocalIdField(e.target.value)}
+                        onBlur={() => updateReferenceData({ idField: localIdField })}
+                        className="max-w-xs font-mono text-sm"
+                      />
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Field containing the unique identifier for each item
+                    </p>
+                  </div>
+
+                  {/* Fields to Cache - unified section */}
+                  <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
+                    <div>
+                      <p className="text-sm font-medium">Fields to cache</p>
                       <p className="text-xs text-muted-foreground">
-                        Field containing the unique identifier
+                        Select fields to store. Click the star to set as display name.
                       </p>
                     </div>
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">Primary name field</Label>
-                      {availableFields.length > 0 ? (
-                        <Select
-                          value={localNameField}
-                          onValueChange={(value) => {
-                            setLocalNameField(value);
-                            updateReferenceData({ nameField: value });
-                          }}
-                        >
-                          <SelectTrigger className="font-mono text-sm">
-                            <SelectValue placeholder="Select name field" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {availableFields.map((field) => (
-                              <SelectItem key={field} value={field} className="font-mono">
-                                {field}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <Input
-                          placeholder="name"
-                          value={localNameField}
-                          onChange={(e) => setLocalNameField(e.target.value)}
-                          onBlur={() => updateReferenceData({ nameField: localNameField })}
-                          className="font-mono text-sm"
-                        />
-                      )}
-                      <p className="text-xs text-muted-foreground">
-                        Main field AI uses for lookups (e.g., &quot;name&quot;)
-                      </p>
+                    <div className="flex flex-wrap gap-2">
+                      {(availableFields.length > 0
+                        ? availableFields.filter((f) => f !== localIdField)
+                        : ['name', 'email', 'username', 'display_name', 'title', 'department']
+                      ).map((field) => {
+                        const isDisplayName = field === localNameField;
+                        const isCached = isDisplayName || cachedFields.includes(field);
+
+                        return (
+                          <label
+                            key={field}
+                            className={`flex cursor-pointer items-center gap-2 rounded-md border bg-background px-3 py-1.5 text-sm transition-colors hover:bg-muted/50 ${
+                              isCached ? 'border-primary bg-primary/5' : ''
+                            }`}
+                          >
+                            <Checkbox
+                              checked={isCached}
+                              onCheckedChange={(checked) =>
+                                toggleCacheField(field, checked as boolean)
+                              }
+                            />
+                            <span className="font-mono text-xs">{field}</span>
+                            {isCached && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setAsDisplayName(field);
+                                }}
+                                className={`ml-1 rounded p-0.5 transition-colors ${
+                                  isDisplayName
+                                    ? 'text-amber-500'
+                                    : 'text-muted-foreground/40 hover:text-amber-500'
+                                }`}
+                                title={isDisplayName ? 'Display name' : 'Set as display name'}
+                              >
+                                <Star
+                                  className={`h-3.5 w-3.5 ${isDisplayName ? 'fill-current' : ''}`}
+                                />
+                              </button>
+                            )}
+                          </label>
+                        );
+                      })}
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      <Star className="mr-1 inline h-3 w-3 fill-amber-500 text-amber-500" />
+                      indicates the primary display name shown when looking up items
+                    </p>
                   </div>
 
                   {/* Lookup Configuration */}
                   <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium">Lookup Settings</p>
-                        <p className="text-xs text-muted-foreground">
-                          How AI finds items when given a name or partial match
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Multiple lookup fields */}
-                    <div className="space-y-2">
-                      <Label className="text-xs font-medium">Fields to search</Label>
+                    <div>
+                      <p className="text-sm font-medium">Fields to search</p>
                       <p className="text-xs text-muted-foreground">
-                        AI will search these fields when looking up items. Select multiple for
-                        flexible matching.
+                        AI will search these fields when looking up items by name
                       </p>
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        {(availableFields.length > 0
-                          ? availableFields
-                          : ['name', 'email', 'username', 'display_name', 'title']
-                        ).map((field) => (
-                          <label
-                            key={field}
-                            className="flex cursor-pointer items-center gap-2 rounded-md border bg-background px-3 py-1.5 text-sm hover:bg-muted/50 has-[:checked]:border-primary has-[:checked]:bg-primary/5"
-                          >
-                            <Checkbox
-                              checked={lookupFields.includes(field)}
-                              onCheckedChange={(checked) =>
-                                toggleLookupField(field, checked as boolean)
-                              }
-                            />
-                            <span className="font-mono text-xs">{field}</span>
-                          </label>
-                        ))}
-                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {(cachedFields.length > 0
+                        ? cachedFields
+                        : availableFields.length > 0
+                          ? availableFields.filter((f) => f !== localIdField)
+                          : ['name', 'email', 'username']
+                      ).map((field) => (
+                        <label
+                          key={field}
+                          className={`flex cursor-pointer items-center gap-2 rounded-md border bg-background px-3 py-1.5 text-sm transition-colors hover:bg-muted/50 ${
+                            lookupFields.includes(field) ? 'border-primary bg-primary/5' : ''
+                          }`}
+                        >
+                          <Checkbox
+                            checked={lookupFields.includes(field)}
+                            onCheckedChange={(checked) =>
+                              toggleLookupField(field, checked as boolean)
+                            }
+                          />
+                          <span className="font-mono text-xs">{field}</span>
+                        </label>
+                      ))}
                     </div>
 
                     {/* Fuzzy matching toggle */}
-                    <div className="flex items-center justify-between pt-2">
+                    <div className="flex items-center justify-between border-t pt-3">
                       <div>
                         <Label className="text-xs font-medium">Fuzzy matching</Label>
                         <p className="text-xs text-muted-foreground">
@@ -876,115 +936,6 @@ function AIToolsTabInner({
                   How often to re-sync this data from the API
                 </p>
               </div>
-
-              {/* Advanced Options - Collapsible */}
-              {syncType === 'list' && (
-                <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
-                  <CollapsibleTrigger asChild>
-                    <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground">
-                      <ChevronDown
-                        className={`h-4 w-4 transition-transform ${showAdvanced ? 'rotate-180' : ''}`}
-                      />
-                      Advanced options
-                    </Button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="space-y-4 pt-4">
-                    {/* Extra fields to cache */}
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Label className="text-sm font-medium">Extra fields to cache</Label>
-                        <Tooltip>
-                          <TooltipTrigger>
-                            <Info className="h-3.5 w-3.5 text-muted-foreground" />
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-xs">
-                            Beyond ID and name, which additional fields should be stored? These can
-                            be used for filtering or providing extra context to AI.
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {metadataFields.map((field: string) => (
-                          <Badge
-                            key={field}
-                            variant="secondary"
-                            className="gap-1 font-mono text-xs"
-                          >
-                            {field}
-                            <button
-                              type="button"
-                              onClick={() => removeMetadataField(field)}
-                              className="ml-1 rounded-full hover:bg-destructive/20"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </Badge>
-                        ))}
-                        <div className="flex items-center gap-1">
-                          {availableFields.length > 0 ? (
-                            <Select
-                              value=""
-                              onValueChange={(value) => {
-                                if (value && !metadataFields.includes(value)) {
-                                  updateReferenceData({
-                                    metadataFields: [...metadataFields, value],
-                                  });
-                                }
-                              }}
-                            >
-                              <SelectTrigger className="h-7 w-32 font-mono text-xs">
-                                <SelectValue placeholder="Add field" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {availableFields
-                                  .filter(
-                                    (f) =>
-                                      !metadataFields.includes(f) &&
-                                      f !== localIdField &&
-                                      f !== localNameField
-                                  )
-                                  .map((field) => (
-                                    <SelectItem key={field} value={field} className="font-mono">
-                                      {field}
-                                    </SelectItem>
-                                  ))}
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            <>
-                              <Input
-                                placeholder="field_name"
-                                value={newMetadataField}
-                                onChange={(e) => setNewMetadataField(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    addMetadataField();
-                                  }
-                                }}
-                                className="h-7 w-28 font-mono text-xs"
-                              />
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={addMetadataField}
-                                className="h-7 w-7 p-0"
-                              >
-                                <Plus className="h-3.5 w-3.5" />
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Example: &quot;email&quot;, &quot;is_admin&quot;, &quot;department&quot; for
-                        user lists
-                      </p>
-                    </div>
-                  </CollapsibleContent>
-                </Collapsible>
-              )}
 
               {/* Schema Preview for debugging */}
               {outputSchema && allFields.length > 0 && (

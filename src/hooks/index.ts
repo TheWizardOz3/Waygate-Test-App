@@ -126,3 +126,17 @@ export {
   toolExportKeys,
   type ExportFormat,
 } from './useToolExport';
+
+// Variable hooks
+export {
+  useVariables,
+  useConnectionVariables,
+  useVariable,
+  useCreateVariable,
+  useCreateConnectionVariable,
+  useUpdateVariable,
+  useDeleteVariable,
+  variableKeys,
+  BUILT_IN_VARIABLES,
+  type BuiltInVariable,
+} from './useVariables';

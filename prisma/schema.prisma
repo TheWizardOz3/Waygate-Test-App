@@ -101,51 +101,59 @@ enum PlatformConnectorStatus {
 
 /// Health check status for connections
 enum HealthCheckStatus {
-  healthy   // All checks passed
-  degraded  // Some issues (e.g., expiring credentials, elevated latency)
+  healthy // All checks passed
+  degraded // Some issues (e.g., expiring credentials, elevated latency)
   unhealthy // Critical issues (e.g., expired credentials, test action failed)
 }
 
 /// Health check tier (determines what gets checked)
 enum HealthCheckTier {
-  credential   // Tier 1: Credential-only check (no API calls)
+  credential // Tier 1: Credential-only check (no API calls)
   connectivity // Tier 2: Single test action (1 API call)
-  full_scan    // Tier 3: All actions tested (multiple API calls)
+  full_scan // Tier 3: All actions tested (multiple API calls)
 }
 
 /// Status of reference data items
 enum ReferenceDataStatus {
-  active   // Item exists in external system
+  active // Item exists in external system
   inactive // Item was soft-deleted (removed from external system)
-  deleted  // Item explicitly deleted by user
+  deleted // Item explicitly deleted by user
 }
 
 /// Status of a reference sync job
 enum SyncJobStatus {
-  pending   // Job created, not yet started
-  syncing   // Job is currently running
+  pending // Job created, not yet started
+  syncing // Job is currently running
   completed // Job finished successfully
-  failed    // Job failed with error
+  failed // Job failed with error
 }
 
 /// How the health check was triggered
 enum HealthCheckTrigger {
   scheduled // Triggered by cron job
-  manual    // Triggered by user from dashboard
+  manual // Triggered by user from dashboard
+}
+
+/// Type of variable value
+enum VariableType {
+  string
+  number
+  boolean
+  json
 }
 
 /// Credential health status for health checks
 enum CredentialHealthStatus {
-  active   // Credentials are valid and not expiring soon
+  active // Credentials are valid and not expiring soon
   expiring // Credentials will expire within 1 hour
-  expired  // Credentials have expired
-  missing  // No credentials found for connection
+  expired // Credentials have expired
+  missing // No credentials found for connection
 }
 
 /// Circuit breaker status
 enum CircuitBreakerStatus {
-  closed    // Normal operation
-  open      // Circuit is open, failing fast
+  closed // Normal operation
+  open // Circuit is open, failing fast
   half_open // Testing if service has recovered
 }
 
@@ -155,13 +163,13 @@ enum CircuitBreakerStatus {
 
 /// Multi-tenant accounts - each tenant is an organization/user account
 model Tenant {
-  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name               String   @db.VarChar(255)
-  email              String   @unique @db.VarChar(255)
-  waygateApiKeyHash  String   @unique @map("waygate_api_key_hash") @db.VarChar(255)
-  settings           Json     @default("{}")
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name              String   @db.VarChar(255)
+  email             String   @unique @db.VarChar(255)
+  waygateApiKeyHash String   @unique @map("waygate_api_key_hash") @db.VarChar(255)
+  settings          Json     @default("{}")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
   // Relations
   integrations           Integration[]
@@ -174,6 +182,7 @@ model Tenant {
   healthChecks           HealthCheck[]
   referenceData          ReferenceData[]
   referenceSyncJobs      ReferenceSyncJob[]
+  variables              Variable[]
 
   @@map("tenants")
 }
@@ -216,24 +225,24 @@ model Integration {
 
 /// Platform-owned OAuth connectors - Waygate's registered OAuth apps with major providers
 model PlatformConnector {
-  id                    String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  providerSlug          String                   @unique @map("provider_slug") @db.VarChar(100)
-  displayName           String                   @map("display_name") @db.VarChar(255)
-  description           String?                  @db.Text
-  logoUrl               String?                  @map("logo_url") @db.Text
-  authType              AuthType                 @map("auth_type")
-  encryptedClientId     Bytes                    @map("encrypted_client_id")
-  encryptedClientSecret Bytes                    @map("encrypted_client_secret")
-  authorizationUrl      String                   @map("authorization_url") @db.Text
-  tokenUrl              String                   @map("token_url") @db.Text
-  defaultScopes         String[]                 @default([]) @map("default_scopes")
-  callbackPath          String                   @map("callback_path") @db.VarChar(255)
-  certifications        Json                     @default("{}") // { casa: { status, tier, expiresAt }, appReview: { status, approvedAt } }
-  rateLimits            Json                     @default("{}") @map("rate_limits") // { requestsPerMinute, shared }
-  status                PlatformConnectorStatus  @default(active)
-  metadata              Json                     @default("{}")
-  createdAt             DateTime                 @default(now()) @map("created_at")
-  updatedAt             DateTime                 @updatedAt @map("updated_at")
+  id                    String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  providerSlug          String                  @unique @map("provider_slug") @db.VarChar(100)
+  displayName           String                  @map("display_name") @db.VarChar(255)
+  description           String?                 @db.Text
+  logoUrl               String?                 @map("logo_url") @db.Text
+  authType              AuthType                @map("auth_type")
+  encryptedClientId     Bytes                   @map("encrypted_client_id")
+  encryptedClientSecret Bytes                   @map("encrypted_client_secret")
+  authorizationUrl      String                  @map("authorization_url") @db.Text
+  tokenUrl              String                  @map("token_url") @db.Text
+  defaultScopes         String[]                @default([]) @map("default_scopes")
+  callbackPath          String                  @map("callback_path") @db.VarChar(255)
+  certifications        Json                    @default("{}") // { casa: { status, tier, expiresAt }, appReview: { status, approvedAt } }
+  rateLimits            Json                    @default("{}") @map("rate_limits") // { requestsPerMinute, shared }
+  status                PlatformConnectorStatus @default(active)
+  metadata              Json                    @default("{}")
+  createdAt             DateTime                @default(now()) @map("created_at")
+  updatedAt             DateTime                @updatedAt @map("updated_at")
 
   // Relations
   connections Connection[]
@@ -245,19 +254,19 @@ model PlatformConnector {
 
 /// Connection - links a consuming app to an integration with its own credentials
 model Connection {
-  id                      String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId                String            @map("tenant_id") @db.Uuid
-  integrationId           String            @map("integration_id") @db.Uuid
-  name                    String            @db.VarChar(255)
-  slug                    String            @db.VarChar(100)
-  baseUrl                 String?           @map("base_url") @db.Text
-  isPrimary               Boolean           @default(false) @map("is_primary")
-  connectorType           ConnectorType     @default(custom) @map("connector_type")
-  platformConnectorId     String?           @map("platform_connector_id") @db.Uuid
-  status                  ConnectionStatus  @default(active)
-  metadata                Json              @default("{}")
-  createdAt               DateTime          @default(now()) @map("created_at")
-  updatedAt               DateTime          @updatedAt @map("updated_at")
+  id                  String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String           @map("tenant_id") @db.Uuid
+  integrationId       String           @map("integration_id") @db.Uuid
+  name                String           @db.VarChar(255)
+  slug                String           @db.VarChar(100)
+  baseUrl             String?          @map("base_url") @db.Text
+  isPrimary           Boolean          @default(false) @map("is_primary")
+  connectorType       ConnectorType    @default(custom) @map("connector_type")
+  platformConnectorId String?          @map("platform_connector_id") @db.Uuid
+  status              ConnectionStatus @default(active)
+  metadata            Json             @default("{}")
+  createdAt           DateTime         @default(now()) @map("created_at")
+  updatedAt           DateTime         @updatedAt @map("updated_at")
 
   // Health tracking
   healthStatus            HealthCheckStatus @default(healthy) @map("health_status")
@@ -267,7 +276,7 @@ model Connection {
   healthCheckTestActionId String?           @map("health_check_test_action_id") @db.Uuid
 
   // LLM Response Preamble
-  preambleTemplate        String?           @map("preamble_template") @db.Text
+  preambleTemplate String? @map("preamble_template") @db.Text
 
   // Relations
   tenant                Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -280,6 +289,7 @@ model Connection {
   fieldMappings         FieldMapping[]
   referenceData         ReferenceData[]
   referenceSyncJobs     ReferenceSyncJob[]
+  variables             Variable[]
 
   // Indexes
   @@unique([tenantId, integrationId, slug], name: "connections_tenant_integration_slug_idx")
@@ -430,8 +440,8 @@ model ScrapeJob {
   wishlist         String[]        @default([])
   progress         Int             @default(0)
   progressDetails  Json?           @map("progress_details") // Structured progress: {stage, message, pagesFound, pagesScraped, chunksTotal, chunksProcessed, endpointsFound}
-  result           Json?           // Parsed API structure
-  error            Json?           // Error details if failed
+  result           Json? // Parsed API structure
+  error            Json? // Error details if failed
   cachedContentKey String?         @map("cached_content_key") @db.VarChar(255)
   createdAt        DateTime        @default(now()) @map("created_at")
   updatedAt        DateTime        @updatedAt @map("updated_at")
@@ -479,7 +489,7 @@ model HealthCheck {
   id           String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   connectionId String             @map("connection_id") @db.Uuid
   tenantId     String             @map("tenant_id") @db.Uuid
-  status       HealthCheckStatus  // healthy, degraded, unhealthy
+  status       HealthCheckStatus // healthy, degraded, unhealthy
   checkTier    HealthCheckTier    @map("check_tier") // credential, connectivity, full_scan
   checkTrigger HealthCheckTrigger @map("check_trigger") // scheduled, manual
 
@@ -488,11 +498,11 @@ model HealthCheck {
   credentialExpiresAt DateTime?               @map("credential_expires_at")
 
   // Test action results (Tier 2+)
-  testActionId         String? @map("test_action_id") @db.Uuid
+  testActionId         String?  @map("test_action_id") @db.Uuid
   testActionSuccess    Boolean? @map("test_action_success")
-  testActionLatencyMs  Int?    @map("test_action_latency_ms")
-  testActionStatusCode Int?    @map("test_action_status_code")
-  testActionError      Json?   @map("test_action_error")
+  testActionLatencyMs  Int?     @map("test_action_latency_ms")
+  testActionStatusCode Int?     @map("test_action_status_code")
+  testActionError      Json?    @map("test_action_error")
 
   // Full scan results (Tier 3 only)
   actionsScanned Int?  @map("actions_scanned")
@@ -504,7 +514,7 @@ model HealthCheck {
   circuitBreakerStatus CircuitBreakerStatus? @map("circuit_breaker_status")
 
   // Overall results
-  durationMs Int   @map("duration_ms")
+  durationMs Int      @map("duration_ms")
   error      Json?
   createdAt  DateTime @default(now()) @map("created_at")
 
@@ -523,28 +533,28 @@ model HealthCheck {
 
 /// Cached reference data from external APIs (users, channels, teams, etc.)
 model ReferenceData {
-  id            String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId      String              @map("tenant_id") @db.Uuid
-  integrationId String              @map("integration_id") @db.Uuid
-  connectionId  String?             @map("connection_id") @db.Uuid
+  id            String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String  @map("tenant_id") @db.Uuid
+  integrationId String  @map("integration_id") @db.Uuid
+  connectionId  String? @map("connection_id") @db.Uuid
 
-  dataType      String              @map("data_type") @db.VarChar(100)     // 'users', 'channels', 'repos', etc.
-  externalId    String              @map("external_id") @db.VarChar(255)   // ID from external system
-  name          String              @db.VarChar(500)                        // Display name
-  metadata      Json                @default("{}")                          // Flexible additional fields
+  dataType   String @map("data_type") @db.VarChar(100) // 'users', 'channels', 'repos', etc.
+  externalId String @map("external_id") @db.VarChar(255) // ID from external system
+  name       String @db.VarChar(500) // Display name
+  metadata   Json   @default("{}") // Flexible additional fields
 
-  status        ReferenceDataStatus @default(active)
-  lastSyncedAt  DateTime            @map("last_synced_at")
-  syncedByActionId String?          @map("synced_by_action_id") @db.Uuid
+  status           ReferenceDataStatus @default(active)
+  lastSyncedAt     DateTime            @map("last_synced_at")
+  syncedByActionId String?             @map("synced_by_action_id") @db.Uuid
 
-  createdAt     DateTime            @default(now()) @map("created_at")
-  updatedAt     DateTime            @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  tenant        Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  integration   Integration         @relation(fields: [integrationId], references: [id], onDelete: Cascade)
-  connection    Connection?         @relation(fields: [connectionId], references: [id], onDelete: Cascade)
-  syncedByAction Action?            @relation(fields: [syncedByActionId], references: [id], onDelete: SetNull)
+  tenant         Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  integration    Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  connection     Connection? @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  syncedByAction Action?     @relation(fields: [syncedByActionId], references: [id], onDelete: SetNull)
 
   // Indexes
   @@unique([integrationId, connectionId, dataType, externalId], name: "reference_data_unique_idx")
@@ -558,34 +568,64 @@ model ReferenceData {
 
 /// Tracks reference data sync jobs
 model ReferenceSyncJob {
-  id            String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId      String        @map("tenant_id") @db.Uuid
-  integrationId String        @map("integration_id") @db.Uuid
-  connectionId  String?       @map("connection_id") @db.Uuid
-  dataType      String        @map("data_type") @db.VarChar(100)
+  id            String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String  @map("tenant_id") @db.Uuid
+  integrationId String  @map("integration_id") @db.Uuid
+  connectionId  String? @map("connection_id") @db.Uuid
+  dataType      String  @map("data_type") @db.VarChar(100)
 
-  status        SyncJobStatus @default(pending)
-  startedAt     DateTime?     @map("started_at")
-  completedAt   DateTime?     @map("completed_at")
+  status      SyncJobStatus @default(pending)
+  startedAt   DateTime?     @map("started_at")
+  completedAt DateTime?     @map("completed_at")
 
-  itemsFound    Int           @default(0) @map("items_found")
-  itemsCreated  Int           @default(0) @map("items_created")
-  itemsUpdated  Int           @default(0) @map("items_updated")
-  itemsDeleted  Int           @default(0) @map("items_deleted")
-  itemsFailed   Int           @default(0) @map("items_failed")
+  itemsFound   Int @default(0) @map("items_found")
+  itemsCreated Int @default(0) @map("items_created")
+  itemsUpdated Int @default(0) @map("items_updated")
+  itemsDeleted Int @default(0) @map("items_deleted")
+  itemsFailed  Int @default(0) @map("items_failed")
 
-  error         Json?                                                       // Error details if failed
+  error Json? // Error details if failed
 
-  createdAt     DateTime      @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  integration   Integration   @relation(fields: [integrationId], references: [id], onDelete: Cascade)
-  connection    Connection?   @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  integration Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  connection  Connection? @relation(fields: [connectionId], references: [id], onDelete: Cascade)
 
   // Indexes
   @@index([integrationId, status], name: "reference_sync_jobs_integration_status_idx")
   @@index([tenantId, createdAt(sort: Desc)], name: "reference_sync_jobs_tenant_created_idx")
   @@index([connectionId, status], name: "reference_sync_jobs_connection_status_idx")
   @@map("reference_sync_jobs")
+}
+
+/// Developer-defined variables for dynamic context injection in AI tools
+model Variable {
+  id           String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String  @map("tenant_id") @db.Uuid
+  connectionId String? @map("connection_id") @db.Uuid // null = tenant-level, otherwise connection-specific
+
+  key       String       @db.VarChar(100) // Variable name (e.g., "api_version", "default_channel")
+  value     Json // Stored value (any type)
+  valueType VariableType @default(string) @map("value_type") // string, number, boolean, json
+
+  sensitive      Boolean @default(false) // Encrypt if true
+  encryptedValue Bytes?  @map("encrypted_value") // For sensitive vars (AES-256-GCM)
+  environment    String? @db.VarChar(50) // null = all, or "development", "staging", "production"
+
+  description String? @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  connection Connection? @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  // Constraints - unique per scope+key+env
+  @@unique([tenantId, connectionId, key, environment], name: "variables_unique_idx")
+  @@index([tenantId], name: "variables_tenant_idx")
+  @@index([connectionId], name: "variables_connection_idx")
+  @@map("variables")
 }

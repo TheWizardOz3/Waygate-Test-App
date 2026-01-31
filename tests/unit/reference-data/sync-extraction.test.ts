@@ -14,10 +14,12 @@ describe('Sync Job Extraction', () => {
     const baseConfig: ActionReferenceDataConfig = {
       dataType: 'users',
       syncable: true,
+      syncType: 'list',
       extractionPath: '$.members[*]',
       idField: 'id',
       nameField: 'name',
-      defaultTtlSeconds: 3600,
+      fuzzyMatch: true,
+      defaultTtlSeconds: 86400,
     };
 
     describe('Basic Extraction', () => {
@@ -299,11 +301,13 @@ describe('Sync Job Extraction', () => {
         const config: ActionReferenceDataConfig = {
           dataType: 'users',
           syncable: true,
+          syncType: 'list',
           extractionPath: '$.members[*]',
           idField: 'id',
           nameField: 'real_name',
+          fuzzyMatch: true,
           metadataFields: ['profile.email', 'is_admin', 'is_bot'],
-          defaultTtlSeconds: 3600,
+          defaultTtlSeconds: 86400,
         };
 
         const data = {
@@ -351,11 +355,13 @@ describe('Sync Job Extraction', () => {
         const config: ActionReferenceDataConfig = {
           dataType: 'channels',
           syncable: true,
+          syncType: 'list',
           extractionPath: '$.channels[*]',
           idField: 'id',
           nameField: 'name',
+          fuzzyMatch: true,
           metadataFields: ['is_private', 'num_members', 'topic.value'],
-          defaultTtlSeconds: 3600,
+          defaultTtlSeconds: 86400,
         };
 
         const data = {
@@ -396,11 +402,13 @@ describe('Sync Job Extraction', () => {
         const config: ActionReferenceDataConfig = {
           dataType: 'repositories',
           syncable: true,
+          syncType: 'list',
           extractionPath: '$',
           idField: 'id',
           nameField: 'full_name',
+          fuzzyMatch: true,
           metadataFields: ['private', 'default_branch', 'language'],
-          defaultTtlSeconds: 7200,
+          defaultTtlSeconds: 86400,
         };
 
         const data = [

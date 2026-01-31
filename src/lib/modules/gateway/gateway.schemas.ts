@@ -89,6 +89,40 @@ export type GatewayMappingOptions = z.infer<typeof GatewayMappingOptionsSchema>;
 // =============================================================================
 
 /**
+ * Current user context for variable resolution
+ */
+export const CurrentUserVariableContextSchema = z.object({
+  /** User ID */
+  id: z.string().nullable().optional(),
+  /** User email */
+  email: z.string().nullable().optional(),
+  /** User display name */
+  name: z.string().nullable().optional(),
+});
+
+export type CurrentUserVariableContext = z.infer<typeof CurrentUserVariableContextSchema>;
+
+/**
+ * Runtime variables that can be passed with tool invocation.
+ * These are highest priority in the resolution order.
+ *
+ * @example
+ * {
+ *   current_user: { id: "user_123", name: "John Doe" },
+ *   api_version: "v2",
+ *   custom_setting: true
+ * }
+ */
+export const RuntimeVariablesSchema = z
+  .object({
+    /** Current user context (for ${current_user.*} variables) */
+    current_user: CurrentUserVariableContextSchema.optional(),
+  })
+  .catchall(z.unknown());
+
+export type RuntimeVariables = z.infer<typeof RuntimeVariablesSchema>;
+
+/**
  * A single item in the injection context (reference data)
  */
 export const InjectionContextItemSchema = z.object({
@@ -161,6 +195,17 @@ export const GatewayInvokeOptionsSchema = z.object({
    * to their corresponding IDs using this context data.
    */
   context: InjectionContextSchema.optional(),
+  /**
+   * Runtime variables for dynamic context injection.
+   * These override stored tenant/connection variables with highest priority.
+   *
+   * @example
+   * {
+   *   current_user: { id: "user_123", name: "John Doe" },
+   *   api_version: "v2"
+   * }
+   */
+  variables: RuntimeVariablesSchema.optional(),
 });
 
 export type GatewayInvokeOptions = z.infer<typeof GatewayInvokeOptionsSchema>;

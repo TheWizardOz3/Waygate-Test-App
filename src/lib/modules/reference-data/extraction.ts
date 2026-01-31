@@ -38,6 +38,14 @@ export function extractReferenceItems(
 ): ExtractedReferenceItem[] {
   const { extractionPath, idField, nameField, metadataFields = [] } = config;
 
+  // For list sync type, these fields are required
+  if (!extractionPath || !idField || !nameField) {
+    console.warn(
+      '[SYNC] Missing required fields for list sync: extractionPath, idField, nameField'
+    );
+    return [];
+  }
+
   try {
     // Extract the array of items using the path
     const items = extractByPath(data, extractionPath);

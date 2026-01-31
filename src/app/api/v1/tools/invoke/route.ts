@@ -19,9 +19,11 @@ import {
   type SuccessFormatterInput,
   type ResolutionContext,
 } from '@/lib/modules/tool-export';
-import type {
-  GatewaySuccessResponse,
-  GatewayErrorResponse,
+import {
+  RuntimeVariablesSchema,
+  type GatewaySuccessResponse,
+  type GatewayErrorResponse,
+  type RuntimeVariables,
 } from '@/lib/modules/gateway/gateway.schemas';
 
 // =============================================================================
@@ -49,6 +51,18 @@ const ToolInvokeRequestSchema = z.object({
   context: z.record(z.string(), z.array(ContextItemSchema)).optional(),
   /** Optional connection ID for multi-app integrations */
   connectionId: z.string().uuid().optional(),
+  /**
+   * Optional runtime variables for dynamic context injection.
+   * These override stored tenant/connection variables with highest priority.
+   *
+   * @example
+   * {
+   *   current_user: { id: "user_123", name: "John Doe" },
+   *   api_version: "v2",
+   *   custom_setting: "some_value"
+   * }
+   */
+  variables: RuntimeVariablesSchema.optional(),
 });
 
 // =============================================================================
@@ -152,7 +166,7 @@ export const POST = withApiAuth(async (request: NextRequest, { tenant }) => {
       );
     }
 
-    const { tool, params, context, connectionId } = validationResult.data;
+    const { tool, params, context, connectionId, variables } = validationResult.data;
 
     // Parse tool name
     const parsed = parseToolName(tool);
@@ -203,6 +217,7 @@ export const POST = withApiAuth(async (request: NextRequest, { tenant }) => {
     const result = await invokeAction(tenant.id, integrationSlug, actionSlug, params, {
       context: context as ResolutionContext | undefined,
       connectionId,
+      variables: variables as RuntimeVariables | undefined,
     });
     const latencyMs = Date.now() - startTime;
 
