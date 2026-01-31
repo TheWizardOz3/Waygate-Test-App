@@ -27,17 +27,38 @@ export type SyncJobStatus = z.infer<typeof SyncJobStatusSchema>;
 // =============================================================================
 
 /**
+ * Sync type for reference data:
+ * - 'list': Extracts items from an array for individual lookup (users, channels, etc.)
+ * - 'object': Caches the full response as a single object (schemas, configs, etc.)
+ */
+export const SyncTypeSchema = z.enum(['list', 'object']);
+export type SyncType = z.infer<typeof SyncTypeSchema>;
+
+/**
  * Configuration for extracting reference data from an action's response
  * Stored in Action.metadata.referenceData
  */
 export const ActionReferenceDataConfigSchema = z.object({
+  /** Label for this data type (e.g., 'users', 'channels', 'crm_schema') */
   dataType: z.string().min(1).max(100),
+  /** Whether this action is enabled for syncing */
   syncable: z.boolean(),
-  extractionPath: z.string().min(1),
-  idField: z.string().min(1),
-  nameField: z.string().min(1),
+  /** Type of sync: 'list' for arrays of items, 'object' for full response caching */
+  syncType: SyncTypeSchema.optional().default('list'),
+  /** JSONPath to extract items (for list sync) - e.g., '$.members[*]' */
+  extractionPath: z.string().optional(),
+  /** Field name for the unique identifier (for list sync) */
+  idField: z.string().optional(),
+  /** Primary field name for display/lookup (for list sync) */
+  nameField: z.string().optional(),
+  /** Multiple fields to search when looking up items (for list sync) */
+  lookupFields: z.array(z.string()).optional(),
+  /** Whether to use fuzzy/partial matching for lookups */
+  fuzzyMatch: z.boolean().optional().default(true),
+  /** Additional fields to cache beyond ID and name */
   metadataFields: z.array(z.string()).optional(),
-  defaultTtlSeconds: z.number().int().positive().optional().default(3600),
+  /** How often to resync in seconds (default: 1 day = 86400) */
+  defaultTtlSeconds: z.number().int().positive().optional().default(86400),
 });
 
 export type ActionReferenceDataConfig = z.infer<typeof ActionReferenceDataConfigSchema>;

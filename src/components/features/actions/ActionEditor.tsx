@@ -202,6 +202,9 @@ export function ActionEditor({ integrationId, actionId }: ActionEditorProps) {
           retryConfig: data.retryConfig,
           validationConfig: data.validationConfig,
           metadata: data.metadata,
+          toolDescription: data.toolDescription,
+          toolSuccessTemplate: data.toolSuccessTemplate,
+          toolErrorTemplate: data.toolErrorTemplate,
         };
         await updateAction.mutateAsync(updatePayload);
         toast.success('Action updated successfully');
@@ -381,6 +384,7 @@ export function ActionEditor({ integrationId, actionId }: ActionEditorProps) {
               <AIToolsTab
                 form={form as unknown as import('react-hook-form').UseFormReturn<FieldValues>}
                 integrationName={integration?.name}
+                outputSchema={form.watch('outputSchema') as JsonSchema}
                 onRegenerateToolDescriptions={
                   isEditing ? handleRegenerateToolDescriptions : undefined
                 }

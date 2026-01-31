@@ -69,7 +69,7 @@ export function DashboardLayout({ children, title }: DashboardLayoutProps) {
       </div>
 
       {/* Main Content Area */}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col">
         {/* Header with mobile menu */}
         <header className="flex h-16 items-center justify-between border-b bg-background px-4 md:px-6">
           {/* Mobile menu button */}

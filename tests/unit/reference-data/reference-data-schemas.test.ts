@@ -81,7 +81,8 @@ describe('Reference Data Schemas', () => {
 
       const result = ActionReferenceDataConfigSchema.parse(config);
 
-      expect(result.defaultTtlSeconds).toBe(3600);
+      // Default TTL is 1 day (86400 seconds)
+      expect(result.defaultTtlSeconds).toBe(86400);
     });
 
     it('should reject empty dataType', () => {
@@ -96,13 +97,45 @@ describe('Reference Data Schemas', () => {
       expect(() => ActionReferenceDataConfigSchema.parse(config)).toThrow();
     });
 
-    it('should reject missing required fields', () => {
-      expect(() =>
-        ActionReferenceDataConfigSchema.parse({
-          dataType: 'users',
-          syncable: true,
-        })
-      ).toThrow();
+    it('should accept minimal config for object sync type', () => {
+      // For object sync type, extractionPath, idField, nameField are optional
+      const result = ActionReferenceDataConfigSchema.parse({
+        dataType: 'crm_schema',
+        syncable: true,
+        syncType: 'object',
+      });
+
+      expect(result.dataType).toBe('crm_schema');
+      expect(result.syncable).toBe(true);
+      expect(result.syncType).toBe('object');
+      expect(result.defaultTtlSeconds).toBe(86400);
+    });
+
+    it('should apply default syncType of list', () => {
+      const result = ActionReferenceDataConfigSchema.parse({
+        dataType: 'users',
+        syncable: true,
+        extractionPath: '$.users[*]',
+        idField: 'id',
+        nameField: 'name',
+      });
+
+      expect(result.syncType).toBe('list');
+    });
+
+    it('should accept lookupFields and fuzzyMatch options', () => {
+      const result = ActionReferenceDataConfigSchema.parse({
+        dataType: 'users',
+        syncable: true,
+        extractionPath: '$.users[*]',
+        idField: 'id',
+        nameField: 'name',
+        lookupFields: ['name', 'email', 'username'],
+        fuzzyMatch: false,
+      });
+
+      expect(result.lookupFields).toEqual(['name', 'email', 'username']);
+      expect(result.fuzzyMatch).toBe(false);
     });
 
     it('should reject invalid TTL', () => {

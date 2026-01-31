@@ -173,26 +173,42 @@ Extend action metadata to indicate reference data capability:
 // In Action.metadata JSON field
 interface ActionReferenceConfig {
   referenceData?: {
-    dataType: string;              // 'users', 'channels', etc.
+    dataType: string;              // 'users', 'channels', 'crm_schema', etc.
     syncable: boolean;             // Whether this action can be used for syncing
-    extractionPath: string;        // JSONPath to extract items from response
-    idField: string;               // Field name for external ID
-    nameField: string;             // Field name for display name
+    syncType?: 'list' | 'object';  // 'list' for arrays, 'object' for full response
+    extractionPath?: string;       // JSONPath to extract items (list sync only)
+    idField?: string;              // Field name for external ID (list sync only)
+    nameField?: string;            // Field name for display name (list sync only)
+    lookupFields?: string[];       // Multiple fields to search for lookups
+    fuzzyMatch?: boolean;          // Enable partial/case-insensitive matching
     metadataFields?: string[];     // Additional fields to capture
-    defaultTtlSeconds?: number;    // How often to resync (default: 3600)
+    defaultTtlSeconds?: number;    // How often to resync (default: 86400 = 1 day)
   };
 }
 
-// Example for Slack users.list action
+// Example for Slack users.list action (list sync)
 {
   "referenceData": {
     "dataType": "users",
     "syncable": true,
+    "syncType": "list",
     "extractionPath": "$.members[*]",
     "idField": "id",
     "nameField": "real_name",
+    "lookupFields": ["real_name", "name", "email"],
+    "fuzzyMatch": true,
     "metadataFields": ["email", "is_admin", "is_bot"],
-    "defaultTtlSeconds": 3600
+    "defaultTtlSeconds": 86400
+  }
+}
+
+// Example for CRM schema action (object sync)
+{
+  "referenceData": {
+    "dataType": "crm_schema",
+    "syncable": true,
+    "syncType": "object",
+    "defaultTtlSeconds": 86400
   }
 }
 ```
@@ -436,6 +452,7 @@ async function buildReferenceDataContext(
 ## Implementation Summary
 
 **Completed:** 2026-01-29
+**Updated:** 2026-01-30
 
 ### What Was Built
 
@@ -457,15 +474,34 @@ async function buildReferenceDataContext(
    - `POST /api/v1/internal/reference-sync` - Cron endpoint for background sync
 
 4. **UI Components**
-   - `AIToolsTab.tsx` - Dedicated "AI Tools" tab in Action editor with cleaner layout:
-     - Reference Data Sync section with improved UX (sync interval in days, clearer field labels)
+   - `AIToolsTab.tsx` - Dedicated "AI Tools" tab in Action editor with:
+     - **Two sync types**: "List of items" (users, channels) vs "Complete object" (schemas, configs)
+     - **Smart field selection**: Dropdowns populated from the action's output schema
+     - **Multiple lookup fields**: Configure which fields AI searches when looking up items
+     - **Fuzzy matching toggle**: Enable partial and case-insensitive matching (e.g., "Derek" matches "Derek Osgood")
+     - Sync interval in days with clearer labels
      - Tool Description and Response Templates section
-     - Clickable variable badges for template editing
+     - Collapsible advanced options for extra cached fields
+     - Schema preview for debugging
    - `IntegrationReferenceDataTab.tsx` - Reference Data tab with three sub-tabs:
-     - **Sync Configuration** - Overview of which actions are configured for sync, with quick links to configure more
+     - **Sync Configuration** - Overview of which actions are configured for sync
      - **Cached Data** - Table view of synced reference items with search/filter
      - **Sync History** - View past sync jobs with status and item counts
    - React Query hooks for data fetching
+
+### Sync Types
+
+**List Sync** (`syncType: 'list'`)
+
+- For actions that return arrays of items (users, channels, projects, etc.)
+- AI can look up items by name using configured lookup fields
+- Supports fuzzy/partial matching
+
+**Object Sync** (`syncType: 'object'`)
+
+- For actions that return complete data structures (CRM schemas, configurations, etc.)
+- Full response is cached and provided as AI context
+- No lookup required - entire object available to AI
 
 ### Per-Consumer Sync Behavior
 
@@ -477,5 +513,5 @@ Reference data is synced **per end-user connection**. When multiple end-users co
 
 ### Testing
 
-- 48 unit tests covering schemas and extraction logic
+- 51 unit tests covering schemas and extraction logic
 - All tests passing
