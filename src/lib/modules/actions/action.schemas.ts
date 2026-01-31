@@ -8,7 +8,7 @@
 
 import { z } from 'zod';
 import { ValidationConfigSchema } from '../execution/validation';
-import { ActionReferenceDataConfigSchema } from '../reference-data';
+import { ActionReferenceDataConfigSchema } from '../reference-data/reference-data.schemas';
 
 // =============================================================================
 // Enums
