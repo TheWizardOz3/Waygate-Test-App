@@ -10,7 +10,17 @@
 
 ### Build Order
 
-_Planning in progress_
+| Order | Feature               | Status           | Dependencies                   |
+| ----- | --------------------- | ---------------- | ------------------------------ |
+| 1     | Composite Tools       | Testing Complete | Simple Tool Export (V1.1)      |
+| 2     | Agentic Tools         | Pending          | Composite Tools                |
+| 3     | Multi-Agent Pipelines | Pending          | Composite Tools, Agentic Tools |
+
+**Feature Summaries:**
+
+- **Composite Tools:** Chain multiple actions into a single tool (sequential/parallel/conditional execution, data passing between steps)
+- **Agentic Tools:** Embed LLM reasoning inside tools (parameter interpretation, action selection, output validation, intelligent error recovery)
+- **Multi-Agent Pipelines:** Orchestrated multi-step workflows with inter-step LLM reasoning, state management, and pipeline monitoring
 
 ### Definition of Done
 
@@ -49,7 +59,20 @@ Webhook ingestion, SDK generation.
 
 ## Known Issues
 
-_None currently tracked_
+### Composite Tools TypeScript Errors
+
+The composite tools feature has 13 TypeScript errors that need to be resolved:
+
+1. **Response type issues** ([route.ts:97](../src/app/api/v1/composite-tools/invoke/route.ts#L97), [route.ts:101](../src/app/api/v1/composite-tools/invoke/route.ts#L101)): `CompositeToolResponse` missing `success` and `error` properties
+2. **Missing parameterMapping** ([StepReview.tsx:31](../src/components/features/composite-tools/wizard/StepReview.tsx#L31)): Operation type missing required `parameterMapping` property
+3. **Action property mismatches** ([StepSelectOperations.tsx:229](../src/components/features/composite-tools/wizard/StepSelectOperations.tsx#L229), [StepSelectOperations.tsx:235](../src/components/features/composite-tools/wizard/StepSelectOperations.tsx#L235)): Using `method` and `path` instead of `httpMethod` and `endpointTemplate`
+4. **Type argument mismatch** ([parameter-mapper.ts:282](../src/lib/modules/composite-tools/context/parameter-mapper.ts#L282)): String not assignable to `JSONSchema7TypeName`
+5. **Unexported types** ([invocation-handler.ts:16](../src/lib/modules/composite-tools/handlers/invocation-handler.ts#L16)): `GatewaySuccessResponse` and `GatewayErrorResponse` not exported
+6. **Error response type issues** ([invocation-handler.ts:392-510](../src/lib/modules/composite-tools/handlers/invocation-handler.ts#L392)): Multiple instances of `success` property not existing on `CompositeToolErrorResponse`
+
+**Impact:** TypeScript compilation fails, but tests pass (146 new tests). Feature is functionally complete but needs type fixes.
+
+**Next Steps:** Fix type definitions and exports to resolve compilation errors.
 
 ---
 

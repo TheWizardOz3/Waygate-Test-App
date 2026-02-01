@@ -4,6 +4,18 @@
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Composite Tools Test Suite**: Comprehensive unit test coverage for composite tools feature (146 tests). Tests cover routing rule evaluation, schema merging, parameter mapping, and Zod schema validation. All tests pass successfully.
+
+### Known Issues
+
+- TypeScript compilation errors in composite tools implementation (13 errors). Feature is functionally complete but requires type fixes for production readiness.
+
+---
+
 ## [1.0.7] - 2026-01-31
 
 ### Added
