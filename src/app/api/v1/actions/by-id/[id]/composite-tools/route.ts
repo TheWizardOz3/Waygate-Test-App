@@ -1,5 +1,5 @@
 /**
- * API Route: GET /api/v1/actions/[id]/composite-tools
+ * API Route: GET /api/v1/actions/by-id/[id]/composite-tools
  *
  * Returns composite tools that use the specified action as an operation.
  * Used for displaying "Used in AI Tools" sections in the UI.
@@ -15,12 +15,12 @@ import { getCompositeToolsForAction } from '@/lib/modules/composite-tools/compos
 function extractActionId(request: NextRequest): string | null {
   const url = new URL(request.url);
   const pathParts = url.pathname.split('/');
-  const actionsIndex = pathParts.indexOf('actions');
-  return actionsIndex !== -1 ? pathParts[actionsIndex + 1] : null;
+  const byIdIndex = pathParts.indexOf('by-id');
+  return byIdIndex !== -1 ? pathParts[byIdIndex + 1] : null;
 }
 
 /**
- * GET /api/v1/actions/[id]/composite-tools
+ * GET /api/v1/actions/by-id/[id]/composite-tools
  *
  * Returns a list of composite tools that include this action as an operation.
  */

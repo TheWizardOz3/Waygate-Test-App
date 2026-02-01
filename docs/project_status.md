@@ -1,6 +1,6 @@
 # Project Status: Waygate
 
-**Last Updated:** 2026-01-31
+**Last Updated:** 2026-02-01
 
 ---
 
@@ -10,11 +10,11 @@
 
 ### Build Order
 
-| Order | Feature               | Status           | Dependencies                   |
-| ----- | --------------------- | ---------------- | ------------------------------ |
-| 1     | Composite Tools       | Testing Complete | Simple Tool Export (V1.1)      |
-| 2     | Agentic Tools         | In Progress      | Composite Tools                |
-| 3     | Multi-Agent Pipelines | Pending          | Composite Tools, Agentic Tools |
+| Order | Feature               | Status                      | Dependencies                   |
+| ----- | --------------------- | --------------------------- | ------------------------------ |
+| 1     | Composite Tools       | Testing Complete            | Simple Tool Export (V1.1)      |
+| 2     | Agentic Tools         | ✅ Complete (Param. Interp) | Composite Tools                |
+| 3     | Multi-Agent Pipelines | Pending                     | Composite Tools, Agentic Tools |
 
 **Feature Summaries:**
 
@@ -73,6 +73,23 @@ The composite tools feature has 13 TypeScript errors that need to be resolved:
 **Impact:** TypeScript compilation fails, but tests pass (146 new tests). Feature is functionally complete but needs type fixes.
 
 **Next Steps:** Fix type definitions and exports to resolve compilation errors.
+
+### Agentic Tools TypeScript Errors
+
+The agentic tools feature has 20 TypeScript errors in optional/bonus features:
+
+1. **Regenerate-prompt route** (4 errors): LLM response type issues with systemPrompt and toolDescription properties
+2. **Test-prompt route** (1 error): ContextConfig type mismatch
+3. **Invoke route** (5 errors): Missing toolSlug property, InvocationError statusCode property issues
+4. **Parameter interpreter** (3 errors): Gateway response property access, requestId not in InvokeActionOptions
+5. **Autonomous agent** (3 errors): Safety error codes mismatch, requestId not in InvokeActionOptions
+6. **Google provider** (1 error): Function declaration schema type incompatibility
+7. **Description generator** (2 errors): LLM provider method not implemented
+8. **Service/route** (1 error): Query parameter type handling
+
+**Impact:** Core functionality works (Parameter Interpreter mode fully functional, 187 tests passing). Errors are in optional routes and edge cases.
+
+**Next Steps:** Fix type mismatches in optional features and complete Autonomous Agent implementation.
 
 ---
 

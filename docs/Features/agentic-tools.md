@@ -1,7 +1,7 @@
 # Feature: Agentic Tools (Embedded LLM Tools)
 
 **Milestone:** V1.5 (AI Tool Factory - Agentic Tools)
-**Status:** Planning
+**Status:** ✅ Implemented (Parameter Interpreter mode)
 **Dependencies:** Composite Tools
 **Priority:** P0
 
@@ -11,54 +11,54 @@
 
 ### 1.1 One-Line Summary
 
-Agentic Tools embed configurable LLMs inside tools to handle complex operations through natural language interpretation, intelligent parameter resolution, and multi-step execution with specialized context.
+Agentic Tools embed configurable LLMs inside tools to translate natural language requests into structured API calls, or autonomously select and execute tools to accomplish complex goals.
 
 ### 1.2 User Story
 
-> As an **AI application developer**, I want to **create tools with embedded LLMs that can interpret high-level natural language requests and handle complex multi-step operations**, so that **my parent agent can delegate complex tasks without needing to understand all the implementation details**.
+> As an **AI application developer**, I want to **create tools with embedded LLMs that can interpret natural language and generate precise API parameters**, so that **my parent agent can use simple language instead of learning complex API syntax**.
 
 ### 1.3 Problem Statement
 
 Composite Tools (V1.5 Phase 1) enable routing and operation selection, but still require the parent agent to:
 
-1. **Understand complex API semantics** — e.g., knowing HubSpot's exact query syntax, field names, filter operators
-2. **Construct precise parameters** — e.g., generating valid GraphQL queries, handling pagination, building search filters
-3. **Handle multi-step flows** — e.g., search → enrich → update requires multiple tool calls and data passing
-4. **Retry and error recovery** — e.g., fixing validation errors, handling rate limits, adjusting parameters
+1. **Understand complex API semantics** — e.g., knowing HubSpot's exact SOSL query syntax, field names, filter operators
+2. **Construct precise parameters** — e.g., generating valid GraphQL queries, SQL statements, complex search filters
 
 Real-world examples from DoubleO that demonstrate the need:
 
-**Without Agentic Tool:**
+**Example 1: Database Tool (Parameter Interpreter Mode)**
 
 ```
-Parent Agent: "Update all Acme Corp deals to Negotiation stage"
+Without Agentic Tool:
+Parent Agent: Must generate exact SQL:
+  "UPDATE users SET status = 'inactive' WHERE last_login < DATE_SUB(NOW(), INTERVAL 90 DAY)"
+
+With Agentic Tool:
+Parent Agent: "Mark users who haven't logged in for 90 days as inactive"
   ↓
-Agent must:
-1. Know HubSpot's deal search syntax
-2. Generate search query with correct field names
-3. Handle pagination
-4. Parse results
-5. Generate update requests for each deal
-6. Handle errors individually
-  ↓
-Result: Complex, error-prone, low accuracy
+Database Tool (embedded LLM):
+- Interprets intent → UPDATE query
+- Has schema context → knows table/field names
+- Generates SQL → executes → returns "Updated 23 users"
 ```
 
-**With Agentic Tool:**
+**Example 2: Research Tool (Autonomous Agent Mode)**
 
 ```
-Parent Agent: "Update all Acme Corp deals to Negotiation stage"
+Without Agentic Tool:
+Parent Agent: Must decide tool sequence:
+  1. Call web_search("competitor pricing")
+  2. Parse results manually
+  3. Call scrape_url for each result
+  4. Aggregate findings
+
+With Agentic Tool:
+Parent Agent: "Find competitor pricing for top 3 competitors"
   ↓
-CRM Agentic Tool (with embedded LLM):
-1. Interprets task → understands "search + batch update"
-2. Has HubSpot schema context → knows deal fields
-3. Generates search: deals.company_name contains "Acme Corp"
-4. Executes search, handles pagination
-5. Plans batch update operations
-6. Executes updates with error handling
-7. Returns summary: "Updated 3 deals to Negotiation"
-  ↓
-Result: Simple, accurate, reliable
+Research Tool (embedded LLM):
+- Autonomously decides: web search → scrape URLs → extract pricing
+- Executes tool sequence internally
+- Returns: Aggregated pricing comparison
 ```
 
 ### 1.4 Business Value
@@ -69,11 +69,12 @@ Result: Simple, accurate, reliable
 
 ### 1.5 Relationship to DoubleO Tool Levels
 
-| Level                                         | Description                                         | Waygate Status             |
-| --------------------------------------------- | --------------------------------------------------- | -------------------------- |
-| **Level 1: Simple Operation Tools**           | Direct wrappers around specific operations          | ✅ Complete (V1.1)         |
-| **Composite Tools**                           | Route to correct operation with deterministic logic | ✅ Complete (V1.5 Phase 1) |
-| **Level 2: Intelligent Tools** (this feature) | Embed LLMs for complex reasoning and execution      | 🎯 This Feature            |
+| Level                                         | Description                                           | Waygate Status                  |
+| --------------------------------------------- | ----------------------------------------------------- | ------------------------------- |
+| **Level 1: Simple Operation Tools**           | Direct wrappers around specific operations            | ✅ Complete (V1.1)              |
+| **Composite Tools**                           | Route to correct operation with deterministic logic   | ✅ Complete (V1.5 Phase 1)      |
+| **Level 2: Intelligent Tools** (this feature) | Embed LLMs for parameter interpretation or tool usage | 🎯 This Feature                 |
+| **Level 3: Multi-Agent Workflows**            | Sequential discrete agents with data passing          | ⏳ Next (Multi-Agent Pipelines) |
 
 ---
 
@@ -85,84 +86,105 @@ Result: Simple, accurate, reliable
 
 Each Agentic Tool has a configurable embedded LLM:
 
-| Configuration         | Description                        | Options                                                   |
-| --------------------- | ---------------------------------- | --------------------------------------------------------- |
-| **Model**             | Which LLM to use                   | Claude Sonnet, Claude Opus, GPT-4, GPT-4o, Gemini 1.5 Pro |
-| **System Prompt**     | Instructions for the embedded LLM  | User-editable template with placeholders                  |
-| **Temperature**       | Creativity vs consistency          | 0.0 - 1.0 (default: 0.2 for deterministic)                |
-| **Max Tokens**        | Output length limit                | 1000 - 8000                                               |
-| **Tool Allocation**   | Which actions/operations available | Select from integrations or composite tools               |
-| **Context Injection** | Additional context to provide      | Schemas, reference data, documentation                    |
+| Configuration         | Description                        | Options                                               |
+| --------------------- | ---------------------------------- | ----------------------------------------------------- |
+| **Model**             | Which LLM to use                   | Claude Opus 4.5, Claude Sonnet 4.5, Gemini 3          |
+| **Reasoning Level**   | Reasoning depth (where supported)  | None, Low, Medium, High (model-dependent)             |
+| **System Prompt**     | Instructions for the embedded LLM  | User-editable template with variable placeholders     |
+| **Temperature**       | Creativity vs consistency          | 0.0 - 1.0 (default: 0.2 for parameter interpretation) |
+| **Max Tokens**        | Output length limit                | 1000 - 8000                                           |
+| **Tool Allocation**   | Which actions/operations available | Select from integrations or composite tools           |
+| **Context Variables** | Context to inject in prompts       | Schemas, reference data, documentation as variables   |
 
 #### 2.1.2 Two Execution Modes
 
-**Deterministic Mode:**
+**Parameter Interpreter Mode:**
 
-- Embedded LLM interprets parameters and formats requests
-- **No tool selection** — the LLM uses a fixed set of operations
-- Useful for: Parameter interpretation, query generation, response formatting
-- Example: CRM tool that always uses "search deals" → "update deals" but interprets natural language queries
+- Embedded LLM translates natural language → structured parameters/queries
+- **Single LLM call** per invocation
+- LLM outputs JSON with structured parameters
+- Waygate executes the action(s) with generated parameters
+- **No tool selection** — predetermined action sequence
+- Example: Database tool - "update all active users" → generates SQL query → executed by system
 
-**Agentic Mode:**
+**Autonomous Agent Mode:**
 
-- Full reasoning with tool selection capability
-- **LLM chooses which tools to use** from allocated tool set
-- Can orchestrate multi-step operations
-- Useful for: Complex workflows, conditional logic, error recovery
-- Example: Research tool that decides whether to use web search, PDF extraction, or API calls based on the request
+- Embedded LLM autonomously selects and executes tools
+- **Multiple tool calls** within single tool invocation
+- LLM has tool selection capability (like parent agent, but scoped)
+- Can call multiple tools in sequence to accomplish goal
+- **All execution happens within single tool invocation**
+- Example: Research tool - LLM decides to use web search, scraping, extraction, then aggregates results
 
-#### 2.1.3 Specialized Context
+**What's NOT in this feature (deferred to Multi-Agent Pipelines):**
 
-Agentic Tools have access to specialized context that simple tools don't:
+- Sequential discrete agents with separate contexts (e.g., Agent 1 → execute → Agent 2 → execute → Agent 3)
+- Data passing between separate agent instances
+- Multi-step orchestration with separate agent lifecycle management
 
-- **Integration Schemas** — Full API schemas, field definitions, valid values
-- **Reference Data** — Users, channels, custom fields (from Reference Data Sync)
-- **Historical Patterns** — Successful query patterns, common parameters (future)
-- **Documentation** — API docs, examples, constraints (embedded in system prompt)
+#### 2.1.3 Context Injection
+
+Agentic Tools support two types of context:
+
+**1. Standard Context (existing system):**
+
+- Integration credentials (OAuth tokens, API keys)
+- Reference data (users, channels, custom fields)
+- Connection settings (base URL, headers)
+
+**2. Prompt Variables (new for agentic tools):**
+
+- `{{integration_schema}}` — API schema with field names, types, valid values
+- `{{reference_data}}` — Injected as variables in system prompt
+- `{{user_input}}` — The natural language task/request
+- `{{available_tools}}` — List of tools (Autonomous Agent Mode only)
+- Custom variables defined by user
+
+These variables are replaced in the system prompt at invocation time.
 
 ### 2.2 Functional Requirements
 
-| ID    | Requirement                                                             | Priority | Mode          |
-| ----- | ----------------------------------------------------------------------- | -------- | ------------- |
-| FR-1  | Configure embedded LLM (model, prompt, temperature, tokens)             | MUST     | Both          |
-| FR-2  | Allocate tools/actions available to embedded LLM                        | MUST     | Both          |
-| FR-3  | Deterministic mode: Fixed operation sequence with LLM interpretation    | MUST     | Deterministic |
-| FR-4  | Agentic mode: LLM selects tools and orchestrates steps                  | MUST     | Agentic       |
-| FR-5  | Inject integration schemas as context                                   | MUST     | Both          |
-| FR-6  | Inject reference data as context                                        | MUST     | Both          |
-| FR-7  | System prompt templating with placeholders                              | MUST     | Both          |
-| FR-8  | Editable system prompt with AI-generated defaults                       | MUST     | Both          |
-| FR-9  | Track execution: parent request → embedded LLM calls → tool invocations | MUST     | Both          |
-| FR-10 | Detailed logging of embedded LLM reasoning                              | SHOULD   | Agentic       |
-| FR-11 | Cost tracking for embedded LLM calls                                    | SHOULD   | Both          |
-| FR-12 | Timeout and max-steps limits for safety                                 | MUST     | Agentic       |
-| FR-13 | Export agentic tools in all formats (Universal, LangChain, MCP)         | MUST     | Both          |
-| FR-14 | Error recovery prompts for embedded LLM                                 | SHOULD   | Agentic       |
-| FR-15 | Schema drift detection (API changes break embedded context)             | SHOULD   | Both          |
+| ID    | Requirement                                                                  | Priority | Mode                  |
+| ----- | ---------------------------------------------------------------------------- | -------- | --------------------- |
+| FR-1  | Configure embedded LLM (model, reasoning level, prompt, temperature, tokens) | MUST     | Both                  |
+| FR-2  | Allocate tools/actions available to embedded LLM                             | MUST     | Both                  |
+| FR-3  | Parameter Interpreter: LLM generates JSON params, system executes            | MUST     | Parameter Interpreter |
+| FR-4  | Autonomous Agent: LLM selects and executes tools autonomously                | MUST     | Autonomous Agent      |
+| FR-5  | Inject integration schemas as prompt variables                               | MUST     | Both                  |
+| FR-6  | Inject reference data as prompt variables                                    | MUST     | Both                  |
+| FR-7  | System prompt templating with variable placeholders                          | MUST     | Both                  |
+| FR-8  | Editable system prompt with AI-generated defaults                            | MUST     | Both                  |
+| FR-9  | Cost tracking for embedded LLM calls (tokens, USD)                           | MUST     | Both                  |
+| FR-10 | Langsmith/OpenTelemetry compatibility for execution tracing                  | MUST     | Both                  |
+| FR-11 | Timeout and max-steps limits for safety                                      | MUST     | Autonomous Agent      |
+| FR-12 | Export agentic tools in all formats (Universal, LangChain, MCP)              | MUST     | Both                  |
+| FR-13 | Reasoning level control (where model supports)                               | SHOULD   | Both                  |
+| FR-14 | Schema drift detection (API changes break embedded context)                  | SHOULD   | Both                  |
+| FR-15 | Custom prompt variables beyond built-in ones                                 | SHOULD   | Both                  |
 
 ### 2.3 Non-Functional Requirements
 
-| Requirement | Target                                                      | Measurement                  |
-| ----------- | ----------------------------------------------------------- | ---------------------------- |
-| Latency     | Agentic tool invocation overhead < 2s (excluding LLM calls) | Orchestration time           |
-| Cost        | Track and report embedded LLM token usage per invocation    | Token counter                |
-| Safety      | Max 10 steps or 5 minutes before timeout                    | Circuit breaker              |
-| Reliability | Embedded LLM error rate < 5%                                | Success vs total invocations |
+| Requirement | Target                                                      | Measurement        |
+| ----------- | ----------------------------------------------------------- | ------------------ |
+| Latency     | Agentic tool orchestration overhead < 500ms (excluding LLM) | Orchestration time |
+| Cost        | Track and report embedded LLM token usage per invocation    | Token counter      |
+| Safety      | Max 10 tool calls or 5 minutes before timeout (Autonomous)  | Circuit breaker    |
+| Reliability | LLM-generated parameter validation before execution         | Schema validation  |
 
 ### 2.4 Acceptance Criteria
 
-- [ ] **Given** an agentic CRM tool in deterministic mode, **when** invoked with "Update all Acme Corp deals to Negotiation", **then** embedded LLM generates correct HubSpot search query and executes batch update
-- [ ] **Given** an agentic research tool in agentic mode, **when** invoked with "Find competitor pricing", **then** LLM autonomously decides to use web search + scraping and returns aggregated results
-- [ ] **Given** an agentic tool with integration schema context, **when** embedded LLM generates a query, **then** it uses correct field names and valid values from schema
-- [ ] **Given** an agentic tool invocation, **when** viewing execution logs, **then** see full trace: parent request → embedded LLM reasoning → each tool call → final response
+- [ ] **Given** a Database tool in Parameter Interpreter mode, **when** invoked with "mark users inactive who haven't logged in for 90 days", **then** embedded LLM generates valid SQL UPDATE query and executes successfully
+- [ ] **Given** a Research tool in Autonomous Agent mode, **when** invoked with "find competitor pricing", **then** LLM autonomously uses web search and scraping tools and returns aggregated results
+- [ ] **Given** an agentic tool with integration schema as prompt variable, **when** embedded LLM generates parameters, **then** it uses correct field names and valid values from schema
+- [ ] **Given** an agentic tool invocation, **when** using Langsmith tracing, **then** parent system can view embedded LLM calls and tool executions in trace
 - [ ] **Given** an agentic tool with cost tracking, **when** invoked, **then** logs show embedded LLM tokens used and estimated cost
 
-### 2.5 Out of Scope
+### 2.5 Out of Scope (Multi-Agent Pipelines Feature)
 
-- **Multi-tenant embedded LLM fine-tuning** — Using tenant-specific training data (V2+)
-- **Embedded memory/state** — LLM remembering previous invocations (V2+)
-- **Human-in-the-loop approvals** — Requiring user approval mid-execution (V2+)
-- **Streaming responses** — Real-time output from embedded LLM (V2+)
+- **Sequential discrete agents** — Multiple separate agent instances with separate lifecycles (e.g., Agent 1 → execute → Agent 2 → execute → Agent 3)
+- **Inter-agent data passing** — Passing output from one agent as input to another agent
+- **Multi-step orchestration** — Separate agent coordination and state management
+- **Error recovery across agents** — Retry logic spanning multiple agent instances
 
 ---
 
@@ -189,142 +211,109 @@ Settings
 ```
 AI Tools → "Create Tool" → Select "Agentic Tool"
         ↓
-   Name & Description → Select Execution Mode (Deterministic | Agentic)
+   Name & Description → Select Execution Mode
         ↓
    Configure Embedded LLM:
-   - Select Model (Claude Sonnet, GPT-4, etc.)
+   - Select Model (Opus 4.5, Sonnet 4.5, Gemini 3)
+   - Set Reasoning Level (if supported)
    - Edit System Prompt (with AI-generated default)
    - Set Temperature, Max Tokens
         ↓
    Allocate Tools:
-   - Deterministic: Select operation sequence
-   - Agentic: Select available tools for LLM to choose from
+   - Parameter Interpreter: Select target action(s)
+   - Autonomous Agent: Select available tools for LLM
         ↓
-   Configure Context Injection:
+   Configure Context Variables:
    - Integration schemas (auto-loaded for selected tools)
    - Reference data sources
-   - Additional documentation/constraints
+   - Custom variables
         ↓
    Define Input Parameters → Generate AI Description → Preview → Save
 ```
 
-**Happy Path:**
+**Happy Path (Parameter Interpreter Mode):**
 
-1. User navigates to "AI Tools" → "Create Tool" → "Agentic Tool"
-2. User names tool (e.g., "HubSpot Deal Manager") and selects mode: "Deterministic"
-3. User configures embedded LLM:
-   - Model: Claude Sonnet 4
-   - Temperature: 0.2 (deterministic)
-   - System Prompt: AI generates default based on tool purpose
-4. User allocates tools (Deterministic mode):
-   - Step 1: `hubspot/search-deals`
-   - Step 2: `hubspot/update-deal` (batch)
-5. System auto-loads HubSpot schema as context for embedded LLM
-6. User defines input: `{ task: string }` (natural language task description)
-7. System generates tool description using embedded LLM's capabilities
-8. User previews and saves
+1. User creates "Database Manager" tool
+2. Selects mode: "Parameter Interpreter"
+3. Configures LLM: Sonnet 4.5, Reasoning: None, Temperature: 0.1
+4. System prompt generated with `{{database_schema}}` variable
+5. Allocates target action: `postgres/execute-query`
+6. Schema auto-injected as variable
+7. Input parameter: `{ task: string }` (natural language)
+8. Tool exports as simple tool with natural language input
+
+**Happy Path (Autonomous Agent Mode):**
+
+1. User creates "Research Assistant" tool
+2. Selects mode: "Autonomous Agent"
+3. Configures LLM: Opus 4.5, Reasoning: High, Temperature: 0.3
+4. System prompt includes `{{available_tools}}` variable
+5. Allocates tools: `google/search`, `firecrawl/scrape`, `pdf-extract/extract`
+6. Safety limits: Max 10 tool calls, 5 min timeout
+7. Input parameter: `{ task: string }`
+8. Tool exports with natural language input, LLM handles tool orchestration internally
 
 ### 3.3 User Flow: Configuring System Prompts
 
-System prompts are critical for embedded LLM behavior. The UI provides:
+System prompts use variable placeholders that are replaced at invocation:
 
-1. **AI-Generated Default** — Based on tool purpose, allocated tools, and mode
-2. **Template Placeholders** — `{{integration_schema}}`, `{{reference_data}}`, `{{user_task}}`
-3. **Inline Editing** — Rich text editor with syntax highlighting
-4. **Regenerate Option** — Re-generate default if tool configuration changes
-5. **Version History** — Track prompt changes (future)
-
-**Example System Prompt (Deterministic CRM Tool):**
+**Example System Prompt (Parameter Interpreter - Database Tool):**
 
 ```
-You are an embedded AI assistant for HubSpot deal management. Your job is to interpret natural language deal management tasks and execute them using the HubSpot API.
+You are a database query assistant. Generate SQL queries based on natural language requests.
 
-# Your Available Operations (use in this order):
-1. hubspot/search-deals - Search for deals matching criteria
-2. hubspot/update-deal - Update a single deal
-3. hubspot/batch-update-deals - Update multiple deals at once
+# Database Schema:
+{{database_schema}}
 
-# Context You Have Access To:
-## HubSpot Deal Schema:
-{{integration_schema}}
-
-## Available Deal Stages:
-{{reference_data.deal_stages}}
-
-# User's Task:
-{{user_task}}
+# User Request:
+{{user_input}}
 
 # Instructions:
-1. Parse the user's task to understand what they want (search, update, create, etc.)
-2. Generate the appropriate search query using correct HubSpot field names from the schema
-3. Execute the search operation
-4. Based on search results, plan the update operations
-5. Execute batch updates if multiple deals need updating
-6. Return a clear summary of what was done
+1. Analyze the user's request to understand intent (SELECT, INSERT, UPDATE, DELETE)
+2. Use the schema above to identify correct table and field names
+3. Generate a valid SQL query
+4. Return ONLY the SQL query as a JSON object
 
-# Response Format:
-Always return results in this structure:
+# Output Format:
 {
-  "summary": "Human-readable summary of actions taken",
-  "deals_affected": 3,
-  "operations_executed": ["search-deals", "batch-update-deals"]
+  "query": "SQL statement here",
+  "query_type": "SELECT | INSERT | UPDATE | DELETE",
+  "affected_tables": ["table1", "table2"]
 }
 
-# Error Handling:
-- If a field name is ambiguous, use the schema to find the correct field
-- If a stage name doesn't match, suggest the closest valid stage from reference data
-- If an operation fails, explain why and suggest how to fix it
+Never execute destructive queries without explicit confirmation.
 ```
 
-### 3.4 User Flow: Viewing Execution Traces
-
-Agentic tool invocations generate detailed execution traces:
-
-**Execution Detail View:**
+**Example System Prompt (Autonomous Agent - Research Tool):**
 
 ```
-Agentic Tool: HubSpot Deal Manager
-Parent Request: "Update all Acme Corp deals to Negotiation stage"
-Status: Success ✓
-Duration: 3.2s
-Cost: $0.004
+You are a research assistant. Find information using available tools.
 
-Execution Trace:
-├─ [1] Embedded LLM Planning (Claude Sonnet 4)
-│   ├─ Input: "Update all Acme Corp deals to Negotiation stage"
-│   ├─ Reasoning: "Need to search for Acme Corp deals, then batch update"
-│   ├─ Tokens: 1,234 (input: 800, output: 434)
-│   └─ Cost: $0.002
-│
-├─ [2] Tool Call: hubspot/search-deals
-│   ├─ Parameters: { company_name: { contains: "Acme Corp" } }
-│   ├─ Result: 3 deals found
-│   └─ Duration: 456ms
-│
-├─ [3] Embedded LLM Review Results
-│   ├─ Input: Search results + task
-│   ├─ Decision: "Batch update 3 deals to Negotiation stage"
-│   ├─ Tokens: 956
-│   └─ Cost: $0.001
-│
-└─ [4] Tool Call: hubspot/batch-update-deals
-    ├─ Parameters: { deal_ids: [101, 102, 103], stage: "negotiation" }
-    ├─ Result: 3 deals updated successfully
-    ├─ Duration: 1.1s
-    └─ Cost: $0.001
+# Available Tools:
+{{available_tools}}
 
-Final Response:
-"Updated 3 deals for Acme Corp to Negotiation stage: Deal-101, Deal-102, Deal-103"
+# User Request:
+{{user_input}}
+
+# Instructions:
+1. Analyze the request to understand what information is needed
+2. Select appropriate tools from the available tools list
+3. Use tools in sequence to gather comprehensive information
+4. Synthesize findings into a coherent answer
+5. Always cite sources
+
+You can call tools multiple times. Continue until request is fully satisfied or max steps reached.
 ```
 
-### 3.5 UI Locations
+### 3.4 UI Locations
 
-| Location                | Content                                                                    |
-| ----------------------- | -------------------------------------------------------------------------- |
-| **AI Tools → Create**   | Add "Agentic Tool" option alongside "Composite Tool"                       |
-| **Agentic Tool Detail** | Tabs: Configuration, System Prompt, Tool Allocation, Context, Export, Logs |
-| **Execution Logs**      | Detailed trace view with embedded LLM reasoning, tool calls, costs         |
-| **Integration Detail**  | Show which agentic tools use this integration                              |
+| Location                | Content                                                              |
+| ----------------------- | -------------------------------------------------------------------- |
+| **AI Tools → Create**   | Add "Agentic Tool" option alongside "Composite Tool"                 |
+| **Agentic Tool Detail** | Tabs: Configuration, System Prompt, Tool Allocation, Context, Export |
+| **Integration Detail**  | Show which agentic tools use this integration                        |
+
+**Note:** Custom execution trace viewer is NOT built. Users rely on Langsmith/OpenTelemetry for tracing.
 
 ---
 
@@ -334,12 +323,12 @@ Final Response:
 
 **Affected Areas:**
 
-| Area              | Impact | Description                                                                 |
-| ----------------- | ------ | --------------------------------------------------------------------------- |
-| Frontend          | NEW    | Agentic tool configuration UI, system prompt editor, execution trace viewer |
-| Backend           | NEW    | Agentic tool module, embedded LLM orchestrator, context injector            |
-| Database          | NEW    | AgenticTool, AgenticToolExecution, EmbeddedLLMCall tables                   |
-| External Services | NEW    | LLM providers (Claude, GPT-4, Gemini) via API                               |
+| Area              | Impact | Description                                                 |
+| ----------------- | ------ | ----------------------------------------------------------- |
+| Frontend          | NEW    | Agentic tool configuration UI, system prompt editor         |
+| Backend           | NEW    | Agentic tool module, embedded LLM client, prompt processing |
+| Database          | NEW    | AgenticTool, AgenticToolExecution tables                    |
+| External Services | NEW    | LLM providers (Anthropic, Google) via API                   |
 
 ### 4.2 Data Model
 
@@ -349,17 +338,17 @@ Final Response:
 AgenticTool: {
   id: uuid PK,
   tenantId: uuid FK → Tenant,
-  name: string,                    // "HubSpot Deal Manager"
-  slug: string UK,                 // "hubspot-deal-manager"
+  name: string,                    // "Database Manager"
+  slug: string UK,                 // "database-manager"
   description: string,
-  executionMode: enum,             // 'deterministic' | 'agentic'
-  embeddedLLMConfig: jsonb,        // { model, temperature, maxTokens }
-  systemPrompt: text,              // LLM instructions with placeholders
-  toolAllocation: jsonb,           // Tools/operations available to LLM
-  contextConfig: jsonb,            // Schema/reference data injection config
+  executionMode: enum,             // 'parameter_interpreter' | 'autonomous_agent'
+  embeddedLLMConfig: jsonb,        // { provider, model, reasoningLevel, temperature, maxTokens }
+  systemPrompt: text,              // LLM instructions with {{variable}} placeholders
+  toolAllocation: jsonb,           // Target actions or available tools
+  contextConfig: jsonb,            // Variable injection config
   inputSchema: jsonb,              // User-facing input parameters
   toolDescription: text,           // Parent-facing tool description
-  safetyLimits: jsonb,             // { maxSteps: 10, timeoutSeconds: 300 }
+  safetyLimits: jsonb,             // { maxToolCalls: 10, timeoutSeconds: 300 }
   status: enum,                    // 'draft' | 'active' | 'disabled'
   metadata: jsonb,
   createdAt: timestamp,
@@ -371,43 +360,17 @@ AgenticToolExecution: {
   agenticToolId: uuid FK → AgenticTool,
   tenantId: uuid FK → Tenant,
   parentRequest: jsonb,            // Original user input
-  executionPlan: jsonb,            // LLM's planned steps
-  status: enum,                    // 'running' | 'success' | 'error' | 'timeout'
+  llmCalls: jsonb[],               // Array of LLM calls with prompts, responses, tokens
+  toolCalls: jsonb[],              // Array of tool invocations (Autonomous mode)
   result: jsonb,                   // Final output
+  status: enum,                    // 'success' | 'error' | 'timeout'
   error: jsonb,                    // Error details if failed
   totalCost: decimal,              // Total LLM cost in USD
   totalTokens: integer,            // Total tokens used
   durationMs: integer,
+  traceId: string,                 // Langsmith/OTel trace ID
   createdAt: timestamp,
   completedAt: timestamp
-}
-
-EmbeddedLLMCall: {
-  id: uuid PK,
-  executionId: uuid FK → AgenticToolExecution,
-  callSequence: integer,           // Order within execution (1, 2, 3...)
-  purpose: enum,                   // 'planning' | 'tool_selection' | 'result_review' | 'error_recovery'
-  model: string,                   // 'claude-sonnet-4' | 'gpt-4o' | etc.
-  prompt: text,                    // Full prompt sent to LLM
-  response: text,                  // LLM's response
-  reasoning: text,                 // Extracted reasoning (if provided)
-  tokensInput: integer,
-  tokensOutput: integer,
-  cost: decimal,                   // Cost in USD
-  latencyMs: integer,
-  createdAt: timestamp
-}
-
-AgenticToolCall: {
-  id: uuid PK,
-  executionId: uuid FK → AgenticToolExecution,
-  actionId: uuid FK → Action,      // Which action was called
-  callSequence: integer,           // Order within execution
-  parameters: jsonb,               // Parameters passed to action
-  response: jsonb,                 // Action response
-  status: enum,                    // 'success' | 'error'
-  latencyMs: integer,
-  createdAt: timestamp
 }
 ```
 
@@ -416,8 +379,11 @@ AgenticToolCall: {
 ```typescript
 interface EmbeddedLLMConfig {
   // Model selection
-  provider: 'anthropic' | 'openai' | 'google';
-  model: string; // 'claude-sonnet-4', 'gpt-4o', 'gemini-1.5-pro'
+  provider: 'anthropic' | 'google';
+  model: 'claude-opus-4.5' | 'claude-sonnet-4.5' | 'gemini-3';
+
+  // Reasoning control (where supported)
+  reasoningLevel?: 'none' | 'low' | 'medium' | 'high';
 
   // Behavior
   temperature: number; // 0.0 - 1.0
@@ -425,132 +391,138 @@ interface EmbeddedLLMConfig {
 
   // Advanced (optional)
   topP?: number;
-  frequencyPenalty?: number;
-  presencePenalty?: number;
 }
 
 interface ToolAllocation {
-  mode: 'deterministic' | 'agentic';
+  mode: 'parameter_interpreter' | 'autonomous_agent';
 
-  // Deterministic: Fixed sequence
-  sequence?: {
-    step: number;
+  // Parameter Interpreter: Target action(s)
+  targetActions?: {
     actionId: string;
     actionSlug: string;
-    purpose: string; // "Search for deals"
   }[];
 
-  // Agentic: Available tools for selection
+  // Autonomous Agent: Available tools for selection
   availableTools?: {
     actionId: string;
     actionSlug: string;
-    priority?: number; // Hint for LLM (higher = prefer)
+    description: string; // Tool description for LLM
   }[];
 }
 
 interface ContextConfig {
-  // Auto-inject integration schemas
-  includeSchemas: boolean; // Default: true
+  // Prompt variables
+  variables: {
+    [key: string]: {
+      type: 'integration_schema' | 'reference_data' | 'custom';
+      source?: string; // Integration ID or data source
+      value?: string; // For custom variables
+    };
+  };
 
-  // Reference data injection
-  referenceData: {
-    integrationId: string;
-    dataTypes: string[]; // ['users', 'channels', 'deal_stages']
-  }[];
-
-  // Additional context
-  documentation?: string; // Custom docs/constraints
-  exampleQueries?: string[]; // Successful query examples
+  // Auto-inject schemas for allocated tools
+  autoInjectSchemas: boolean; // Default: true
 }
 ```
 
-### 4.4 System Prompt Templating
+### 4.4 System Prompt Variable Replacement
 
-System prompts support placeholders that are replaced at invocation time:
+Variables are replaced at invocation time:
 
-**Supported Placeholders:**
+**Built-in Variables:**
 
-| Placeholder              | Description                                        | Example Value                               |
-| ------------------------ | -------------------------------------------------- | ------------------------------------------- |
-| `{{integration_schema}}` | Full schema for allocated tools' integrations      | HubSpot deal schema with field names, types |
-| `{{reference_data}}`     | Reference data (users, channels, etc.)             | List of valid deal stages                   |
-| `{{user_task}}`          | The user's input task/request                      | "Update all Acme Corp deals to Negotiation" |
-| `{{available_tools}}`    | List of tools available to LLM                     | hubspot/search-deals, hubspot/update-deal   |
-| `{{execution_history}}`  | Previous steps in current execution (agentic mode) | "Step 1: Searched deals, found 3 results"   |
+| Variable                 | Description                             | Example Value                               |
+| ------------------------ | --------------------------------------- | ------------------------------------------- |
+| `{{integration_schema}}` | Full schema for target integration      | HubSpot deal schema with field names, types |
+| `{{reference_data}}`     | Reference data from specified source    | List of valid deal stages                   |
+| `{{user_input}}`         | The natural language task/request       | "Mark inactive users"                       |
+| `{{available_tools}}`    | List of tools (Autonomous Agent only)   | google/search, firecrawl/scrape             |
+| `{{database_schema}}`    | Database schema (alias for integration) | Postgres table schemas                      |
 
-**Example with Placeholders:**
+**Custom Variables:**
 
-```
-You are managing HubSpot deals. Use the following schema:
+Users can define custom variables:
 
-{{integration_schema}}
-
-Available stages: {{reference_data.deal_stages}}
-
-User's request: {{user_task}}
-
-Available tools: {{available_tools}}
-```
-
-### 4.5 Orchestration Flow
-
-#### Deterministic Mode Flow
-
-```
-1. Parent Agent Invokes Agentic Tool
-   ↓
-2. Load Embedded LLM Config + System Prompt
-   ↓
-3. Inject Context (schemas, reference data)
-   ↓
-4. Embedded LLM Call: "Plan Execution"
-   Input: User task + context + allocated tools (sequence)
-   Output: Execution plan with parameters for each step
-   ↓
-5. Execute Tool Sequence:
-   For each step in sequence:
-     - Map parameters from plan
-     - Load operation context (auth, reference data)
-     - Execute action via existing pipeline
-     - Collect result
-   ↓
-6. Embedded LLM Call: "Format Response"
-   Input: All step results + user task
-   Output: Formatted summary for parent agent
-   ↓
-7. Return to Parent Agent with execution trace
+```typescript
+{
+  "examples": {
+    "type": "custom",
+    "value": "Example 1: 'find active users' → SELECT * FROM users WHERE status = 'active'"
+  }
+}
 ```
 
-#### Agentic Mode Flow
+### 4.5 Execution Flows
+
+#### Parameter Interpreter Mode Flow
 
 ```
 1. Parent Agent Invokes Agentic Tool
+   Input: { task: "mark users inactive who haven't logged in for 90 days" }
    ↓
-2. Load Embedded LLM Config + System Prompt
+2. Load System Prompt & Replace Variables
+   {{database_schema}} → Postgres users table schema
+   {{user_input}} → "mark users inactive..."
    ↓
-3. Inject Context (schemas, reference data)
+3. Call Embedded LLM (single call)
+   Prompt: System prompt with injected variables
+   Output: { query: "UPDATE users SET...", query_type: "UPDATE", ... }
    ↓
-4. Embedded LLM Call: "Plan & Select First Tool"
-   Input: User task + context + available tools
-   Output: { reasoning, tool_to_use, parameters }
+4. Validate LLM Output Against Schema
+   Check: SQL syntax valid, table/field names exist
    ↓
-5. Execute Selected Tool
-   - Load operation context
-   - Execute action
-   - Collect result
+5. Execute Generated Query via Target Action
+   Action: postgres/execute-query
+   Parameters: { query: "UPDATE users SET..." }
    ↓
-6. Loop: Embedded LLM Reviews Result
-   Input: Task + execution history + available tools + last result
-   Decision:
-     - CONTINUE: Select next tool + parameters
-     - COMPLETE: Format final response
-     - ERROR_RECOVERY: Retry with adjusted params
+6. Format Response
+   "Updated 23 users to inactive status"
    ↓
-7. Execute Next Tool (if CONTINUE)
+7. Log Execution (for tracing)
+   LLM call, tokens, cost, result
+   Emit to Langsmith/OTel if configured
    ↓
-8. Repeat until COMPLETE or max steps reached
+8. Return to Parent Agent
+```
+
+#### Autonomous Agent Mode Flow
+
+```
+1. Parent Agent Invokes Agentic Tool
+   Input: { task: "find competitor pricing for top 3 competitors" }
    ↓
-9. Return to Parent Agent with full execution trace
+2. Load System Prompt & Replace Variables
+   {{available_tools}} → list of search/scrape tools
+   {{user_input}} → "find competitor pricing..."
+   ↓
+3. Initialize Agentic Loop (with Safety Limits)
+   MaxToolCalls: 10, Timeout: 5 minutes, MaxCost: $1
+   ↓
+4. Embedded LLM Autonomous Execution
+
+   The LLM autonomously:
+   - Analyzes the task
+   - Selects which tools to use (from available tools)
+   - Executes tools by calling them with generated parameters
+   - Reviews results and decides whether to continue or complete
+   - Loops until task is satisfied or safety limit hit
+   - Synthesizes final answer
+
+   Example internal execution (invisible to Waygate orchestrator):
+     LLM → "I'll search Google" → executes google/search → reviews results
+     LLM → "I'll scrape HubSpot pricing" → executes firecrawl/scrape → reviews
+     LLM → "I'll scrape Salesforce too" → executes firecrawl/scrape → reviews
+     LLM → "I have enough data" → synthesizes final answer → COMPLETE
+
+   All tool selection and orchestration happens within the LLM's reasoning.
+   Waygate provides the tools and enforces safety limits, but doesn't manage the flow.
+   ↓
+5. Log Execution Metadata
+   All LLM calls, tool calls, tokens, costs
+   Emit to Langsmith/OTel if configured
+   ↓
+6. Return to Parent Agent
+   Formatted result with execution metadata
 ```
 
 ### 4.6 Module Structure
@@ -561,21 +533,21 @@ src/lib/modules/agentic-tools/
 ├── agentic-tool.service.ts            # CRUD, orchestration
 ├── agentic-tool.repository.ts         # Database access
 ├── agentic-tool.schemas.ts            # Zod schemas
-├── orchestrator/
-│   ├── deterministic-orchestrator.ts  # Fixed sequence execution
-│   ├── agentic-orchestrator.ts        # LLM-driven tool selection
-│   ├── execution-tracker.ts           # Track steps, costs, logs
-│   └── safety-limits.ts               # Timeout, max steps enforcement
 ├── llm/
 │   ├── llm-client.ts                  # Multi-provider LLM client
 │   ├── anthropic-provider.ts          # Claude integration
-│   ├── openai-provider.ts             # GPT-4 integration
 │   ├── google-provider.ts             # Gemini integration
-│   └── prompt-builder.ts              # Inject context into prompts
+│   └── prompt-processor.ts            # Variable replacement, prompt building
+├── orchestrator/
+│   ├── parameter-interpreter.ts       # Single LLM call → structured output
+│   ├── autonomous-agent.ts            # Agentic loop with tool selection
+│   └── safety-enforcer.ts             # Timeout, max calls enforcement
 ├── context/
-│   ├── schema-injector.ts             # Load integration schemas
-│   ├── reference-data-injector.ts     # Load reference data
-│   └── context-merger.ts              # Combine all context sources
+│   ├── variable-injector.ts           # Inject schemas, ref data as variables
+│   └── schema-loader.ts               # Load integration schemas
+├── tracing/
+│   ├── langsmith-adapter.ts           # Langsmith compatibility
+│   └── opentelemetry-adapter.ts       # OpenTelemetry compatibility
 ├── export/
 │   ├── agentic-tool.transformer.ts    # Export to Universal/LangChain/MCP
 │   └── description-generator.ts       # Generate parent-facing descriptions
@@ -593,25 +565,20 @@ interface CostBreakdown {
   totalTokens: number;
 
   llmCalls: {
-    callId: string;
-    purpose: string; // 'planning' | 'tool_selection' | etc.
+    sequence: number;
+    purpose: string; // 'parameter_generation' | 'tool_selection' | 'synthesis'
     model: string;
     tokensInput: number;
     tokensOutput: number;
     cost: number;
   }[];
-
-  actionCalls: {
-    actionSlug: string;
-    cost: number; // If action has usage-based pricing
-  }[];
 }
 
 // Pricing per model (updated periodically)
 const MODEL_PRICING = {
-  'claude-sonnet-4': { input: 0.003, output: 0.015 }, // per 1K tokens
-  'gpt-4o': { input: 0.005, output: 0.015 },
-  'gemini-1.5-pro': { input: 0.00125, output: 0.005 },
+  'claude-opus-4.5': { input: 0.015, output: 0.075 }, // per 1K tokens
+  'claude-sonnet-4.5': { input: 0.003, output: 0.015 },
+  'gemini-3': { input: 0.00125, output: 0.005 },
 };
 
 function calculateCost(model: string, tokensInput: number, tokensOutput: number): number {
@@ -622,20 +589,19 @@ function calculateCost(model: string, tokensInput: number, tokensOutput: number)
 
 ### 4.8 Safety Limits & Circuit Breakers
 
-Prevent runaway executions:
+Prevent runaway executions in Autonomous Agent mode:
 
 ```typescript
 interface SafetyLimits {
-  maxSteps: number; // Default: 10
+  maxToolCalls: number; // Default: 10
   maxDurationSeconds: number; // Default: 300 (5 min)
-  maxTokensPerCall: number; // Default: 4000
   maxTotalCost: number; // Default: $1.00
 }
 
 async function enforceLimit(execution: AgenticToolExecution) {
-  // Check step count
-  if (execution.currentStep > execution.safetyLimits.maxSteps) {
-    throw new SafetyLimitError('MAX_STEPS_EXCEEDED');
+  // Check tool call count (Autonomous Agent only)
+  if (execution.toolCalls.length >= execution.safetyLimits.maxToolCalls) {
+    throw new SafetyLimitError('MAX_TOOL_CALLS_EXCEEDED');
   }
 
   // Check duration
@@ -651,39 +617,80 @@ async function enforceLimit(execution: AgenticToolExecution) {
 }
 ```
 
-### 4.9 API Endpoints
+### 4.9 Langsmith/OpenTelemetry Integration
 
-| Method | Endpoint                                       | Purpose                              |
-| ------ | ---------------------------------------------- | ------------------------------------ |
-| GET    | `/api/v1/ai-tools`                             | List all AI tools (includes agentic) |
-| GET    | `/api/v1/agentic-tools`                        | List agentic tools                   |
-| POST   | `/api/v1/agentic-tools`                        | Create agentic tool                  |
-| GET    | `/api/v1/agentic-tools/:id`                    | Get agentic tool detail              |
-| PATCH  | `/api/v1/agentic-tools/:id`                    | Update configuration                 |
-| DELETE | `/api/v1/agentic-tools/:id`                    | Delete agentic tool                  |
-| POST   | `/api/v1/agentic-tools/:id/test-prompt`        | Test system prompt with sample input |
-| POST   | `/api/v1/agentic-tools/:id/regenerate-prompt`  | Re-generate default system prompt    |
-| GET    | `/api/v1/agentic-tools/:id/executions`         | List execution history               |
-| GET    | `/api/v1/agentic-tools/:id/executions/:execId` | Get execution trace detail           |
-| POST   | `/api/v1/agentic-tools/invoke`                 | Invoke agentic tool                  |
-| GET    | `/api/v1/agentic-tools/:id/tools/universal`    | Export as universal tool             |
-| GET    | `/api/v1/agentic-tools/:id/tools/langchain`    | Export as LangChain tool             |
-| GET    | `/api/v1/agentic-tools/:id/tools/mcp`          | Export as MCP tool                   |
+Enable tracing for consuming applications:
 
-### 4.10 Tool Export Format
+```typescript
+interface TracingConfig {
+  provider: 'langsmith' | 'opentelemetry' | null;
+  apiKey?: string; // Langsmith API key (from consuming app)
+  endpoint?: string; // OTel endpoint
+  traceName?: string; // Custom trace name
+}
+
+// Emit trace events
+async function emitLLMCall(trace: TraceContext, llmCall: LLMCall) {
+  if (trace.provider === 'langsmith') {
+    await langsmithClient.log({
+      run_id: llmCall.id,
+      parent_run_id: trace.parentRunId,
+      name: llmCall.purpose,
+      inputs: { prompt: llmCall.prompt },
+      outputs: { response: llmCall.response },
+      metadata: { model: llmCall.model, tokens: llmCall.tokens },
+    });
+  } else if (trace.provider === 'opentelemetry') {
+    const span = tracer.startSpan('llm_call', { parent: trace.parentSpan });
+    span.setAttributes({
+      'llm.model': llmCall.model,
+      'llm.tokens.input': llmCall.tokensInput,
+      'llm.tokens.output': llmCall.tokensOutput,
+    });
+    span.end();
+  }
+}
+```
+
+Consuming apps pass tracing config in headers:
+
+```
+X-Trace-Provider: langsmith
+X-Trace-API-Key: lsk_...
+X-Trace-Run-ID: parent-run-id
+```
+
+### 4.10 API Endpoints
+
+| Method | Endpoint                                      | Purpose                              |
+| ------ | --------------------------------------------- | ------------------------------------ |
+| GET    | `/api/v1/ai-tools`                            | List all AI tools (includes agentic) |
+| GET    | `/api/v1/agentic-tools`                       | List agentic tools                   |
+| POST   | `/api/v1/agentic-tools`                       | Create agentic tool                  |
+| GET    | `/api/v1/agentic-tools/:id`                   | Get agentic tool detail              |
+| PATCH  | `/api/v1/agentic-tools/:id`                   | Update configuration                 |
+| DELETE | `/api/v1/agentic-tools/:id`                   | Delete agentic tool                  |
+| POST   | `/api/v1/agentic-tools/:id/test-prompt`       | Test system prompt with sample input |
+| POST   | `/api/v1/agentic-tools/:id/regenerate-prompt` | Re-generate default system prompt    |
+| POST   | `/api/v1/agentic-tools/invoke`                | Invoke agentic tool                  |
+| GET    | `/api/v1/agentic-tools/:id/tools/universal`   | Export as universal tool             |
+| GET    | `/api/v1/agentic-tools/:id/tools/langchain`   | Export as LangChain tool             |
+| GET    | `/api/v1/agentic-tools/:id/tools/mcp`         | Export as MCP tool                   |
+
+### 4.11 Tool Export Format
 
 Agentic tools are exported as simple tools from the parent agent's perspective — the embedded LLM complexity is hidden:
 
 ```json
 {
-  "name": "hubspot_deal_manager",
-  "description": "Use this tool to manage HubSpot deals using natural language commands. You can search, update, create, and batch-modify deals.\n\n# Required inputs (always include these):\n- task: Natural language description of what to do with deals. Examples: \"Update all Acme Corp deals to Negotiation\", \"Find deals closing this quarter over $50k\", \"Create a new deal for TechCo worth $100k\".\n\n# What the tool outputs:\nReturns a summary of actions taken, including the number of deals affected, operations executed, and any errors encountered. The embedded AI handles all the complex HubSpot API interactions for you.",
+  "name": "database_manager",
+  "description": "Use this tool to query or modify the database using natural language. The tool automatically generates SQL queries based on your request.\n\n# Required inputs:\n- task: Natural language description of the database operation. Examples: \"find all active users\", \"mark users inactive who haven't logged in for 90 days\", \"create a new user with email test@example.com\".\n\n# What the tool outputs:\nReturns the result of the database operation, including affected rows and any returned data.",
   "parameters": {
     "type": "object",
     "properties": {
       "task": {
         "type": "string",
-        "description": "Natural language description of the deal management task to perform."
+        "description": "Natural language description of the database operation to perform."
       }
     },
     "required": ["task"]
@@ -694,106 +701,96 @@ Agentic tools are exported as simple tools from the parent agent's perspective �
 The parent agent just provides a task description. The embedded LLM handles:
 
 - Parsing the task
-- Generating HubSpot queries
-- Executing operations
+- Generating SQL/queries using schema context
+- Executing via allocated action(s)
 - Formatting results
 
 ---
 
 ## 5. Implementation Tasks
 
-### Phase 1: Database & Core Module (~4 hours)
-
-| #   | Task                                                                                         | Estimate |
-| --- | -------------------------------------------------------------------------------------------- | -------- |
-| 1.1 | Create Prisma schema for AgenticTool, AgenticToolExecution, EmbeddedLLMCall, AgenticToolCall | 45 min   |
-| 1.2 | Run migration                                                                                | 10 min   |
-| 1.3 | Create agentic-tools module structure                                                        | 20 min   |
-| 1.4 | Implement agentic-tool.repository.ts (CRUD)                                                  | 60 min   |
-| 1.5 | Implement agentic-tool.schemas.ts (Zod validation)                                           | 45 min   |
-| 1.6 | Implement agentic-tool.service.ts (basic CRUD)                                               | 60 min   |
-
-### Phase 2: LLM Client Infrastructure (~4 hours)
-
-| #   | Task                                                 | Estimate |
-| --- | ---------------------------------------------------- | -------- |
-| 2.1 | Implement llm-client.ts (multi-provider abstraction) | 45 min   |
-| 2.2 | Implement anthropic-provider.ts (Claude integration) | 45 min   |
-| 2.3 | Implement openai-provider.ts (GPT-4 integration)     | 45 min   |
-| 2.4 | Implement google-provider.ts (Gemini integration)    | 45 min   |
-| 2.5 | Implement prompt-builder.ts (context injection)      | 45 min   |
-| 2.6 | Add token counting and cost calculation              | 30 min   |
-
-### Phase 3: Context Injection System (~3 hours)
+### Phase 1: Database & Core Module (~3 hours)
 
 | #   | Task                                                       | Estimate |
 | --- | ---------------------------------------------------------- | -------- |
-| 3.1 | Implement schema-injector.ts (load integration schemas)    | 45 min   |
-| 3.2 | Implement reference-data-injector.ts (load reference data) | 45 min   |
-| 3.3 | Implement context-merger.ts (combine all context sources)  | 45 min   |
-| 3.4 | Add placeholder replacement in system prompts              | 45 min   |
+| 1.1 | Create Prisma schema for AgenticTool, AgenticToolExecution | 30 min   |
+| 1.2 | Run migration                                              | 10 min   |
+| 1.3 | Create agentic-tools module structure                      | 15 min   |
+| 1.4 | Implement agentic-tool.repository.ts (CRUD)                | 45 min   |
+| 1.5 | Implement agentic-tool.schemas.ts (Zod validation)         | 30 min   |
+| 1.6 | Implement agentic-tool.service.ts (basic CRUD)             | 45 min   |
 
-### Phase 4: Deterministic Orchestrator (~4 hours)
+### Phase 2: LLM Client Infrastructure (~3 hours)
+
+| #   | Task                                                 | Estimate |
+| --- | ---------------------------------------------------- | -------- |
+| 2.1 | Implement llm-client.ts (multi-provider abstraction) | 30 min   |
+| 2.2 | Implement anthropic-provider.ts (Claude integration) | 45 min   |
+| 2.3 | Implement google-provider.ts (Gemini integration)    | 45 min   |
+| 2.4 | Implement prompt-processor.ts (variable replacement) | 45 min   |
+| 2.5 | Add token counting and cost calculation              | 30 min   |
+
+### Phase 3: Context & Variable Injection (~2 hours)
+
+| #   | Task                                                  | Estimate |
+| --- | ----------------------------------------------------- | -------- |
+| 3.1 | Implement schema-loader.ts (load integration schemas) | 30 min   |
+| 3.2 | Implement variable-injector.ts (replace prompt vars)  | 45 min   |
+| 3.3 | Add built-in variables (schema, reference data, etc.) | 30 min   |
+| 3.4 | Add custom variable support                           | 30 min   |
+
+### Phase 4: Parameter Interpreter Orchestrator (~3 hours)
 
 | #   | Task                                                               | Estimate |
 | --- | ------------------------------------------------------------------ | -------- |
-| 4.1 | Implement deterministic-orchestrator.ts (fixed sequence execution) | 60 min   |
-| 4.2 | Implement execution-tracker.ts (track steps, costs)                | 45 min   |
-| 4.3 | Implement safety-limits.ts (timeout, max steps)                    | 45 min   |
+| 4.1 | Implement parameter-interpreter.ts (single LLM call → JSON output) | 60 min   |
+| 4.2 | Add output validation against target action schema                 | 30 min   |
+| 4.3 | Implement safety-enforcer.ts (timeouts, cost limits)               | 30 min   |
 | 4.4 | Integrate with existing action execution pipeline                  | 60 min   |
 
-### Phase 5: Agentic Orchestrator (~5 hours)
+### Phase 5: Autonomous Agent Orchestrator (~4 hours)
 
-| #   | Task                                                                 | Estimate |
-| --- | -------------------------------------------------------------------- | -------- |
-| 5.1 | Implement agentic-orchestrator.ts (LLM-driven tool selection loop)   | 90 min   |
-| 5.2 | Implement tool selection logic (LLM chooses next tool)               | 60 min   |
-| 5.3 | Implement result review and decision logic (continue/complete/retry) | 60 min   |
-| 5.4 | Add error recovery with retry prompts                                | 45 min   |
+| #   | Task                                                   | Estimate |
+| --- | ------------------------------------------------------ | -------- |
+| 5.1 | Implement autonomous-agent.ts (agentic loop)           | 90 min   |
+| 5.2 | Implement tool selection logic (LLM chooses next tool) | 60 min   |
+| 5.3 | Add loop continuation logic (continue vs complete)     | 45 min   |
+| 5.4 | Apply safety limits (max tool calls, timeout)          | 45 min   |
 
-### Phase 6: Export & Description Generation (~3 hours)
+### Phase 6: Tracing & Export (~3 hours)
 
-| #   | Task                                                            | Estimate |
-| --- | --------------------------------------------------------------- | -------- |
-| 6.1 | Implement agentic-tool.transformer.ts (Universal format)        | 45 min   |
-| 6.2 | Add LangChain export support                                    | 30 min   |
-| 6.3 | Add MCP export support                                          | 30 min   |
-| 6.4 | Implement description-generator.ts (parent-facing descriptions) | 45 min   |
-| 6.5 | Add system prompt generation (AI-generated defaults)            | 45 min   |
+| #   | Task                                                     | Estimate |
+| --- | -------------------------------------------------------- | -------- |
+| 6.1 | Implement langsmith-adapter.ts (Langsmith compatibility) | 45 min   |
+| 6.2 | Implement opentelemetry-adapter.ts (OTel compatibility)  | 45 min   |
+| 6.3 | Implement agentic-tool.transformer.ts (Universal format) | 30 min   |
+| 6.4 | Add LangChain export support                             | 20 min   |
+| 6.5 | Add MCP export support                                   | 20 min   |
+| 6.6 | Implement description-generator.ts (tool descriptions)   | 30 min   |
 
-### Phase 7: API Endpoints (~3 hours)
+### Phase 7: API Endpoints (~2 hours)
 
-| #   | Task                                           | Estimate |
-| --- | ---------------------------------------------- | -------- |
-| 7.1 | Create CRUD endpoints for agentic tools        | 60 min   |
-| 7.2 | Create system prompt test/regenerate endpoints | 30 min   |
-| 7.3 | Create execution history endpoints             | 30 min   |
-| 7.4 | Create agentic tool invoke endpoint            | 45 min   |
-| 7.5 | Create export endpoints                        | 20 min   |
+| #   | Task                                    | Estimate |
+| --- | --------------------------------------- | -------- |
+| 7.1 | Create CRUD endpoints for agentic tools | 45 min   |
+| 7.2 | Create test/regenerate prompt endpoints | 20 min   |
+| 7.3 | Create agentic tool invoke endpoint     | 30 min   |
+| 7.4 | Create export endpoints                 | 20 min   |
 
-### Phase 8: UI - Agentic Tool Management (~7 hours)
+### Phase 8: UI - Agentic Tool Management (~5 hours)
 
-| #   | Task                                                                          | Estimate |
-| --- | ----------------------------------------------------------------------------- | -------- |
-| 8.1 | Add "Agentic Tool" to unified "Create Tool" flow                              | 30 min   |
-| 8.2 | Create execution mode selector (Deterministic vs Agentic)                     | 30 min   |
-| 8.3 | Create embedded LLM config form (model, temperature, tokens)                  | 60 min   |
-| 8.4 | Create system prompt editor with placeholders                                 | 90 min   |
-| 8.5 | Create tool allocation UI (deterministic: sequence, agentic: available tools) | 90 min   |
-| 8.6 | Create context config UI (schemas, reference data, docs)                      | 60 min   |
-| 8.7 | Create agentic tool detail/edit page                                          | 60 min   |
-| 8.8 | Add "Test Prompt" feature (test with sample input)                            | 45 min   |
-| 8.9 | Add "Regenerate Prompt" button                                                | 15 min   |
+| #   | Task                                                                       | Estimate |
+| --- | -------------------------------------------------------------------------- | -------- |
+| 8.1 | Add "Agentic Tool" to unified "Create Tool" flow                           | 20 min   |
+| 8.2 | Create execution mode selector (Parameter Interpreter vs Autonomous Agent) | 30 min   |
+| 8.3 | Create embedded LLM config form (model, reasoning, temperature, tokens)    | 60 min   |
+| 8.4 | Create system prompt editor with variable placeholders                     | 90 min   |
+| 8.5 | Create tool allocation UI (target actions vs available tools)              | 60 min   |
+| 8.6 | Create context config UI (variable injection)                              | 45 min   |
+| 8.7 | Create agentic tool detail/edit page                                       | 45 min   |
+| 8.8 | Add "Test Prompt" feature (test with sample input)                         | 30 min   |
 
-### Phase 9: UI - Execution Trace Viewer (~4 hours)
-
-| #   | Task                                                    | Estimate |
-| --- | ------------------------------------------------------- | -------- |
-| 9.1 | Create execution list view                              | 45 min   |
-| 9.2 | Create execution trace detail view                      | 90 min   |
-| 9.3 | Add embedded LLM call details (reasoning, tokens, cost) | 60 min   |
-| 9.4 | Add tool call timeline visualization                    | 60 min   |
-| 9.5 | Add cost breakdown display                              | 30 min   |
+**Total Estimated Time:** ~25 hours
 
 ---
 
@@ -802,45 +799,44 @@ The parent agent just provides a task description. The embedded LLM handles:
 ### Unit Tests
 
 - LLM client: Multi-provider calls, error handling, token counting
-- Prompt builder: Context injection, placeholder replacement
-- Context injectors: Schema loading, reference data loading
-- Orchestrators: Deterministic sequence, agentic loop, safety limits
+- Prompt processor: Variable replacement, edge cases
+- Variable injector: Schema loading, reference data loading
+- Parameter interpreter: JSON output validation
+- Autonomous agent: Tool selection, loop continuation
 - Cost tracking: Accurate calculation per model
-- Safety limits: Timeout, max steps, max cost enforcement
+- Safety limits: Timeout, max tool calls, max cost enforcement
 
 ### Integration Tests
 
 - Full agentic tool CRUD
-- Deterministic mode execution end-to-end
-- Agentic mode execution with tool selection
-- Context injection from integrations
+- Parameter Interpreter mode execution end-to-end
+- Autonomous Agent mode execution with tool selection
+- Variable injection from integrations
 - LLM calls with real providers (or mocked)
 - Export agentic tools in all formats
-- Execution trace generation
+- Langsmith tracing integration
 - Cost calculation accuracy
 
 ### E2E Tests
 
-- Create a deterministic CRM tool, invoke with natural language task
-- Create an agentic research tool, invoke and verify autonomous tool selection
-- View execution trace with LLM reasoning and tool calls
-- Edit agentic tool after creation (change model, update prompt)
+- Create a Database tool (Parameter Interpreter), invoke with natural language
+- Create a Research tool (Autonomous Agent), invoke and verify tool selection
 - Test prompt with sample input before saving
-- Regenerate system prompt after modifying tool allocation
+- Regenerate system prompt after modifying configuration
+- Verify Langsmith trace includes embedded LLM calls
 
 ---
 
 ## 7. Edge Cases & Error Handling
 
-| Scenario                                    | Handling                                                                        |
-| ------------------------------------------- | ------------------------------------------------------------------------------- |
-| LLM times out or errors                     | Retry with exponential backoff (up to 3 times), log error, return clear message |
-| LLM generates invalid tool parameters       | Validate against schema, retry with error prompt, fall back to error response   |
-| Max steps exceeded                          | Stop execution, return partial results + warning                                |
-| Max cost exceeded                           | Stop execution, return cost limit error                                         |
-| No valid tools available in agentic mode    | Return error explaining no tools match task                                     |
-| Schema drift (API changed)                  | Detect mismatch, log warning, attempt best-effort execution                     |
-| Embedded LLM selects tool not in allocation | Reject, retry with clarification prompt                                         |
+| Scenario                             | Handling                                                                  |
+| ------------------------------------ | ------------------------------------------------------------------------- |
+| LLM times out or errors              | Retry with exponential backoff (up to 3 times), log error, return message |
+| LLM generates invalid JSON           | Validate against schema, retry with error prompt, fall back to error      |
+| Max tool calls exceeded (Autonomous) | Stop execution, return partial results + warning                          |
+| Max cost exceeded                    | Stop execution, return cost limit error                                   |
+| Schema drift (API changed)           | Detect mismatch, log warning, attempt best-effort execution               |
+| Variable not found in context        | Log warning, replace with empty string or error message                   |
 
 ---
 
@@ -850,58 +846,57 @@ The parent agent just provides a task description. The embedded LLM handles:
 - System prompts validated (no code injection)
 - Tool allocation enforced server-side (LLM can't call unauthorized tools)
 - Cost limits prevent runaway spending
-- Execution logs sanitize sensitive data (no credentials, PII)
+- Generated parameters validated against target action schemas before execution
 - Agentic tools inherit tenant isolation from underlying actions
 
 ---
 
 ## 9. Future Enhancements (Out of Scope)
 
+- **Multi-Agent Workflows** — Sequential discrete agents with data passing (Multi-Agent Pipelines feature)
 - **Memory/State** — Embedded LLM remembering previous executions (V2)
 - **Fine-tuning** — Tenant-specific LLM fine-tuning (V2)
 - **Human-in-the-loop** — Approval gates mid-execution (V2)
 - **Streaming** — Real-time output from embedded LLM (V2)
-- **Multi-agent collaboration** — Multiple agentic tools working together (Multi-Agent Pipelines)
 - **Learning from feedback** — Improving prompts based on success/failure patterns (V3)
 
 ---
 
 ## 10. Example Usage
 
-### Creating a Deterministic HubSpot Deal Manager
+### Creating a Database Manager (Parameter Interpreter Mode)
 
 **Configuration:**
 
-- Mode: Deterministic
-- Model: Claude Sonnet 4
-- Temperature: 0.2
-- Tool Sequence:
-  1. `hubspot/search-deals`
-  2. `hubspot/batch-update-deals`
-- Context: HubSpot schema, deal stages reference data
+- Mode: Parameter Interpreter
+- Model: Sonnet 4.5
+- Reasoning: None
+- Temperature: 0.1
+- Target Action: `postgres/execute-query`
+- Context Variables: `{{database_schema}}` (auto-loaded)
 
 **System Prompt (AI-generated):**
 
 ```
-You are a HubSpot deal management assistant. Execute deal management tasks using these operations:
+You are a database query assistant. Generate SQL queries based on natural language.
 
-1. hubspot/search-deals - Find deals matching criteria
-2. hubspot/batch-update-deals - Update multiple deals
+# Database Schema:
+{{database_schema}}
 
-Schema: {{integration_schema}}
-Valid stages: {{reference_data.deal_stages}}
+# User Request:
+{{user_input}}
 
-User task: {{user_task}}
+# Instructions:
+1. Parse the request to understand intent (SELECT, INSERT, UPDATE, DELETE)
+2. Use the schema to identify correct table/field names
+3. Generate valid SQL
+4. Return ONLY JSON
 
-Instructions:
-1. Parse task to understand intent
-2. Generate search query with correct field names
-3. Execute search
-4. Plan batch update with found deal IDs
-5. Execute update
-6. Return summary
-
-Format: { summary: string, deals_affected: number }
+# Output Format:
+{
+  "query": "SQL statement",
+  "query_type": "SELECT | INSERT | UPDATE | DELETE"
+}
 ```
 
 **Invocation:**
@@ -911,78 +906,67 @@ const result = await fetch('/api/v1/agentic-tools/invoke', {
   method: 'POST',
   headers: {
     'Authorization': `Bearer ${WAYGATE_API_KEY}`,
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    'X-Trace-Provider': 'langsmith',
+    'X-Trace-API-Key': 'lsk_...',
   },
   body: JSON.stringify({
-    tool: 'hubspot-deal-manager',
+    tool: 'database-manager',
     params: {
-      task: 'Update all Acme Corp deals to Negotiation stage'
-    }
-  })
+      task: 'mark users inactive who haven\'t logged in for 90 days',
+    },
+  }),
 });
 
-// Response includes execution trace
+// Response
 {
   success: true,
   data: {
-    summary: "Updated 3 deals for Acme Corp to Negotiation stage",
-    deals_affected: 3,
-    operations_executed: ["search-deals", "batch-update-deals"]
+    affected_rows: 23,
+    message: "Updated 23 users to inactive status"
   },
   meta: {
-    agenticTool: "hubspot-deal-manager",
-    executionId: "exec_abc123",
-    mode: "deterministic",
-    totalCost: 0.004,
-    totalTokens: 2190,
-    durationMs: 3200,
-    trace: {
-      steps: [
-        { type: "llm_call", purpose: "planning", tokens: 1234, cost: 0.002 },
-        { type: "tool_call", action: "hubspot/search-deals", latencyMs: 456 },
-        { type: "llm_call", purpose: "result_review", tokens: 956, cost: 0.001 },
-        { type: "tool_call", action: "hubspot/batch-update-deals", latencyMs: 1100 }
-      ]
-    }
+    agenticTool: "database-manager",
+    mode: "parameter_interpreter",
+    llmCalls: 1,
+    totalCost: 0.002,
+    totalTokens: 456,
+    durationMs: 1200,
+    traceId: "langsmith-trace-id"
   }
 }
 ```
 
-### Creating an Agentic Research Tool
+### Creating a Research Assistant (Autonomous Agent Mode)
 
 **Configuration:**
 
-- Mode: Agentic
-- Model: GPT-4o
+- Mode: Autonomous Agent
+- Model: Opus 4.5
+- Reasoning: High
 - Temperature: 0.3
-- Available Tools:
-  - `google/search`
-  - `firecrawl/scrape`
-  - `pdf-extract/extract`
-- Context: Tool descriptions, examples
+- Available Tools: `google/search`, `firecrawl/scrape`, `pdf-extract/extract`
+- Safety Limits: Max 10 tool calls, 5 min timeout, $1 max cost
 
 **System Prompt (AI-generated):**
 
 ```
-You are a research assistant. Find information requested by the user using these tools:
+You are a research assistant. Find information using available tools.
 
-- google/search: Search the web for information
-- firecrawl/scrape: Scrape content from a URL
-- pdf-extract/extract: Extract text from PDF files
+# Available Tools:
+{{available_tools}}
 
-User request: {{user_task}}
+# User Request:
+{{user_input}}
 
-Previous steps: {{execution_history}}
+# Instructions:
+1. Analyze the request
+2. Select appropriate tools from available tools
+3. Use tools in sequence to gather information
+4. Synthesize findings
+5. Cite sources
 
-Instructions:
-1. Analyze the request to understand what information is needed
-2. Select the most appropriate tool to gather information
-3. Execute the tool with proper parameters
-4. Review results and decide if more information is needed
-5. Continue until request is satisfied or max steps reached
-6. Format final answer with sources
-
-Always cite sources and explain your reasoning.
+You can call tools multiple times. Continue until satisfied or max steps reached.
 ```
 
 **Invocation:**
@@ -993,17 +977,38 @@ const result = await fetch('/api/v1/agentic-tools/invoke', {
   body: JSON.stringify({
     tool: 'research-assistant',
     params: {
-      task: 'Find the top 3 competitors to Waygate and their pricing',
+      task: 'Find competitor pricing for top 3 CRM tools',
     },
   }),
 });
 
-// The agentic tool autonomously:
-// 1. Searches Google for "Waygate competitors"
-// 2. Scrapes top results
-// 3. Searches for pricing pages
-// 4. Aggregates findings
-// 5. Returns formatted report with sources
+// The autonomous agent:
+// 1. Uses google/search for "CRM pricing comparison"
+// 2. Scrapes top 3 result URLs with firecrawl/scrape
+// 3. Synthesizes pricing comparison
+// 4. Returns formatted report
+
+{
+  success: true,
+  data: {
+    competitors: [
+      { name: "HubSpot", pricing: "$45/user/month", source: "hubspot.com/pricing" },
+      { name: "Salesforce", pricing: "$25-$300/user/month", source: "salesforce.com/pricing" },
+      { name: "Pipedrive", pricing: "$14-$99/user/month", source: "pipedrive.com/pricing" }
+    ],
+    summary: "Pricing ranges from $14/user/month (Pipedrive) to $300/user/month (Salesforce Enterprise)."
+  },
+  meta: {
+    agenticTool: "research-assistant",
+    mode: "autonomous_agent",
+    llmCalls: 4,
+    toolCalls: 5,
+    totalCost: 0.023,
+    totalTokens: 3421,
+    durationMs: 8200,
+    traceId: "langsmith-trace-id"
+  }
+}
 ```
 
 ---
@@ -1021,18 +1026,60 @@ const result = await fetch('/api/v1/agentic-tools/invoke', {
 
 **New Dependencies:**
 
-- Anthropic SDK (Claude)
-- OpenAI SDK (GPT-4)
-- Google AI SDK (Gemini)
+- Anthropic SDK (Claude Opus 4.5, Sonnet 4.5)
+- Google AI SDK (Gemini 3)
+- Langsmith SDK (optional, for tracing)
+- OpenTelemetry SDK (optional, for tracing)
 
 ---
 
 ## 12. Success Metrics
 
-| Metric                            | Target                   | Measurement                     |
-| --------------------------------- | ------------------------ | ------------------------------- |
-| Agentic tools created per tenant  | 2+ within first month    | Database query                  |
-| Agentic tool success rate         | > 90%                    | Successful vs failed executions |
-| Average cost per invocation       | < $0.05                  | Cost tracking logs              |
-| Time to create agentic tool       | < 10 minutes             | User testing                    |
-| Parent agent accuracy improvement | +30% vs direct API calls | A/B testing                     |
+| Metric                                | Target                | Measurement                     |
+| ------------------------------------- | --------------------- | ------------------------------- |
+| Agentic tools created per tenant      | 2+ within first month | Database query                  |
+| Parameter Interpreter success rate    | > 95%                 | Valid output vs total calls     |
+| Autonomous Agent task completion rate | > 85%                 | Successful vs failed executions |
+| Average cost per invocation           | < $0.05               | Cost tracking logs              |
+| Time to create agentic tool           | < 10 minutes          | User testing                    |
+
+---
+
+## 13. Implementation Summary
+
+**Status:** ✅ Core implementation complete (Parameter Interpreter mode)
+
+**Implemented:**
+
+- Database schema with AgenticTool and AgenticToolExecution models
+- Full CRUD operations for agentic tools
+- LLM client architecture supporting Claude (Anthropic) and Gemini (Google)
+- Parameter Interpreter orchestrator with prompt processing and variable injection
+- Context system for loading integration schemas and reference data
+- Safety enforcement (cost limits, tool call limits, timeout)
+- Cost calculation and token estimation
+- Wizard UI for creating agentic tools
+- API endpoints for invocation and management
+- Comprehensive unit test coverage (187 tests)
+
+**Test Results:**
+
+- 187 new unit tests created and passing
+- Core modules fully covered: schemas, cost calculator, prompt processor, safety enforcer
+- Dev server compiles successfully
+- UI wizard functional
+
+**Known Limitations:**
+
+- Autonomous Agent mode orchestrator not yet implemented (planned for future phase)
+- 20 TypeScript errors remain in optional features (regenerate-prompt, test-prompt routes)
+- Export formats (Universal, LangChain, MCP) not yet implemented
+- Tracing integration (Langsmith, OpenTelemetry) not yet implemented
+
+**Next Steps:**
+
+- Fix remaining TypeScript errors in bonus features
+- Implement Autonomous Agent orchestrator
+- Add export format support
+- Integrate tracing providers
+  | Parent agent accuracy improvement | +40% vs direct API calls | A/B testing |

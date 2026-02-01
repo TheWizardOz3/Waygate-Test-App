@@ -179,6 +179,26 @@ enum CircuitBreakerStatus {
   half_open // Testing if service has recovered
 }
 
+/// Execution mode for agentic tools
+enum AgenticToolExecutionMode {
+  parameter_interpreter // LLM generates parameters, system executes
+  autonomous_agent // LLM autonomously selects and executes tools
+}
+
+/// Status of an agentic tool
+enum AgenticToolStatus {
+  draft
+  active
+  disabled
+}
+
+/// Status of an agentic tool execution
+enum AgenticToolExecutionStatus {
+  success
+  error
+  timeout
+}
+
 // =============================================================================
 // MODELS
 // =============================================================================
@@ -206,6 +226,8 @@ model Tenant {
   referenceSyncJobs      ReferenceSyncJob[]
   variables              Variable[]
   compositeTools         CompositeTool[]
+  agenticTools           AgenticTool[]
+  agenticToolExecutions  AgenticToolExecution[]
 
   @@map("tenants")
 }
@@ -730,4 +752,83 @@ model RoutingRule {
   @@index([compositeToolId, priority], name: "routing_rules_composite_tool_priority_idx")
   @@index([operationId], name: "routing_rules_operation_id_idx")
   @@map("routing_rules")
+}
+
+/// Agentic tools - AI tools with embedded LLMs for parameter interpretation or autonomous operation
+model AgenticTool {
+  id            String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String                   @map("tenant_id") @db.Uuid
+  name          String                   @db.VarChar(255)
+  slug          String                   @db.VarChar(100)
+  description   String?                  @db.Text
+  executionMode AgenticToolExecutionMode @map("execution_mode")
+
+  // Embedded LLM configuration
+  // { provider: 'anthropic' | 'google', model: string, reasoningLevel?: string, temperature: number, maxTokens: number, topP?: number }
+  embeddedLLMConfig Json @default("{}") @map("embedded_llm_config")
+
+  // System prompt with variable placeholders ({{variable}})
+  systemPrompt String @map("system_prompt") @db.Text
+
+  // Tool allocation configuration
+  // { mode: 'parameter_interpreter' | 'autonomous_agent', targetActions?: [...], availableTools?: [...] }
+  toolAllocation Json @default("{}") @map("tool_allocation")
+
+  // Context configuration for variable injection
+  // { variables: { [key]: { type, source?, value? } }, autoInjectSchemas: boolean }
+  contextConfig Json @default("{}") @map("context_config")
+
+  // Input schema (parent-facing parameters)
+  inputSchema Json @default("{}") @map("input_schema")
+
+  // Parent-facing tool description
+  toolDescription String? @map("tool_description") @db.Text
+
+  // Safety limits for autonomous mode
+  // { maxToolCalls: number, timeoutSeconds: number, maxTotalCost: number }
+  safetyLimits Json @default("{\"maxToolCalls\": 10, \"timeoutSeconds\": 300, \"maxTotalCost\": 1.0}") @map("safety_limits")
+
+  status    AgenticToolStatus @default(draft)
+  metadata  Json              @default("{}")
+  createdAt DateTime          @default(now()) @map("created_at")
+  updatedAt DateTime          @updatedAt @map("updated_at")
+
+  // Relations
+  tenant     Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  executions AgenticToolExecution[]
+
+  // Indexes
+  @@unique([tenantId, slug], name: "agentic_tools_tenant_slug_idx")
+  @@index([tenantId], name: "agentic_tools_tenant_id_idx")
+  @@index([status], name: "agentic_tools_status_idx")
+  @@map("agentic_tools")
+}
+
+/// Execution records for agentic tool invocations
+model AgenticToolExecution {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  agenticToolId String   @map("agentic_tool_id") @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  parentRequest Json     @map("parent_request") // Original user input
+  llmCalls      Json[]   @default([]) @map("llm_calls") // Array of LLM calls with prompts, responses, tokens
+  toolCalls     Json[]   @default([]) @map("tool_calls") // Array of tool invocations (Autonomous mode)
+  result        Json?    // Final output
+  status        AgenticToolExecutionStatus
+  error         Json?    // Error details if failed
+  totalCost     Decimal  @default(0) @map("total_cost") @db.Decimal(10, 6) // Total LLM cost in USD
+  totalTokens   Int      @default(0) @map("total_tokens") // Total tokens used
+  durationMs    Int      @default(0) @map("duration_ms")
+  traceId       String?  @map("trace_id") @db.VarChar(255) // Langsmith/OTel trace ID
+  createdAt     DateTime @default(now()) @map("created_at")
+  completedAt   DateTime? @map("completed_at")
+
+  // Relations
+  agenticTool AgenticTool @relation(fields: [agenticToolId], references: [id], onDelete: Cascade)
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([agenticToolId, createdAt(sort: Desc)], name: "agentic_tool_executions_tool_created_idx")
+  @@index([tenantId, createdAt(sort: Desc)], name: "agentic_tool_executions_tenant_created_idx")
+  @@index([status], name: "agentic_tool_executions_status_idx")
+  @@map("agentic_tool_executions")
 }

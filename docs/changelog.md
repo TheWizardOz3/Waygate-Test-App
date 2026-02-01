@@ -8,10 +8,12 @@
 
 ### Added
 
+- **Agentic Tools (Parameter Interpreter Mode)**: Create AI tools with embedded LLMs that translate natural language into precise API parameters. Configure Claude or Gemini models with custom system prompts, inject integration schemas and reference data as context, and set safety limits (cost, timeout, tool calls). Tools execute single LLM calls to generate validated parameters, then invoke target actions. Includes wizard UI, comprehensive test suite (187 tests), and full CRUD API.
 - **Composite Tools Test Suite**: Comprehensive unit test coverage for composite tools feature (146 tests). Tests cover routing rule evaluation, schema merging, parameter mapping, and Zod schema validation. All tests pass successfully.
 
 ### Known Issues
 
+- TypeScript compilation errors in agentic tools optional features (20 errors in regenerate-prompt, test-prompt routes). Core functionality fully tested and working.
 - TypeScript compilation errors in composite tools implementation (13 errors). Feature is functionally complete but requires type fixes for production readiness.
 
 ---

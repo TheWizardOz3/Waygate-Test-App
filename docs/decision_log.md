@@ -32,6 +32,7 @@
 | ADR-025 | arch     | Tiered health check system                                        |
 | ADR-026 | arch     | Per-app custom mappings with inheritance                          |
 | ADR-027 | arch     | LLM response preamble as optional wrapper                         |
+| ADR-028 | arch     | Service layer exports over repository for public modules          |
 
 ---
 
@@ -255,6 +256,21 @@
 - Check `connection.preambleTemplate` — if set, wrap response with `context` field
 - Use `interpolatePreamble()` for template processing
 - Preamble logic should NEVER throw — invalid templates fail open
+
+---
+
+### ADR-028: Service Layer Exports Over Repository
+
+**Decision:** Module index files export service functions (high-level operations) over repository functions when names conflict. Repository functions are exported only if they provide unique functionality not available in the service layer.
+
+**Rationale:** Service layer provides business logic, validation, and proper error handling. Direct repository access bypasses these safeguards and creates inconsistent data access patterns across the codebase.
+
+**AI Instructions:**
+
+- In module `index.ts`, use named exports from repository instead of `export *` when conflicts exist
+- Service layer functions take precedence: `createX`, `updateX`, `deleteX`, `disableX` from service, not repository
+- Export repository functions that have no service equivalent (e.g., `findXByIdAndTenant`, `findAllXForTenant`)
+- Pattern seen in [agentic-tools/index.ts](../src/lib/modules/agentic-tools/index.ts#L9-L18)
 
 ---
 

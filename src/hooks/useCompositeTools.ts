@@ -166,7 +166,9 @@ interface CompositeToolsByActionResponse {
 async function fetchCompositeToolsByAction(
   actionId: string
 ): Promise<CompositeToolsByActionResponse> {
-  return apiClient.get<CompositeToolsByActionResponse>(`/actions/${actionId}/composite-tools`);
+  return apiClient.get<CompositeToolsByActionResponse>(
+    `/actions/by-id/${actionId}/composite-tools`
+  );
 }
 
 async function fetchCompositeToolsByIntegration(
