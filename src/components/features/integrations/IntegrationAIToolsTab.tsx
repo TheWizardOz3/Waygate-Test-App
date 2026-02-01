@@ -30,8 +30,6 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PreambleTemplateInput } from '@/components/features/connections/mappings';
-import { UsedInAIToolsSection } from '@/components/features/composite-tools/UsedInAIToolsSection';
-import { useCompositeToolsByIntegration } from '@/hooks/useCompositeTools';
 
 interface IntegrationAIToolsTabProps {
   integrationId: string;
@@ -49,10 +47,6 @@ export function IntegrationAIToolsTab({
   connectionId,
 }: IntegrationAIToolsTabProps) {
   const [activeFormat, setActiveFormat] = useState<ExportFormat>('universal');
-
-  // Fetch composite tools that use actions from this integration
-  const { data: compositeToolsData, isLoading: isLoadingCompositeTools } =
-    useCompositeToolsByIntegration(integrationId);
 
   const {
     data: universalData,
@@ -237,49 +231,6 @@ export function IntegrationAIToolsTab({
                         label="Copied to clipboard"
                         className="absolute right-2 top-2"
                       />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Tool Summary */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm">Available Tools</CardTitle>
-                    <CardDescription>
-                      Each tool&apos;s AI description can be configured in its action settings
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex flex-wrap gap-2">
-                      {universalData.tools.map((tool) => (
-                        <Badge key={tool.name} variant="outline" className="font-mono text-xs">
-                          {tool.name}
-                          <span className="ml-1 font-sans text-muted-foreground">
-                            ({tool.parameters?.required?.length ?? 0} required)
-                          </span>
-                        </Badge>
-                      ))}
-                    </div>
-                    <p className="mt-3 text-xs text-muted-foreground">
-                      <Info className="mr-1 inline h-3 w-3" />
-                      To customize AI tool descriptions, edit individual actions in the Actions tab
-                    </p>
-                  </CardContent>
-                </Card>
-
-                {/* Compatibility Info */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm">Compatible Platforms</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex flex-wrap gap-2">
-                      {universalData.format.compatibleWith.map((platform) => (
-                        <Badge key={platform} variant="secondary">
-                          <CheckCircle2 className="mr-1 h-3 w-3 text-emerald-500" />
-                          {platform}
-                        </Badge>
-                      ))}
                     </div>
                   </CardContent>
                 </Card>
@@ -674,18 +625,6 @@ export function IntegrationAIToolsTab({
           </CardContent>
         </Card>
       </div>
-
-      {/* Divider */}
-      <div className="border-t" />
-
-      {/* Used in Composite Tools Section */}
-      <UsedInAIToolsSection
-        compositeTools={compositeToolsData?.compositeTools}
-        isLoading={isLoadingCompositeTools}
-        title="Used in Composite Tools"
-        description="Actions from this integration are included in the following composite tools"
-        emptyMessage="No actions from this integration are used in composite tools yet."
-      />
     </div>
   );
 }
