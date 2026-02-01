@@ -142,6 +142,28 @@ enum VariableType {
   json
 }
 
+/// Routing mode for composite tools
+enum CompositeToolRoutingMode {
+  rule_based
+  agent_driven
+}
+
+/// Status of a composite tool
+enum CompositeToolStatus {
+  draft
+  active
+  disabled
+}
+
+/// Type of routing condition for composite tools
+enum RoutingConditionType {
+  contains
+  equals
+  matches
+  starts_with
+  ends_with
+}
+
 /// Credential health status for health checks
 enum CredentialHealthStatus {
   active // Credentials are valid and not expiring soon
@@ -183,6 +205,7 @@ model Tenant {
   referenceData          ReferenceData[]
   referenceSyncJobs      ReferenceSyncJob[]
   variables              Variable[]
+  compositeTools         CompositeTool[]
 
   @@map("tenants")
 }
@@ -328,13 +351,14 @@ model Action {
   toolErrorTemplate   String? @map("tool_error_template") @db.Text /// Template for formatting error responses
 
   // Relations
-  integration              Integration         @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  integration              Integration              @relation(fields: [integrationId], references: [id], onDelete: Cascade)
   fieldMappings            FieldMapping[]
   requestLogs              RequestLog[]
   validationFailures       ValidationFailure[]
-  connectionTestActionFor  Connection[]        @relation("ConnectionTestAction")
-  healthChecksAsTestAction HealthCheck[]       @relation("HealthCheckTestAction")
+  connectionTestActionFor  Connection[]             @relation("ConnectionTestAction")
+  healthChecksAsTestAction HealthCheck[]            @relation("HealthCheckTestAction")
   referenceDataSyncedBy    ReferenceData[]
+  compositeToolOperations  CompositeToolOperation[]
 
   // Indexes
   @@unique([integrationId, slug], name: "actions_integration_slug_idx")
@@ -628,4 +652,82 @@ model Variable {
   @@index([tenantId], name: "variables_tenant_idx")
   @@index([connectionId], name: "variables_connection_idx")
   @@map("variables")
+}
+
+/// Composite tools - aggregate multiple actions with routing logic
+model CompositeTool {
+  id                  String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String                   @map("tenant_id") @db.Uuid
+  name                String                   @db.VarChar(255)
+  slug                String                   @db.VarChar(100)
+  description         String?                  @db.Text
+  routingMode         CompositeToolRoutingMode @map("routing_mode")
+  defaultOperationId  String?                  @map("default_operation_id") @db.Uuid
+  unifiedInputSchema  Json                     @default("{}") @map("unified_input_schema")
+  toolDescription     String?                  @map("tool_description") @db.Text /// LLM-optimized mini-prompt description
+  toolSuccessTemplate String?                  @map("tool_success_template") @db.Text /// Template for formatting successful responses
+  toolErrorTemplate   String?                  @map("tool_error_template") @db.Text /// Template for formatting error responses
+  status              CompositeToolStatus      @default(draft)
+  metadata            Json                     @default("{}")
+  createdAt           DateTime                 @default(now()) @map("created_at")
+  updatedAt           DateTime                 @updatedAt @map("updated_at")
+
+  // Relations
+  tenant           Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  defaultOperation CompositeToolOperation?  @relation("DefaultOperation", fields: [defaultOperationId], references: [id], onDelete: SetNull)
+  operations       CompositeToolOperation[] @relation("CompositeToolOperations")
+  routingRules     RoutingRule[]
+
+  // Indexes
+  @@unique([tenantId, slug], name: "composite_tools_tenant_slug_idx")
+  @@index([tenantId], name: "composite_tools_tenant_id_idx")
+  @@index([status], name: "composite_tools_status_idx")
+  @@map("composite_tools")
+}
+
+/// Operations within a composite tool - links to actions with parameter mappings
+model CompositeToolOperation {
+  id               String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  compositeToolId  String @map("composite_tool_id") @db.Uuid
+  actionId         String @map("action_id") @db.Uuid
+  operationSlug    String @map("operation_slug") @db.VarChar(100) /// Unique identifier within composite tool
+  displayName      String @map("display_name") @db.VarChar(255) /// Human-readable name (e.g., "LinkedIn Scraper")
+  parameterMapping Json   @default("{}") @map("parameter_mapping") /// Maps unified params → action params
+  priority         Int    @default(0) /// For ordering operations
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  // Relations
+  compositeTool            CompositeTool @relation("CompositeToolOperations", fields: [compositeToolId], references: [id], onDelete: Cascade)
+  action                   Action        @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  routingRules             RoutingRule[]
+  defaultForCompositeTools CompositeTool[] @relation("DefaultOperation")
+
+  // Indexes
+  @@unique([compositeToolId, operationSlug], name: "composite_tool_operations_slug_idx")
+  @@unique([compositeToolId, actionId], name: "composite_tool_operations_action_idx")
+  @@index([compositeToolId], name: "composite_tool_operations_composite_tool_id_idx")
+  @@index([actionId], name: "composite_tool_operations_action_id_idx")
+  @@map("composite_tool_operations")
+}
+
+/// Routing rules for composite tools - evaluate conditions to select operations
+model RoutingRule {
+  id              String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  compositeToolId String               @map("composite_tool_id") @db.Uuid
+  operationId     String               @map("operation_id") @db.Uuid
+  conditionType   RoutingConditionType @map("condition_type")
+  conditionField  String               @map("condition_field") @db.VarChar(100) /// Input parameter to check (e.g., "url")
+  conditionValue  String               @map("condition_value") @db.Text /// Value to compare against
+  caseSensitive   Boolean              @default(false) @map("case_sensitive")
+  priority        Int                  @default(0) /// Evaluation order (lower = first)
+  createdAt       DateTime             @default(now()) @map("created_at")
+
+  // Relations
+  compositeTool CompositeTool          @relation(fields: [compositeToolId], references: [id], onDelete: Cascade)
+  operation     CompositeToolOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([compositeToolId, priority], name: "routing_rules_composite_tool_priority_idx")
+  @@index([operationId], name: "routing_rules_operation_id_idx")
+  @@map("routing_rules")
 }

@@ -11,9 +11,11 @@ import {
   Trash2,
   ExternalLink,
   Sparkles,
+  Wand2,
 } from 'lucide-react';
 import Link from 'next/link';
 
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -45,6 +47,7 @@ import { IntegrationEmptyState, IntegrationNoResults } from './IntegrationEmptyS
 import { TagFilter } from './TagFilter';
 import { TagList } from '@/components/ui/tag-badge';
 import { useIntegrations, useDeleteIntegration, useTags } from '@/hooks';
+import { useCompositeToolCounts } from '@/hooks/useCompositeTools';
 import { cn } from '@/lib/utils';
 import type {
   IntegrationStatus,
@@ -98,6 +101,10 @@ export function IntegrationList({ className }: IntegrationListProps) {
 
   // Mutations
   const deleteIntegration = useDeleteIntegration();
+
+  // Fetch composite tool counts per integration
+  const { data: compositeToolCountsData } = useCompositeToolCounts();
+  const aiToolCounts = compositeToolCountsData?.counts ?? {};
 
   const handleDelete = React.useCallback(
     (id: string) => {
@@ -256,12 +263,17 @@ export function IntegrationList({ className }: IntegrationListProps) {
               key={integration.id}
               integration={integration}
               onDelete={handleDelete}
+              aiToolCount={aiToolCounts[integration.id]}
             />
           ))}
         </div>
       ) : (
         // Table/List View
-        <IntegrationTable integrations={integrations} onDelete={handleDelete} />
+        <IntegrationTable
+          integrations={integrations}
+          onDelete={handleDelete}
+          aiToolCounts={aiToolCounts}
+        />
       )}
     </div>
   );
@@ -274,9 +286,10 @@ export function IntegrationList({ className }: IntegrationListProps) {
 interface IntegrationTableProps {
   integrations: IntegrationSummary[];
   onDelete: (id: string) => void;
+  aiToolCounts?: Record<string, number>;
 }
 
-function IntegrationTable({ integrations, onDelete }: IntegrationTableProps) {
+function IntegrationTable({ integrations, onDelete, aiToolCounts = {} }: IntegrationTableProps) {
   return (
     <div className="rounded-md border">
       <Table>
@@ -285,6 +298,7 @@ function IntegrationTable({ integrations, onDelete }: IntegrationTableProps) {
             <TableHead className="w-[300px]">Integration</TableHead>
             <TableHead>Slug</TableHead>
             <TableHead>Tags</TableHead>
+            <TableHead>AI Tools</TableHead>
             <TableHead>Health</TableHead>
             <TableHead className="w-[40px]"></TableHead>
           </TableRow>
@@ -315,6 +329,19 @@ function IntegrationTable({ integrations, onDelete }: IntegrationTableProps) {
               </TableCell>
               <TableCell>
                 <TagList tags={integration.tags} size="sm" maxVisible={2} />
+              </TableCell>
+              <TableCell>
+                {aiToolCounts[integration.id] ? (
+                  <Badge
+                    variant="secondary"
+                    className="gap-1 bg-violet-500/10 text-violet-600 dark:text-violet-400"
+                  >
+                    <Wand2 className="h-3 w-3" />
+                    {aiToolCounts[integration.id]}
+                  </Badge>
+                ) : (
+                  <span className="text-sm text-muted-foreground">-</span>
+                )}
               </TableCell>
               <TableCell>
                 <IntegrationHealthBadge
@@ -379,6 +406,7 @@ function IntegrationTableSkeleton() {
             <TableHead className="w-[300px]">Integration</TableHead>
             <TableHead>Slug</TableHead>
             <TableHead>Tags</TableHead>
+            <TableHead>AI Tools</TableHead>
             <TableHead>Health</TableHead>
             <TableHead className="w-[40px]"></TableHead>
           </TableRow>
@@ -400,6 +428,9 @@ function IntegrationTableSkeleton() {
               </TableCell>
               <TableCell>
                 <Skeleton className="h-5 w-20 rounded-md" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-5 w-10 rounded-md" />
               </TableCell>
               <TableCell>
                 <Skeleton className="h-5 w-16 rounded-full" />

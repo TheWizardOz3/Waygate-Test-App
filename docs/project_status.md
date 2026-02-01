@@ -13,7 +13,7 @@
 | Order | Feature               | Status           | Dependencies                   |
 | ----- | --------------------- | ---------------- | ------------------------------ |
 | 1     | Composite Tools       | Testing Complete | Simple Tool Export (V1.1)      |
-| 2     | Agentic Tools         | Pending          | Composite Tools                |
+| 2     | Agentic Tools         | In Progress      | Composite Tools                |
 | 3     | Multi-Agent Pipelines | Pending          | Composite Tools, Agentic Tools |
 
 **Feature Summaries:**

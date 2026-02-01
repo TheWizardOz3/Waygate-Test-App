@@ -390,6 +390,7 @@ export function ActionEditor({ integrationId, actionId }: ActionEditorProps) {
                 onRegenerateToolDescriptions={
                   isEditing ? handleRegenerateToolDescriptions : undefined
                 }
+                actionId={isEditing ? actionId : undefined}
               />
             </TabsContent>
 

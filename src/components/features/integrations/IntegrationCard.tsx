@@ -3,10 +3,19 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { MoreHorizontal, ExternalLink, Settings, Trash2, Sparkles, ArrowRight } from 'lucide-react';
+import {
+  MoreHorizontal,
+  ExternalLink,
+  Settings,
+  Trash2,
+  Sparkles,
+  ArrowRight,
+  Wand2,
+} from 'lucide-react';
 
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,6 +23,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { IntegrationHealthBadge } from './IntegrationStatusBadge';
 import { TagList } from '@/components/ui/tag-badge';
 import { cn } from '@/lib/utils';
@@ -23,6 +33,7 @@ interface IntegrationCardProps {
   integration: IntegrationSummary;
   onDelete?: (id: string) => void;
   className?: string;
+  aiToolCount?: number;
 }
 
 /**
@@ -30,7 +41,12 @@ interface IntegrationCardProps {
  * Shows integration name, status, action count, and quick actions.
  * The entire card is clickable to navigate to the integration detail.
  */
-export function IntegrationCard({ integration, onDelete, className }: IntegrationCardProps) {
+export function IntegrationCard({
+  integration,
+  onDelete,
+  className,
+  aiToolCount,
+}: IntegrationCardProps) {
   const router = useRouter();
   const { id, name, slug, description, status } = integration;
 
@@ -84,10 +100,30 @@ export function IntegrationCard({ integration, onDelete, className }: Integratio
           <p className="mb-2 line-clamp-2 text-sm text-muted-foreground">{description}</p>
         )}
 
-        {/* Tags */}
-        {integration.tags.length > 0 && (
-          <TagList tags={integration.tags} size="sm" maxVisible={3} />
-        )}
+        {/* Tags and AI Tool Count */}
+        <div className="flex items-center justify-between gap-2">
+          {integration.tags.length > 0 && (
+            <TagList tags={integration.tags} size="sm" maxVisible={3} />
+          )}
+          {aiToolCount !== undefined && aiToolCount > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge
+                  variant="secondary"
+                  className="shrink-0 gap-1 bg-violet-500/10 text-violet-600 hover:bg-violet-500/20 dark:text-violet-400"
+                >
+                  <Wand2 className="h-3 w-3" />
+                  {aiToolCount}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>
+                  Used in {aiToolCount} composite tool{aiToolCount > 1 ? 's' : ''}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
 
         {/* More Menu - absolute positioned */}
         <DropdownMenu>

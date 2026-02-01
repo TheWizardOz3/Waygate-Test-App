@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   Sparkles,
+  Wand2,
   ScrollText,
   Settings,
   ChevronLeft,
@@ -35,6 +36,12 @@ const navItems: NavItem[] = [
     href: '/integrations',
     icon: Sparkles,
     description: 'Manage your integrations',
+  },
+  {
+    title: 'AI Tools',
+    href: '/ai-tools',
+    icon: Wand2,
+    description: 'Composite and agentic tools',
   },
   {
     title: 'Logs',

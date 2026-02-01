@@ -30,6 +30,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PreambleTemplateInput } from '@/components/features/connections/mappings';
+import { UsedInAIToolsSection } from '@/components/features/composite-tools/UsedInAIToolsSection';
+import { useCompositeToolsByIntegration } from '@/hooks/useCompositeTools';
 
 interface IntegrationAIToolsTabProps {
   integrationId: string;
@@ -47,6 +49,10 @@ export function IntegrationAIToolsTab({
   connectionId,
 }: IntegrationAIToolsTabProps) {
   const [activeFormat, setActiveFormat] = useState<ExportFormat>('universal');
+
+  // Fetch composite tools that use actions from this integration
+  const { data: compositeToolsData, isLoading: isLoadingCompositeTools } =
+    useCompositeToolsByIntegration(integrationId);
 
   const {
     data: universalData,
@@ -668,6 +674,18 @@ export function IntegrationAIToolsTab({
           </CardContent>
         </Card>
       </div>
+
+      {/* Divider */}
+      <div className="border-t" />
+
+      {/* Used in Composite Tools Section */}
+      <UsedInAIToolsSection
+        compositeTools={compositeToolsData?.compositeTools}
+        isLoading={isLoadingCompositeTools}
+        title="Used in Composite Tools"
+        description="Actions from this integration are included in the following composite tools"
+        emptyMessage="No actions from this integration are used in composite tools yet."
+      />
     </div>
   );
 }
