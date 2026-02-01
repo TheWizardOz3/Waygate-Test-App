@@ -124,9 +124,10 @@ export type UpdateCompositeToolOperationInput = z.infer<
 
 /**
  * Input for creating a routing rule
+ * Note: operationId can be either a UUID (for existing operations) or a slug (resolved during creation)
  */
 export const CreateRoutingRuleInputSchema = z.object({
-  operationId: z.string().uuid(),
+  operationId: z.string().min(1), // Accept slug or UUID - service layer handles mapping
   conditionType: RoutingConditionTypeSchema,
   conditionField: z.string().min(1).max(100),
   conditionValue: z.string().min(1),

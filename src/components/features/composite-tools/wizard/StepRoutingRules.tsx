@@ -16,7 +16,11 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { useCompositeToolWizardStore, type RoutingRule } from '@/stores/compositeToolWizard.store';
+import {
+  useCompositeToolWizardStore,
+  type RoutingRule,
+  type SelectedOperation,
+} from '@/stores/compositeToolWizard.store';
 import type { RoutingConditionType } from '@/lib/modules/composite-tools/composite-tool.schemas';
 
 // =============================================================================
@@ -32,6 +36,57 @@ const CONDITION_TYPES: { value: RoutingConditionType; label: string; example: st
 ];
 
 // =============================================================================
+// Helpers
+// =============================================================================
+
+interface DerivedField {
+  value: string;
+  label: string;
+  description: string;
+}
+
+/**
+ * Extract field names from the inputSchema of operations.
+ * Aggregates fields from all selected operations and deduplicates them.
+ */
+function deriveFieldsFromOperations(operations: SelectedOperation[]): DerivedField[] {
+  const fieldsMap = new Map<string, DerivedField>();
+
+  for (const operation of operations) {
+    const schema = operation.inputSchema as {
+      type?: string;
+      properties?: Record<string, { type?: string; description?: string }>;
+    } | null;
+
+    if (!schema || schema.type !== 'object' || !schema.properties) {
+      continue;
+    }
+
+    for (const [fieldName, fieldDef] of Object.entries(schema.properties)) {
+      if (!fieldsMap.has(fieldName)) {
+        fieldsMap.set(fieldName, {
+          value: fieldName,
+          label: fieldName,
+          description: fieldDef.description || `${fieldDef.type || 'any'} field`,
+        });
+      }
+    }
+  }
+
+  // Convert to array and sort alphabetically
+  const fields = Array.from(fieldsMap.values()).sort((a, b) => a.label.localeCompare(b.label));
+
+  // Always add a "custom" option at the end
+  fields.push({
+    value: 'custom',
+    label: 'Custom field...',
+    description: 'Enter a custom field name',
+  });
+
+  return fields;
+}
+
+// =============================================================================
 // Component
 // =============================================================================
 
@@ -39,15 +94,24 @@ export function StepRoutingRules() {
   const { data, addRoutingRule, updateRoutingRule, removeRoutingRule, goToStep, canProceed } =
     useCompositeToolWizardStore();
 
+  // Derive available fields from the selected operations' input schemas
+  const availableFields = React.useMemo(
+    () => deriveFieldsFromOperations(data.operations),
+    [data.operations]
+  );
+
   const handleAddRule = () => {
     // Default to the first operation
     const firstOperation = data.operations[0];
     if (!firstOperation) return;
 
+    // Use the first non-custom field as default, or empty string if only custom is available
+    const defaultField = availableFields.find((f) => f.value !== 'custom')?.value || '';
+
     addRoutingRule({
       operationSlug: firstOperation.operationSlug,
       conditionType: 'contains',
-      conditionField: 'url',
+      conditionField: defaultField,
       conditionValue: '',
       caseSensitive: false,
     });
@@ -74,6 +138,17 @@ export function StepRoutingRules() {
             </span>
           )}
         </p>
+        {availableFields.length > 1 && (
+          <p className="mt-2 text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">
+              Available fields from your operations:
+            </span>{' '}
+            {availableFields
+              .filter((f) => f.value !== 'custom')
+              .map((f) => f.label)
+              .join(', ')}
+          </p>
+        )}
       </div>
 
       {/* Rules list */}
@@ -111,6 +186,7 @@ export function StepRoutingRules() {
                 <RoutingRuleCard
                   rule={rule}
                   operations={data.operations}
+                  availableFields={availableFields}
                   index={index}
                   onUpdate={(updates) => updateRoutingRule(rule.id, updates)}
                   onRemove={() => removeRoutingRule(rule.id)}
@@ -160,12 +236,38 @@ export function StepRoutingRules() {
 interface RoutingRuleCardProps {
   rule: RoutingRule;
   operations: { operationSlug: string; displayName: string }[];
+  availableFields: DerivedField[];
   index: number;
   onUpdate: (updates: Partial<RoutingRule>) => void;
   onRemove: () => void;
 }
 
-function RoutingRuleCard({ rule, operations, index, onUpdate, onRemove }: RoutingRuleCardProps) {
+function RoutingRuleCard({
+  rule,
+  operations,
+  availableFields,
+  index,
+  onUpdate,
+  onRemove,
+}: RoutingRuleCardProps) {
+  const [isCustomField, setIsCustomField] = React.useState(() => {
+    // Check if current field is a custom field (not in available fields list)
+    const isDerived = availableFields.some(
+      (f) => f.value === rule.conditionField && f.value !== 'custom'
+    );
+    return !isDerived && rule.conditionField !== '';
+  });
+
+  const handleFieldSelect = (value: string) => {
+    if (value === 'custom') {
+      setIsCustomField(true);
+      onUpdate({ conditionField: '' });
+    } else {
+      setIsCustomField(false);
+      onUpdate({ conditionField: value });
+    }
+  };
+
   return (
     <Card>
       <CardContent className="space-y-4 p-4">
@@ -187,12 +289,52 @@ function RoutingRuleCard({ rule, operations, index, onUpdate, onRemove }: Routin
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="space-y-1.5">
             <Label className="text-xs">If field</Label>
-            <Input
-              value={rule.conditionField}
-              onChange={(e) => onUpdate({ conditionField: e.target.value })}
-              placeholder="e.g., url"
-              className="h-9"
-            />
+            {isCustomField ? (
+              <Input
+                value={rule.conditionField}
+                onChange={(e) => onUpdate({ conditionField: e.target.value })}
+                placeholder="Enter field name"
+                className="h-9"
+              />
+            ) : (
+              <Select
+                value={
+                  rule.conditionField ||
+                  (availableFields[0]?.value !== 'custom' ? availableFields[0]?.value : '')
+                }
+                onValueChange={handleFieldSelect}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Select a field" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableFields.map((field) => (
+                    <SelectItem key={field.value} value={field.value}>
+                      <div className="flex items-center gap-2">
+                        <span>{field.label}</span>
+                        {field.description && field.value !== 'custom' && (
+                          <span className="text-xs text-muted-foreground">
+                            ({field.description})
+                          </span>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {isCustomField && availableFields.length > 1 && (
+              <button
+                onClick={() => {
+                  setIsCustomField(false);
+                  const firstNonCustomField = availableFields.find((f) => f.value !== 'custom');
+                  onUpdate({ conditionField: firstNonCustomField?.value || '' });
+                }}
+                className="text-xs text-muted-foreground underline hover:text-foreground"
+              >
+                Use schema field
+              </button>
+            )}
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Condition</Label>

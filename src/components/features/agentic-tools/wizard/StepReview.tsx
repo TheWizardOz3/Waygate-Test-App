@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAgenticToolWizardStore } from '@/stores/agenticToolWizard.store';
+import { apiClient } from '@/lib/api/client';
 
 export function StepReview() {
   const router = useRouter();
@@ -45,22 +46,12 @@ export function StepReview() {
         status: 'draft',
       };
 
-      const response = await fetch('/api/v1/agentic-tools', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || 'Failed to create agentic tool');
-      }
-
-      const result = await response.json();
-      setCreatedToolId(result.data.id);
+      // Use apiClient which handles authentication automatically
+      const result = await apiClient.post<{ id: string }>('/agentic-tools', payload);
+      setCreatedToolId(result.id);
 
       // Redirect to the created tool's detail page
-      router.push(`/ai-tools/${result.data.id}`);
+      router.push(`/ai-tools/${result.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create agentic tool');
       setIsCreating(false);
@@ -69,15 +60,65 @@ export function StepReview() {
 
   if (data.createdToolId) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
-        <CheckCircle2 className="mb-4 h-16 w-16 text-green-600" />
-        <h3 className="text-xl font-semibold">Agentic Tool Created!</h3>
-        <p className="mt-2 text-muted-foreground">
-          Your agentic tool has been created successfully.
-        </p>
-        <Button className="mt-6" onClick={() => router.push('/ai-tools')}>
-          View All Tools
-        </Button>
+      <div className="space-y-6">
+        <div className="flex flex-col items-center justify-center py-8 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/20">
+            <CheckCircle2 className="h-8 w-8 text-green-600 dark:text-green-400" />
+          </div>
+          <h3 className="mt-4 font-heading text-xl font-semibold">
+            Agentic Tool Created Successfully!
+          </h3>
+          <p className="mt-2 text-muted-foreground">
+            Your agentic tool &quot;{data.name}&quot; is ready to use.
+          </p>
+        </div>
+
+        {/* Tool details */}
+        <div className="space-y-6 rounded-lg border p-6">
+          <div>
+            <Label>Tool Name</Label>
+            <p className="mt-1 text-sm">{data.name}</p>
+          </div>
+          <div>
+            <Label>Slug</Label>
+            <p className="mt-1 font-mono text-sm">{data.slug}</p>
+          </div>
+          {data.description && (
+            <div>
+              <Label>Description</Label>
+              <p className="mt-1 text-sm text-muted-foreground">{data.description}</p>
+            </div>
+          )}
+          <div>
+            <Label>Execution Mode</Label>
+            <p className="mt-1 text-sm">
+              {data.executionMode === 'parameter_interpreter'
+                ? 'LLM Data Transformation'
+                : 'Autonomous Agent'}
+            </p>
+          </div>
+          <div>
+            <Label>Model</Label>
+            <p className="mt-1 text-sm">{data.embeddedLLMConfig.model}</p>
+          </div>
+          <div>
+            <Label>Tools/Actions</Label>
+            <p className="mt-1 text-sm">
+              {data.executionMode === 'parameter_interpreter'
+                ? `${data.targetActions.length} target action(s)`
+                : `${data.availableTools.length} available tool(s)`}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex justify-center gap-3">
+          <Button variant="outline" onClick={() => router.push('/ai-tools')}>
+            View All Tools
+          </Button>
+          <Button onClick={() => router.push(`/ai-tools/${data.createdToolId}`)}>
+            View Tool Details
+          </Button>
+        </div>
       </div>
     );
   }
@@ -119,7 +160,7 @@ export function StepReview() {
           <div className="rounded-lg border p-4">
             <span className="text-sm font-medium">
               {data.executionMode === 'parameter_interpreter'
-                ? 'Parameter Interpreter'
+                ? 'LLM Data Transformation'
                 : 'Autonomous Agent'}
             </span>
           </div>

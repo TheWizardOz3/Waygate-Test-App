@@ -2,6 +2,7 @@
  * Agentic Tool Wizard Store
  *
  * Zustand store for managing the multi-step agentic tool creation wizard.
+ * Updated to use unified tool abstraction for tool composition.
  */
 
 import { create } from 'zustand';
@@ -13,6 +14,7 @@ import type {
   ContextVariable,
   SafetyLimits,
 } from '@/lib/modules/agentic-tools/agentic-tool.schemas';
+import type { ToolType } from '@/lib/modules/tools';
 
 // =============================================================================
 // Types
@@ -26,6 +28,43 @@ export type AgenticToolWizardStep =
   | 'tool-allocation'
   | 'context-config'
   | 'review';
+
+/**
+ * Extended tool metadata for wizard use (includes schema for prompt generation).
+ * Uses unified tool abstraction to support simple, composite, and agentic tools.
+ */
+export interface SelectedToolMeta {
+  /** Tool ID - actionId for simple tools, toolId for composite/agentic */
+  toolId: string;
+  /** Tool type discriminator */
+  toolType: ToolType;
+  /** Tool slug */
+  toolSlug: string;
+  /** Tool name for display */
+  toolName: string;
+  /** Integration context (simple tools only) */
+  integrationId?: string;
+  integrationName?: string;
+  /** AI-optimized description */
+  description: string;
+  /** Input schema for prompt generation */
+  inputSchema?: unknown;
+  /** Output schema for prompt generation */
+  outputSchema?: unknown;
+}
+
+/**
+ * @deprecated Use SelectedToolMeta instead. Kept for backwards compatibility.
+ */
+export interface SelectedActionMeta {
+  actionId: string;
+  actionSlug: string;
+  actionName: string;
+  integrationId: string;
+  integrationName: string;
+  inputSchema?: unknown;
+  outputSchema?: unknown;
+}
 
 export interface WizardData {
   // Step 1: Name & Description
@@ -43,8 +82,12 @@ export interface WizardData {
   systemPrompt: string;
 
   // Step 5: Tool Allocation
-  targetActions: TargetAction[]; // For parameter_interpreter mode
-  availableTools: AvailableTool[]; // For autonomous_agent mode
+  targetActions: TargetAction[]; // For parameter_interpreter mode (API-compatible)
+  availableTools: AvailableTool[]; // For autonomous_agent mode (API-compatible)
+  /** Full tool metadata keyed by toolId (unified tool abstraction) */
+  selectedToolsMeta: Record<string, SelectedToolMeta>;
+  /** @deprecated Use selectedToolsMeta instead */
+  selectedActionsMeta: Record<string, SelectedActionMeta>;
 
   // Step 6: Context Configuration
   contextVariables: Record<string, ContextVariable>;
@@ -77,17 +120,26 @@ interface WizardState {
   setExecutionMode: (mode: AgenticToolExecutionMode) => void;
   setLLMConfig: (config: Partial<EmbeddedLLMConfig>) => void;
   setSystemPrompt: (prompt: string) => void;
-  addTargetAction: (action: TargetAction) => void;
-  removeTargetAction: (actionId: string) => void;
-  addAvailableTool: (tool: AvailableTool) => void;
-  removeAvailableTool: (actionId: string) => void;
-  updateAvailableTool: (actionId: string, updates: Partial<AvailableTool>) => void;
+  /** Add target action with optional tool metadata (uses unified tool abstraction) */
+  addTargetAction: (action: TargetAction, meta?: SelectedToolMeta | SelectedActionMeta) => void;
+  /** Remove target action by tool ID */
+  removeTargetAction: (toolId: string) => void;
+  /** Add available tool with optional metadata (uses unified tool abstraction) */
+  addAvailableTool: (tool: AvailableTool, meta?: SelectedToolMeta | SelectedActionMeta) => void;
+  /** Remove available tool by tool ID */
+  removeAvailableTool: (toolId: string) => void;
+  /** Update available tool by tool ID */
+  updateAvailableTool: (toolId: string, updates: Partial<AvailableTool>) => void;
   setContextVariable: (key: string, variable: ContextVariable) => void;
   removeContextVariable: (key: string) => void;
   setAutoInjectSchemas: (value: boolean) => void;
   setToolDescription: (description: string) => void;
   setSafetyLimits: (limits: Partial<SafetyLimits>) => void;
   setCreatedToolId: (id: string) => void;
+  /** Get selected tools metadata (unified tool abstraction) */
+  getSelectedToolsMeta: () => SelectedToolMeta[];
+  /** @deprecated Use getSelectedToolsMeta instead */
+  getSelectedActionsMeta: () => SelectedActionMeta[];
 
   // Validation
   canProceed: () => boolean;
@@ -115,6 +167,8 @@ const initialData: WizardData = {
   systemPrompt: '',
   targetActions: [],
   availableTools: [],
+  selectedToolsMeta: {},
+  selectedActionsMeta: {}, // Deprecated
   contextVariables: {},
   autoInjectSchemas: true,
   toolDescription: '',
@@ -242,56 +296,166 @@ export const useAgenticToolWizardStore = create<WizardState>((set, get) => ({
       data: { ...state.data, systemPrompt: prompt },
     })),
 
-  addTargetAction: (action) =>
+  addTargetAction: (action, meta) =>
     set((state) => {
       // Don't add duplicate
       if (state.data.targetActions.some((a) => a.actionId === action.actionId)) {
         return state;
       }
+
+      // Convert meta to both formats for compatibility
+      const toolId = (meta as SelectedToolMeta)?.toolId || action.actionId;
+      const toolMeta: SelectedToolMeta | undefined = meta
+        ? {
+            toolId,
+            toolType: (meta as SelectedToolMeta).toolType || 'simple',
+            toolSlug:
+              (meta as SelectedToolMeta).toolSlug || (meta as SelectedActionMeta).actionSlug,
+            toolName:
+              (meta as SelectedToolMeta).toolName || (meta as SelectedActionMeta).actionName,
+            integrationId: meta.integrationId,
+            integrationName: meta.integrationName,
+            description: (meta as SelectedToolMeta).description || '',
+            inputSchema: meta.inputSchema,
+            outputSchema: meta.outputSchema,
+          }
+        : undefined;
+
+      // Also maintain legacy selectedActionsMeta for backwards compatibility
+      const actionMeta: SelectedActionMeta | undefined = meta
+        ? {
+            actionId: action.actionId,
+            actionSlug:
+              (meta as SelectedActionMeta).actionSlug || (meta as SelectedToolMeta).toolSlug,
+            actionName:
+              (meta as SelectedActionMeta).actionName || (meta as SelectedToolMeta).toolName,
+            integrationId: meta.integrationId || '',
+            integrationName: meta.integrationName || '',
+            inputSchema: meta.inputSchema,
+            outputSchema: meta.outputSchema,
+          }
+        : undefined;
+
       return {
         data: {
           ...state.data,
           targetActions: [...state.data.targetActions, action],
+          selectedToolsMeta: toolMeta
+            ? { ...state.data.selectedToolsMeta, [toolId]: toolMeta }
+            : state.data.selectedToolsMeta,
+          selectedActionsMeta: actionMeta
+            ? { ...state.data.selectedActionsMeta, [action.actionId]: actionMeta }
+            : state.data.selectedActionsMeta,
         },
       };
     }),
 
-  removeTargetAction: (actionId) =>
-    set((state) => ({
-      data: {
-        ...state.data,
-        targetActions: state.data.targetActions.filter((a) => a.actionId !== actionId),
-      },
-    })),
+  removeTargetAction: (toolId) =>
+    set((state) => {
+      // Find by toolId first, then by actionId for backwards compatibility
+      const targetAction = state.data.targetActions.find(
+        (a) => a.actionId === toolId || state.data.selectedToolsMeta[toolId]?.toolId === toolId
+      );
+      const actionId = targetAction?.actionId || toolId;
 
-  addAvailableTool: (tool) =>
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { [toolId]: _removedTool, ...restToolMeta } = state.data.selectedToolsMeta;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { [actionId]: _removedAction, ...restActionMeta } = state.data.selectedActionsMeta;
+
+      return {
+        data: {
+          ...state.data,
+          targetActions: state.data.targetActions.filter((a) => a.actionId !== actionId),
+          selectedToolsMeta: restToolMeta,
+          selectedActionsMeta: restActionMeta,
+        },
+      };
+    }),
+
+  addAvailableTool: (tool, meta) =>
     set((state) => {
       // Don't add duplicate
       if (state.data.availableTools.some((t) => t.actionId === tool.actionId)) {
         return state;
       }
+
+      // Convert meta to both formats for compatibility
+      const toolId = (meta as SelectedToolMeta)?.toolId || tool.actionId;
+      const toolMeta: SelectedToolMeta | undefined = meta
+        ? {
+            toolId,
+            toolType: (meta as SelectedToolMeta).toolType || 'simple',
+            toolSlug:
+              (meta as SelectedToolMeta).toolSlug || (meta as SelectedActionMeta).actionSlug,
+            toolName:
+              (meta as SelectedToolMeta).toolName || (meta as SelectedActionMeta).actionName,
+            integrationId: meta.integrationId,
+            integrationName: meta.integrationName,
+            description: (meta as SelectedToolMeta).description || tool.description,
+            inputSchema: meta.inputSchema,
+            outputSchema: meta.outputSchema,
+          }
+        : undefined;
+
+      // Also maintain legacy selectedActionsMeta for backwards compatibility
+      const actionMeta: SelectedActionMeta | undefined = meta
+        ? {
+            actionId: tool.actionId,
+            actionSlug:
+              (meta as SelectedActionMeta).actionSlug || (meta as SelectedToolMeta).toolSlug,
+            actionName:
+              (meta as SelectedActionMeta).actionName || (meta as SelectedToolMeta).toolName,
+            integrationId: meta.integrationId || '',
+            integrationName: meta.integrationName || '',
+            inputSchema: meta.inputSchema,
+            outputSchema: meta.outputSchema,
+          }
+        : undefined;
+
       return {
         data: {
           ...state.data,
           availableTools: [...state.data.availableTools, tool],
+          selectedToolsMeta: toolMeta
+            ? { ...state.data.selectedToolsMeta, [toolId]: toolMeta }
+            : state.data.selectedToolsMeta,
+          selectedActionsMeta: actionMeta
+            ? { ...state.data.selectedActionsMeta, [tool.actionId]: actionMeta }
+            : state.data.selectedActionsMeta,
         },
       };
     }),
 
-  removeAvailableTool: (actionId) =>
-    set((state) => ({
-      data: {
-        ...state.data,
-        availableTools: state.data.availableTools.filter((t) => t.actionId !== actionId),
-      },
-    })),
+  removeAvailableTool: (toolId) =>
+    set((state) => {
+      // Find by toolId first, then by actionId for backwards compatibility
+      const availableTool = state.data.availableTools.find(
+        (t) => t.actionId === toolId || state.data.selectedToolsMeta[toolId]?.toolId === toolId
+      );
+      const actionId = availableTool?.actionId || toolId;
 
-  updateAvailableTool: (actionId, updates) =>
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { [toolId]: _removedTool, ...restToolMeta } = state.data.selectedToolsMeta;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { [actionId]: _removedAction, ...restActionMeta } = state.data.selectedActionsMeta;
+
+      return {
+        data: {
+          ...state.data,
+          availableTools: state.data.availableTools.filter((t) => t.actionId !== actionId),
+          selectedToolsMeta: restToolMeta,
+          selectedActionsMeta: restActionMeta,
+        },
+      };
+    }),
+
+  updateAvailableTool: (toolId, updates) =>
     set((state) => ({
       data: {
         ...state.data,
         availableTools: state.data.availableTools.map((t) =>
-          t.actionId === actionId ? { ...t, ...updates } : t
+          t.actionId === toolId ? { ...t, ...updates } : t
         ),
       },
     })),
@@ -338,6 +502,17 @@ export const useAgenticToolWizardStore = create<WizardState>((set, get) => ({
     set((state) => ({
       data: { ...state.data, createdToolId: id },
     })),
+
+  getSelectedToolsMeta: () => {
+    const state = get();
+    return Object.values(state.data.selectedToolsMeta);
+  },
+
+  /** @deprecated Use getSelectedToolsMeta instead */
+  getSelectedActionsMeta: () => {
+    const state = get();
+    return Object.values(state.data.selectedActionsMeta);
+  },
 
   // Validation
   canProceed: () => {

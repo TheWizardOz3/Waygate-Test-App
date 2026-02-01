@@ -2,6 +2,7 @@
  * Composite Tool Wizard Store
  *
  * Zustand store for managing the multi-step composite tool creation wizard.
+ * Updated to use unified tool abstraction for tool composition.
  */
 
 import { create } from 'zustand';
@@ -9,6 +10,7 @@ import type {
   CompositeToolRoutingMode,
   RoutingConditionType,
 } from '@/lib/modules/composite-tools/composite-tool.schemas';
+import type { ToolType } from '@/lib/modules/tools';
 
 // =============================================================================
 // Types
@@ -22,15 +24,40 @@ export type CompositeToolWizardStep =
   | 'routing-rules'
   | 'review';
 
+/**
+ * Selected operation using unified tool abstraction.
+ * Can reference simple tools (actions), composite tools, or agentic tools.
+ */
 export interface SelectedOperation {
-  actionId: string;
-  integrationId: string;
-  integrationName: string;
-  actionName: string;
-  actionSlug: string;
+  /** Tool identifier - actionId for simple tools, toolId for composite/agentic */
+  toolId: string;
+  /** Tool type for routing to correct service */
+  toolType: ToolType;
+  /** Tool name for display */
+  toolName: string;
+  /** Tool slug */
+  toolSlug: string;
+  /** Integration context (simple tools only) */
+  integrationId?: string;
+  integrationName?: string;
+  /** Unique identifier within this composite tool */
   operationSlug: string;
+  /** User-friendly display name */
   displayName: string;
+  /** Execution priority/order */
   priority: number;
+  /** Tool's input schema - used for routing field derivation */
+  inputSchema?: unknown;
+  /** AI-optimized tool description */
+  description?: string;
+
+  // Legacy fields for backwards compatibility during migration
+  /** @deprecated Use toolId instead */
+  actionId?: string;
+  /** @deprecated Use toolSlug instead */
+  actionSlug?: string;
+  /** @deprecated Use toolName instead */
+  actionName?: string;
 }
 
 export interface RoutingRule {
@@ -85,8 +112,10 @@ interface WizardState {
   setToolType: (type: 'composite') => void;
   setNameAndDescription: (name: string, slug: string, description: string) => void;
   addOperation: (operation: SelectedOperation) => void;
-  removeOperation: (actionId: string) => void;
-  updateOperationPriority: (actionId: string, priority: number) => void;
+  /** Remove operation by tool ID */
+  removeOperation: (toolId: string) => void;
+  /** Update operation priority by tool ID */
+  updateOperationPriority: (toolId: string, priority: number) => void;
   setRoutingMode: (mode: CompositeToolRoutingMode) => void;
   setDefaultOperation: (operationSlug: string | null) => void;
   addRoutingRule: (rule: Omit<RoutingRule, 'id' | 'priority'>) => void;
@@ -234,8 +263,12 @@ export const useCompositeToolWizardStore = create<WizardState>((set, get) => ({
 
   addOperation: (operation) =>
     set((state) => {
-      // Don't add duplicate
-      if (state.data.operations.some((op) => op.actionId === operation.actionId)) {
+      // Don't add duplicate - check by toolId (primary) or legacy actionId
+      const isDuplicate = state.data.operations.some(
+        (op) =>
+          op.toolId === operation.toolId || (op.actionId && op.actionId === operation.actionId)
+      );
+      if (isDuplicate) {
         return state;
       }
       return {
@@ -249,27 +282,34 @@ export const useCompositeToolWizardStore = create<WizardState>((set, get) => ({
       };
     }),
 
-  removeOperation: (actionId) =>
-    set((state) => ({
-      data: {
-        ...state.data,
-        operations: state.data.operations.filter((op) => op.actionId !== actionId),
-        // Also remove any routing rules for this operation
-        routingRules: state.data.routingRules.filter(
-          (rule) =>
-            !state.data.operations.find(
-              (op) => op.actionId === actionId && op.operationSlug === rule.operationSlug
-            )
-        ),
-      },
-    })),
+  removeOperation: (toolId) =>
+    set((state) => {
+      // Find the operation being removed to get its operationSlug
+      const removedOp = state.data.operations.find(
+        (op) => op.toolId === toolId || op.actionId === toolId
+      );
+      return {
+        data: {
+          ...state.data,
+          operations: state.data.operations.filter(
+            (op) => op.toolId !== toolId && op.actionId !== toolId
+          ),
+          // Also remove any routing rules for this operation
+          routingRules: removedOp
+            ? state.data.routingRules.filter(
+                (rule) => rule.operationSlug !== removedOp.operationSlug
+              )
+            : state.data.routingRules,
+        },
+      };
+    }),
 
-  updateOperationPriority: (actionId, priority) =>
+  updateOperationPriority: (toolId, priority) =>
     set((state) => ({
       data: {
         ...state.data,
         operations: state.data.operations.map((op) =>
-          op.actionId === actionId ? { ...op, priority } : op
+          op.toolId === toolId || op.actionId === toolId ? { ...op, priority } : op
         ),
       },
     })),

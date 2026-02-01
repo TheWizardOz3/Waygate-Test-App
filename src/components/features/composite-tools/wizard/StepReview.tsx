@@ -31,7 +31,8 @@ export function StepReview() {
         unifiedInputSchema: {},
         metadata: {},
         operations: data.operations.map((op) => ({
-          actionId: op.actionId,
+          // Use toolId for simple tools (which equals actionId), or fall back to actionId for backwards compatibility
+          actionId: op.toolType === 'simple' ? op.toolId : (op.actionId ?? op.toolId),
           operationSlug: op.operationSlug,
           displayName: op.displayName,
           priority: op.priority,
@@ -40,7 +41,9 @@ export function StepReview() {
         routingRules:
           data.routingMode === 'rule_based'
             ? data.routingRules.map((rule) => ({
-                operationId: '', // Will be resolved by backend using operationSlug
+                // Backend expects operationSlug in the operationId field during creation
+                // Service layer maps this to the actual ID after creating operations
+                operationId: rule.operationSlug,
                 conditionType: rule.conditionType,
                 conditionField: rule.conditionField,
                 conditionValue: rule.conditionValue,
@@ -60,15 +63,51 @@ export function StepReview() {
   // Success state
   if (data.createdToolId) {
     return (
-      <div className="flex flex-col items-center justify-center py-8 text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/20">
-          <Check className="h-8 w-8 text-green-600 dark:text-green-400" />
+      <div className="space-y-6">
+        <div className="flex flex-col items-center justify-center py-8 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/20">
+            <Check className="h-8 w-8 text-green-600 dark:text-green-400" />
+          </div>
+          <h3 className="mt-4 font-heading text-xl font-semibold">Tool Created Successfully!</h3>
+          <p className="mt-2 text-muted-foreground">
+            Your composite tool &quot;{data.name}&quot; is ready to use.
+          </p>
         </div>
-        <h3 className="mt-4 font-heading text-xl font-semibold">Tool Created Successfully!</h3>
-        <p className="mt-2 text-muted-foreground">
-          Your composite tool &quot;{data.name}&quot; is ready to use.
-        </p>
-        <div className="mt-6 flex gap-3">
+
+        {/* Tool details */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Tool Details</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">Name</p>
+              <p className="text-sm">{data.name}</p>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">Slug</p>
+              <code className="text-xs">{data.slug}</code>
+            </div>
+            {data.description && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Description</p>
+                <p className="text-sm">{data.description}</p>
+              </div>
+            )}
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">Routing Mode</p>
+              <p className="text-sm">
+                {data.routingMode === 'rule_based' ? 'Rule-Based Routing' : 'Route via Tool Arg'}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">Operations</p>
+              <p className="text-sm">{data.operations.length} operations configured</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="flex justify-center gap-3">
           <Button asChild variant="outline">
             <Link href="/ai-tools">Back to AI Tools</Link>
           </Button>
@@ -143,7 +182,7 @@ export function StepReview() {
               <Bot className="h-4 w-4" />
             )}
             <CardTitle className="text-base">
-              {data.routingMode === 'rule_based' ? 'Rule-Based Routing' : 'Agent-Driven Selection'}
+              {data.routingMode === 'rule_based' ? 'Rule-Based Routing' : 'Route via Tool Arg'}
             </CardTitle>
           </div>
         </CardHeader>

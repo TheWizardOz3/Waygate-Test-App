@@ -55,8 +55,8 @@ export function StepRoutingMode() {
         />
         <RoutingModeCard
           mode="agent_driven"
-          title="Agent-Driven Selection"
-          description="Let the AI agent choose which operation to use based on context and requirements."
+          title="Route via Tool Arg"
+          description="Let the AI agent choose which operation to use by passing it as a tool argument."
           icon={Bot}
           selected={data.routingMode === 'agent_driven'}
           onSelect={() => handleModeSelect('agent_driven')}
