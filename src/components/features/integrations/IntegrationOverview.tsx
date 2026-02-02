@@ -312,33 +312,13 @@ export function IntegrationOverview({ integration, selectedConnection }: Integra
             </div>
           )}
 
-          {/* Auth Type - show when connection is selected (since auth card changes) */}
-          {connectionData && (
-            <div className="space-y-1.5">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Authentication
-              </p>
-              <div className="flex items-center gap-2">
-                <Key className="h-4 w-4 text-muted-foreground" />
-                <Badge variant="secondary" className="font-normal">
-                  {integration.authType === 'oauth2'
-                    ? 'OAuth 2.0'
-                    : integration.authType === 'api_key'
-                      ? 'API Key'
-                      : integration.authType === 'basic'
-                        ? 'Basic Auth'
-                        : integration.authType === 'bearer'
-                          ? 'Bearer Token'
-                          : integration.authType === 'none'
-                            ? 'No Auth Required'
-                            : integration.authType}
-                </Badge>
-              </div>
-            </div>
-          )}
-
           {/* Created / Updated */}
-          <div className="grid grid-cols-2 gap-4 border-t pt-4">
+          <div
+            className={cn(
+              'grid grid-cols-2 gap-4',
+              integration.authConfig?.baseUrl && 'border-t pt-4'
+            )}
+          >
             <div className="space-y-1">
               <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Created
