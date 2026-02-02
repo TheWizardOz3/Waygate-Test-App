@@ -10,11 +10,11 @@
 
 ### Build Order
 
-| Order | Feature               | Status                      | Dependencies                   |
-| ----- | --------------------- | --------------------------- | ------------------------------ |
-| 1     | Composite Tools       | Testing Complete            | Simple Tool Export (V1.1)      |
-| 2     | Agentic Tools         | ✅ Complete (Param. Interp) | Composite Tools                |
-| 3     | Multi-Agent Pipelines | Pending                     | Composite Tools, Agentic Tools |
+| Order | Feature               | Status                  | Dependencies                   |
+| ----- | --------------------- | ----------------------- | ------------------------------ |
+| 1     | Composite Tools       | ✅ Complete (Tabbed UI) | Simple Tool Export (V1.1)      |
+| 2     | Agentic Tools         | ✅ Complete (Tabbed UI) | Composite Tools                |
+| 3     | Multi-Agent Pipelines | Pending                 | Composite Tools, Agentic Tools |
 
 **Feature Summaries:**
 

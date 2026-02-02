@@ -8,6 +8,7 @@
 
 ### Added
 
+- **AI Tools Tabbed Dashboard**: Replaced linear wizard flows for Composite and Agentic tool creation with a streamlined tabbed dashboard. Tools are now created with minimal info (name + description) then configured via four tabs: Details (metadata), Tools/Actions (sub-tool selection), Intelligence (routing/LLM config), and Export (AI descriptions + format export). Single-select mode enforced for Parameter Interpreter agentic tools. Includes unified tool selector with checkbox selection and real-time schema generation for exports.
 - **Agentic Tools (Parameter Interpreter Mode)**: Create AI tools with embedded LLMs that translate natural language into precise API parameters. Configure Claude or Gemini models with custom system prompts, inject integration schemas and reference data as context, and set safety limits (cost, timeout, tool calls). Tools execute single LLM calls to generate validated parameters, then invoke target actions. Includes wizard UI, comprehensive test suite (187 tests), and full CRUD API.
 - **Composite Tools Test Suite**: Comprehensive unit test coverage for composite tools feature (146 tests). Tests cover routing rule evaluation, schema merging, parameter mapping, and Zod schema validation. All tests pass successfully.
 

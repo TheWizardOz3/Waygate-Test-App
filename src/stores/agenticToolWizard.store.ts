@@ -198,7 +198,7 @@ function generateSlug(name: string): string {
 // =============================================================================
 
 export const useAgenticToolWizardStore = create<WizardState>((set, get) => ({
-  currentStep: 'name-description',
+  currentStep: 'tool-allocation', // Tool selection first
   stepHistory: [],
   data: initialData,
 
@@ -206,11 +206,11 @@ export const useAgenticToolWizardStore = create<WizardState>((set, get) => ({
   goToStep: (step) =>
     set((state) => {
       const STEP_ORDER: AgenticToolWizardStep[] = [
+        'tool-allocation',
         'name-description',
         'execution-mode',
         'llm-config',
         'system-prompt',
-        'tool-allocation',
         'context-config',
         'review',
       ];
@@ -251,11 +251,11 @@ export const useAgenticToolWizardStore = create<WizardState>((set, get) => ({
   getNextStep: () => {
     const state = get();
     const STEP_ORDER: AgenticToolWizardStep[] = [
+      'tool-allocation',
       'name-description',
       'execution-mode',
       'llm-config',
       'system-prompt',
-      'tool-allocation',
       'context-config',
       'review',
     ];
@@ -560,7 +560,7 @@ export const useAgenticToolWizardStore = create<WizardState>((set, get) => ({
   // Reset
   reset: () =>
     set({
-      currentStep: 'name-description',
+      currentStep: 'tool-allocation',
       stepHistory: [],
       data: initialData,
     }),

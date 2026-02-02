@@ -169,7 +169,7 @@ function generateLocalId(): string {
 // =============================================================================
 
 export const useCompositeToolWizardStore = create<WizardState>((set, get) => ({
-  currentStep: 'name-description', // Skip tool type for now since only composite is supported
+  currentStep: 'select-operations', // Tool selection first, then name/description
   stepHistory: [],
   data: initialData,
 
@@ -177,8 +177,8 @@ export const useCompositeToolWizardStore = create<WizardState>((set, get) => ({
   goToStep: (step) =>
     set((state) => {
       const STEP_ORDER: CompositeToolWizardStep[] = [
-        'name-description',
         'select-operations',
+        'name-description',
         'routing-mode',
         'routing-rules',
         'review',
@@ -220,8 +220,8 @@ export const useCompositeToolWizardStore = create<WizardState>((set, get) => ({
   getNextStep: () => {
     const state = get();
     const STEP_ORDER: CompositeToolWizardStep[] = [
-      'name-description',
       'select-operations',
+      'name-description',
       'routing-mode',
       'routing-rules',
       'review',
@@ -412,7 +412,7 @@ export const useCompositeToolWizardStore = create<WizardState>((set, get) => ({
   // Reset
   reset: () =>
     set({
-      currentStep: 'name-description',
+      currentStep: 'select-operations',
       stepHistory: [],
       data: initialData,
     }),
