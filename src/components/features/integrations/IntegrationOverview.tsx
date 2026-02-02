@@ -231,16 +231,16 @@ export function IntegrationOverview({ integration, selectedConnection }: Integra
           </div>
         )}
 
-        {/* Authentication & Configuration Section - combined card */}
+        {/* Authentication Section - connection-specific or integration-level */}
         {connectionData ? (
           <ConnectionCredentialPanel connection={connectionData} integration={integration} />
         ) : (
           <div className="space-y-4 rounded-lg border bg-card p-5">
             <div className="flex items-center gap-2">
-              <Settings2 className="h-4 w-4 text-muted-foreground" />
+              <Key className="h-4 w-4 text-muted-foreground" />
               <div>
-                <h3 className="font-medium">Authentication & Configuration</h3>
-                <p className="text-xs text-muted-foreground">Integration settings and metadata</p>
+                <h3 className="font-medium">Authentication</h3>
+                <p className="text-xs text-muted-foreground">Integration authentication settings</p>
               </div>
             </div>
 
@@ -248,10 +248,9 @@ export function IntegrationOverview({ integration, selectedConnection }: Integra
               {/* Auth Type */}
               <div className="space-y-1.5">
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Authentication
+                  Type
                 </p>
                 <div className="flex items-center gap-2">
-                  <Key className="h-4 w-4 text-muted-foreground" />
                   <Badge variant="secondary" className="font-normal">
                     {integration.authType === 'oauth2'
                       ? 'OAuth 2.0'
@@ -285,45 +284,83 @@ export function IntegrationOverview({ integration, selectedConnection }: Integra
                   )}
                 </div>
               </div>
-
-              {/* Base URL */}
-              {integration.authConfig?.baseUrl && (
-                <div className="space-y-1.5">
-                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Base URL
-                  </p>
-                  <p className="break-all rounded-md border bg-muted/30 px-3 py-2 font-mono text-sm">
-                    {integration.authConfig.baseUrl as string}
-                  </p>
-                </div>
-              )}
-
-              {/* Created / Updated */}
-              <div className="grid grid-cols-2 gap-4 border-t pt-4">
-                <div className="space-y-1">
-                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Created
-                  </p>
-                  <p className="text-sm">
-                    {integration.createdAt && !isNaN(new Date(integration.createdAt).getTime())
-                      ? new Date(integration.createdAt).toLocaleDateString()
-                      : 'Unknown'}
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Last Updated
-                  </p>
-                  <p className="text-sm">
-                    {integration.updatedAt && !isNaN(new Date(integration.updatedAt).getTime())
-                      ? new Date(integration.updatedAt).toLocaleDateString()
-                      : 'Unknown'}
-                  </p>
-                </div>
-              </div>
             </div>
           </div>
         )}
+      </div>
+
+      {/* Configuration Section - always visible */}
+      <div className="space-y-4 rounded-lg border bg-card p-5">
+        <div className="flex items-center gap-2">
+          <Settings2 className="h-4 w-4 text-muted-foreground" />
+          <div>
+            <h3 className="font-medium">Configuration</h3>
+            <p className="text-xs text-muted-foreground">Integration settings and metadata</p>
+          </div>
+        </div>
+
+        <div className="space-y-4 pt-2">
+          {/* Base URL */}
+          {integration.authConfig?.baseUrl && (
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Base URL
+              </p>
+              <p className="break-all rounded-md border bg-muted/30 px-3 py-2 font-mono text-sm">
+                {integration.authConfig.baseUrl as string}
+              </p>
+            </div>
+          )}
+
+          {/* Auth Type - show when connection is selected (since auth card changes) */}
+          {connectionData && (
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Authentication
+              </p>
+              <div className="flex items-center gap-2">
+                <Key className="h-4 w-4 text-muted-foreground" />
+                <Badge variant="secondary" className="font-normal">
+                  {integration.authType === 'oauth2'
+                    ? 'OAuth 2.0'
+                    : integration.authType === 'api_key'
+                      ? 'API Key'
+                      : integration.authType === 'basic'
+                        ? 'Basic Auth'
+                        : integration.authType === 'bearer'
+                          ? 'Bearer Token'
+                          : integration.authType === 'none'
+                            ? 'No Auth Required'
+                            : integration.authType}
+                </Badge>
+              </div>
+            </div>
+          )}
+
+          {/* Created / Updated */}
+          <div className="grid grid-cols-2 gap-4 border-t pt-4">
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Created
+              </p>
+              <p className="text-sm">
+                {integration.createdAt && !isNaN(new Date(integration.createdAt).getTime())
+                  ? new Date(integration.createdAt).toLocaleDateString()
+                  : 'Unknown'}
+              </p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Last Updated
+              </p>
+              <p className="text-sm">
+                {integration.updatedAt && !isNaN(new Date(integration.updatedAt).getTime())
+                  ? new Date(integration.updatedAt).toLocaleDateString()
+                  : 'Unknown'}
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
