@@ -52,15 +52,37 @@ interface UniversalToolExport {
 
 function generateUniversalExport(
   tool: CompositeToolDetailResponse | AgenticToolResponse,
-  toolType: 'composite' | 'agentic'
+  toolType: 'composite' | 'agentic',
+  aiDescription?: string
 ): UniversalToolExport {
-  const description = tool.description || `${tool.name} - AI Tool`;
+  // Use AI-generated description if provided, otherwise fall back to basic description
+  const description = aiDescription || tool.description || `${tool.name} - AI Tool`;
 
   if (toolType === 'composite') {
     const compositeTool = tool as CompositeToolDetailResponse;
     const operations = compositeTool.operations || [];
 
-    // For composite tools, we might need to merge schemas or expose routing
+    // Use the unifiedInputSchema if available - it contains the merged parameters from all operations
+    const unifiedSchema = compositeTool.unifiedInputSchema as {
+      type?: string;
+      properties?: Record<string, unknown>;
+      required?: string[];
+    } | null;
+
+    // If we have a unified schema with properties, use it
+    if (unifiedSchema?.properties && Object.keys(unifiedSchema.properties).length > 0) {
+      return {
+        name: tool.slug,
+        description,
+        parameters: {
+          type: 'object',
+          properties: unifiedSchema.properties,
+          required: unifiedSchema.required || [],
+        },
+      };
+    }
+
+    // Fallback: Build a basic schema for composite tools
     const properties: Record<string, unknown> = {};
     const required: string[] = [];
 
@@ -73,7 +95,6 @@ function generateUniversalExport(
       required.push('operation');
     }
 
-    // Note: The API response doesn't include inputSchema for operations
     // Add a generic input property for composite tools
     if (operations.length > 0) {
       properties['input'] = {
@@ -94,6 +115,27 @@ function generateUniversalExport(
     };
   } else {
     const agenticTool = tool as AgenticToolResponse;
+
+    // Use the inputSchema if available
+    const inputSchema = agenticTool.inputSchema as {
+      type?: string;
+      properties?: Record<string, unknown>;
+      required?: string[];
+    } | null;
+
+    if (inputSchema?.properties && Object.keys(inputSchema.properties).length > 0) {
+      return {
+        name: tool.slug,
+        description,
+        parameters: {
+          type: 'object',
+          properties: inputSchema.properties,
+          required: inputSchema.required || [],
+        },
+      };
+    }
+
+    // Fallback: Build a basic schema for agentic tools
     const allocation = agenticTool.toolAllocation as
       | {
           mode?: string;
@@ -102,7 +144,6 @@ function generateUniversalExport(
         }
       | undefined;
 
-    // For agentic tools, expose a simple interface
     const properties: Record<string, unknown> = {
       task: {
         type: 'string',
@@ -196,15 +237,23 @@ function toCamelCase(str: string): string {
 
 export function ExportTab({ tool, toolType, onUpdate }: ExportTabProps) {
   const [activeFormat, setActiveFormat] = React.useState<ExportFormat>('universal');
-  const [aiDescription, setAiDescription] = React.useState(tool.description || '');
+  // Prefer toolDescription (AI-generated) over basic description
+  const savedDescription = tool.toolDescription || tool.description || '';
+  const [aiDescription, setAiDescription] = React.useState(savedDescription);
   const [isGenerating, setIsGenerating] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
 
-  const hasDescriptionChanges = aiDescription !== (tool.description || '');
+  // Sync state when tool data changes (e.g., after generating new description)
+  React.useEffect(() => {
+    const newSavedDescription = tool.toolDescription || tool.description || '';
+    setAiDescription(newSavedDescription);
+  }, [tool.toolDescription, tool.description]);
+
+  const hasDescriptionChanges = aiDescription !== savedDescription;
 
   // Generate exports
   const universalExport = React.useMemo(
-    () => generateUniversalExport({ ...tool, description: aiDescription }, toolType),
+    () => generateUniversalExport(tool, toolType, aiDescription),
     [tool, toolType, aiDescription]
   );
 
@@ -223,13 +272,31 @@ export function ExportTab({ tool, toolType, onUpdate }: ExportTabProps) {
           ? `/agentic-tools/${tool.id}/regenerate-prompt`
           : `/composite-tools/${tool.id}/regenerate-description`;
 
-      const result = await apiClient.post<{ description?: string; toolDescription?: string }>(
-        endpoint,
-        {}
-      );
-      const newDescription = result.description || result.toolDescription || '';
-      setAiDescription(newDescription);
-      toast.success('AI description generated');
+      // apiClient already unwraps { success, data } and returns just 'data'
+      // So result is directly: { compositeTool, regenerated } or { agenticTool, regenerated }
+      const result = await apiClient.post<{
+        compositeTool?: { toolDescription?: string };
+        agenticTool?: { toolDescription?: string };
+        regenerated?: { toolDescription?: string };
+        toolDescription?: string;
+      }>(endpoint, {});
+
+      // Extract the description - apiClient returns data.data, so access directly
+      const newDescription =
+        result.regenerated?.toolDescription ||
+        result.compositeTool?.toolDescription ||
+        result.agenticTool?.toolDescription ||
+        result.toolDescription ||
+        '';
+
+      if (newDescription) {
+        setAiDescription(newDescription);
+        toast.success('AI description generated');
+        onUpdate?.(); // Refresh tool data
+      } else {
+        console.error('No toolDescription found in response:', result);
+        toast.error('Generated description was empty');
+      }
     } catch (error) {
       console.error('Failed to generate description:', error);
       toast.error('Failed to generate description');
@@ -331,7 +398,7 @@ export function ExportTab({ tool, toolType, onUpdate }: ExportTabProps) {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setAiDescription(tool.description || '')}
+                onClick={() => setAiDescription(savedDescription)}
               >
                 Reset
               </Button>

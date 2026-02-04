@@ -266,6 +266,8 @@ export {
   generateBasicCompositeToolDescription,
   generateCompositeToolDescriptionsWithFallback,
   loadOperationActionData,
+  buildUnifiedInputSchema,
+  mergeParamsFromDescription,
   // Transformer (Universal)
   transformCompositeToolToUniversalTool,
   createCompositeToolExportResponse,

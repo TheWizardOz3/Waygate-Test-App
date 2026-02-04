@@ -12,6 +12,12 @@
 - **Agentic Tools (Parameter Interpreter Mode)**: Create AI tools with embedded LLMs that translate natural language into precise API parameters. Configure Claude or Gemini models with custom system prompts, inject integration schemas and reference data as context, and set safety limits (cost, timeout, tool calls). Tools execute single LLM calls to generate validated parameters, then invoke target actions. Includes wizard UI, comprehensive test suite (187 tests), and full CRUD API.
 - **Composite Tools Test Suite**: Comprehensive unit test coverage for composite tools feature (146 tests). Tests cover routing rule evaluation, schema merging, parameter mapping, and Zod schema validation. All tests pass successfully.
 
+### Fixed
+
+- **Tool Export Parameter Schemas**: Fixed empty parameter schemas in tool exports. Composite tools now build `unifiedInputSchema` from sub-tool parameters and LLM-generated descriptions. Simple tools with empty `inputSchema` are enriched with path parameters extracted from endpoint templates and parameters parsed from `toolDescription`.
+- **AI Description Generation**: Fixed "Generate with AI" button for composite tools not updating UI. Description now persists correctly using `toolDescription` field and syncs on page refresh.
+- **API Scraper Parameter Extraction**: Enhanced AI documentation scraper to extract `pathParameters`, `queryParameters`, and `requestBody` from API docs. Previously only extracted 5 flat fields (name, slug, method, path, description), resulting in non-functional tools. New integrations will now have complete parameter schemas.
+
 ### Known Issues
 
 - TypeScript compilation errors in agentic tools optional features (20 errors in regenerate-prompt, test-prompt routes). Core functionality fully tested and working.

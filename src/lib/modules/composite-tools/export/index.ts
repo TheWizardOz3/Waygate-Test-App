@@ -17,6 +17,8 @@ export {
   generateBasicCompositeToolDescription,
   generateCompositeToolDescriptionsWithFallback,
   loadOperationActionData,
+  buildUnifiedInputSchema,
+  mergeParamsFromDescription,
 } from './composite-tool-description-generator';
 
 export type {

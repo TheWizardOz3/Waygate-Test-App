@@ -37,6 +37,8 @@ export interface OperationActionData {
   toolErrorTemplate: string | null;
   integrationName: string;
   inputSchema: Record<string, unknown>;
+  endpointTemplate: string | null;
+  httpMethod: string | null;
   contextTypes: string[];
 }
 
@@ -255,6 +257,8 @@ export async function loadOperationActionData(
       toolErrorTemplate: action.toolErrorTemplate,
       integrationName: action.integration.name,
       inputSchema: (action.inputSchema as Record<string, unknown>) ?? {},
+      endpointTemplate: action.endpointTemplate,
+      httpMethod: action.httpMethod,
       contextTypes,
     });
   }
@@ -405,4 +409,218 @@ export async function generateCompositeToolDescriptionsWithFallback(
     console.error('LLM description generation failed, using basic fallback:', error);
     return generateBasicCompositeToolDescription(input);
   }
+}
+
+// =============================================================================
+// Unified Input Schema Builder
+// =============================================================================
+
+/**
+ * Build a unified JSON Schema from operation input schemas.
+ * Merges parameters from all operations and adds operation selector for agent_driven mode.
+ *
+ * @param operations - Array of operation data with input schemas
+ * @param routingMode - 'rule_based' or 'agent_driven'
+ * @returns JSON Schema object for the composite tool
+ */
+/**
+ * Extract path parameters from an endpoint template like "/v1/charges/{charge}/capture"
+ */
+function extractPathParams(endpointTemplate: string): string[] {
+  const matches = endpointTemplate.match(/\{([^}]+)\}/g);
+  if (!matches) return [];
+  return matches.map((m) => m.slice(1, -1)); // Remove { and }
+}
+
+/**
+ * Parse toolDescription to extract parameter hints
+ * Looks for patterns like "- param_name: description" in Required/Optional inputs sections
+ */
+function extractParamsFromToolDescription(
+  toolDescription: string | null
+): Array<{ name: string; description: string; required: boolean }> {
+  if (!toolDescription) return [];
+
+  const params: Array<{ name: string; description: string; required: boolean }> = [];
+  const lines = toolDescription.split('\n');
+  let inRequired = false;
+  let inOptional = false;
+
+  for (const line of lines) {
+    const lowerLine = line.toLowerCase();
+    if (lowerLine.includes('required input')) {
+      inRequired = true;
+      inOptional = false;
+      continue;
+    }
+    if (lowerLine.includes('optional input')) {
+      inRequired = false;
+      inOptional = true;
+      continue;
+    }
+    if (line.startsWith('#') || line.startsWith('Use this tool')) {
+      inRequired = false;
+      inOptional = false;
+      continue;
+    }
+
+    // Look for "- param_name: description" pattern
+    const paramMatch = line.match(/^[\s-]*([a-z_][a-z0-9_]*)\s*[:\-]\s*(.+)/i);
+    if (paramMatch && (inRequired || inOptional)) {
+      params.push({
+        name: paramMatch[1],
+        description: paramMatch[2].trim(),
+        required: inRequired,
+      });
+    }
+  }
+
+  return params;
+}
+
+export function buildUnifiedInputSchema(
+  operations: OperationActionData[],
+  routingMode: CompositeToolRoutingMode
+): Record<string, unknown> {
+  const properties: Record<string, unknown> = {};
+  const requiredSet = new Set<string>();
+
+  // For agent_driven mode, add the operation selector
+  if (routingMode === 'agent_driven') {
+    properties['operation'] = {
+      type: 'string',
+      description: 'Which operation to perform',
+      enum: operations.map((op) => op.operationSlug),
+    };
+    requiredSet.add('operation');
+  }
+
+  // Merge parameters from all operations
+  for (const op of operations) {
+    const schema = op.inputSchema;
+
+    let opProperties: Record<string, unknown> = {};
+    let opRequired: string[] = [];
+
+    // Try to get properties from inputSchema first
+    if (schema && typeof schema === 'object') {
+      opProperties = (schema as { properties?: Record<string, unknown> }).properties || {};
+      opRequired = (schema as { required?: string[] }).required || [];
+    }
+
+    // If inputSchema has no properties, try to extract from endpointTemplate
+    if (Object.keys(opProperties).length === 0 && op.endpointTemplate) {
+      const pathParams = extractPathParams(op.endpointTemplate);
+      for (const param of pathParams) {
+        opProperties[param] = {
+          type: 'string',
+          description: `Path parameter for ${op.displayName}`,
+        };
+        opRequired.push(param);
+      }
+    }
+
+    // Also try to extract params from toolDescription
+    if (op.toolDescription) {
+      const descParams = extractParamsFromToolDescription(op.toolDescription);
+      for (const param of descParams) {
+        if (!opProperties[param.name]) {
+          opProperties[param.name] = {
+            type: 'string',
+            description: param.description,
+          };
+          if (param.required) {
+            opRequired.push(param.name);
+          }
+        }
+      }
+    }
+
+    const opRequiredSet = new Set(opRequired);
+
+    for (const [paramName, paramSchema] of Object.entries(opProperties)) {
+      // Skip if already added from another operation
+      if (properties[paramName]) {
+        // Merge descriptions if different operations have the same parameter
+        const existing = properties[paramName] as { description?: string };
+        const incoming = paramSchema as { description?: string };
+        if (incoming.description && !existing.description) {
+          existing.description = incoming.description;
+        }
+        continue;
+      }
+
+      // Add the parameter with metadata about which operation it's from
+      const paramCopy = { ...(paramSchema as Record<string, unknown>) };
+      properties[paramName] = paramCopy;
+
+      // For rule_based mode, params that are required in all operations stay required
+      // For agent_driven, we make most params optional since different operations need different params
+      if (routingMode === 'rule_based' && opRequiredSet.has(paramName)) {
+        // In rule_based, add to required only if this is a common param across operations
+        // For now, we'll be conservative and not mark as required
+      }
+    }
+  }
+
+  return {
+    type: 'object',
+    properties,
+    required: Array.from(requiredSet),
+  };
+}
+
+/**
+ * Merge parameters extracted from a generated toolDescription into an existing schema.
+ * This allows the LLM-generated description to inform the final schema.
+ *
+ * @param existingSchema - The schema built from operation data
+ * @param toolDescription - The LLM-generated tool description
+ * @returns Updated schema with merged parameters
+ */
+export function mergeParamsFromDescription(
+  existingSchema: Record<string, unknown>,
+  toolDescription: string
+): Record<string, unknown> {
+  const existingProperties = (existingSchema.properties as Record<string, unknown>) || {};
+  const existingRequired = (existingSchema.required as string[]) || [];
+
+  // Extract params from the generated description
+  const descParams = extractParamsFromToolDescription(toolDescription);
+
+  // Merge new params into existing schema
+  const mergedProperties = { ...existingProperties };
+  const mergedRequired = new Set(existingRequired);
+
+  for (const param of descParams) {
+    // Skip 'operation' as it's already handled
+    if (param.name === 'operation') continue;
+
+    if (!mergedProperties[param.name]) {
+      mergedProperties[param.name] = {
+        type: 'string',
+        description: param.description,
+      };
+    } else {
+      // Update description if existing one is generic
+      const existing = mergedProperties[param.name] as { description?: string };
+      if (
+        existing.description &&
+        (existing.description.startsWith('Path parameter') ||
+          existing.description.length < param.description.length)
+      ) {
+        existing.description = param.description;
+      }
+    }
+
+    // For agent_driven, we don't mark operation-specific params as required
+    // since different operations need different params
+    // But we could optionally mark them if they appear in "Required inputs"
+  }
+
+  return {
+    type: 'object',
+    properties: mergedProperties,
+    required: Array.from(mergedRequired),
+  };
 }

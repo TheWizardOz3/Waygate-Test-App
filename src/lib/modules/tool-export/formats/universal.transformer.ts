@@ -92,7 +92,12 @@ export function transformActionToUniversalTool(
     const toolName = generateToolName(integrationSlug, action.slug);
 
     // Transform input schema to universal parameters
-    const parameters = transformInputSchemaToParameters(action.inputSchema);
+    let parameters = transformInputSchemaToParameters(action.inputSchema);
+
+    // If schema has no properties, try to enrich from endpointTemplate and toolDescription
+    if (Object.keys(parameters.properties).length === 0) {
+      parameters = enrichEmptyParameters(action, parameters);
+    }
 
     // Determine context types from action metadata
     const contextTypes = includeContextTypes ? extractContextTypes(action) : undefined;
@@ -613,6 +618,118 @@ function extractContextTypes(action: ActionResponse): string[] {
   }
 
   return contextTypes;
+}
+
+// =============================================================================
+// Schema Enrichment (for empty inputSchemas)
+// =============================================================================
+
+/**
+ * Extract path parameters from an endpoint template like "/v1/charges/{charge}/capture"
+ */
+function extractPathParams(endpointTemplate: string): string[] {
+  const matches = endpointTemplate.match(/\{([^}]+)\}/g);
+  if (!matches) return [];
+  return matches.map((m) => m.slice(1, -1)); // Remove { and }
+}
+
+/**
+ * Parse toolDescription to extract parameter hints.
+ * Looks for patterns like "- param_name: description" in Required/Optional inputs sections.
+ */
+function extractParamsFromToolDescription(
+  toolDescription: string | null
+): Array<{ name: string; description: string; required: boolean }> {
+  if (!toolDescription) return [];
+
+  const params: Array<{ name: string; description: string; required: boolean }> = [];
+  const lines = toolDescription.split('\n');
+  let inRequired = false;
+  let inOptional = false;
+
+  for (const line of lines) {
+    const lowerLine = line.toLowerCase();
+    if (lowerLine.includes('required input')) {
+      inRequired = true;
+      inOptional = false;
+      continue;
+    }
+    if (lowerLine.includes('optional input')) {
+      inRequired = false;
+      inOptional = true;
+      continue;
+    }
+    if (line.startsWith('#') || line.startsWith('Use this tool')) {
+      inRequired = false;
+      inOptional = false;
+      continue;
+    }
+
+    // Look for "- param_name: description" pattern
+    const paramMatch = line.match(/^[\s-]*([a-z_][a-z0-9_]*)\s*[:\-]\s*(.+)/i);
+    if (paramMatch && (inRequired || inOptional)) {
+      params.push({
+        name: paramMatch[1],
+        description: paramMatch[2].trim(),
+        required: inRequired,
+      });
+    }
+  }
+
+  return params;
+}
+
+/**
+ * Enrich empty parameters by extracting info from endpointTemplate and toolDescription.
+ */
+function enrichEmptyParameters(
+  action: ActionResponse,
+  emptyParams: UniversalToolParameters
+): UniversalToolParameters {
+  const properties: Record<string, UniversalToolProperty> = {};
+  const required: string[] = [];
+
+  // Extract path parameters from endpoint template
+  if (action.endpointTemplate) {
+    const pathParams = extractPathParams(action.endpointTemplate);
+    for (const param of pathParams) {
+      properties[param] = {
+        type: 'string',
+        description: `The ${param.replace(/_/g, ' ')} identifier`,
+      };
+      required.push(param);
+    }
+  }
+
+  // Extract parameters from toolDescription
+  if (action.toolDescription) {
+    const descParams = extractParamsFromToolDescription(action.toolDescription);
+    for (const param of descParams) {
+      if (!properties[param.name]) {
+        properties[param.name] = {
+          type: 'string',
+          description: param.description,
+        };
+        if (param.required && !required.includes(param.name)) {
+          required.push(param.name);
+        }
+      } else if (param.description.length > (properties[param.name].description?.length || 0)) {
+        // Update with better description
+        properties[param.name].description = param.description;
+      }
+    }
+  }
+
+  // If still no properties, return original
+  if (Object.keys(properties).length === 0) {
+    return emptyParams;
+  }
+
+  return {
+    type: 'object',
+    properties,
+    required,
+  };
 }
 
 // =============================================================================

@@ -1089,19 +1089,45 @@ export async function regenerateCompositeToolDescription(
 ): Promise<CompositeToolDetailResponse> {
   // Import dynamically to avoid circular dependencies
   const {
-    generateDescriptionsFromCompositeTool,
+    generateCompositeToolDescriptions,
     generateBasicCompositeToolDescription,
     loadOperationActionData,
+    buildUnifiedInputSchema,
+    mergeParamsFromDescription,
   } = await import('./export/composite-tool-description-generator');
 
   // Get the composite tool with all relations
   const compositeTool = await getCompositeToolDetail(tenantId, compositeToolId);
 
+  // Load operation data - needed for both schema building and description generation
+  const operationData = await loadOperationActionData(
+    compositeTool.operations.map((op) => ({
+      id: op.id,
+      operationSlug: op.operationSlug,
+      displayName: op.displayName,
+      actionId: op.actionId,
+    }))
+  );
+
+  // Build the unified input schema from operation schemas
+  let unifiedInputSchema = buildUnifiedInputSchema(operationData, compositeTool.routingMode);
+
+  // Build the input for description generation with the NEW schema
+  const descriptionInput = {
+    name: compositeTool.name,
+    slug: compositeTool.slug,
+    description: compositeTool.description,
+    routingMode: compositeTool.routingMode,
+    unifiedInputSchema, // Use the newly built schema, not the old empty one
+    operations: operationData,
+    hasDefaultOperation: !!compositeTool.defaultOperationId,
+  };
+
   let descriptions;
 
   try {
-    // Generate descriptions using LLM
-    descriptions = await generateDescriptionsFromCompositeTool(compositeTool);
+    // Generate descriptions using LLM with the new unified schema
+    descriptions = await generateCompositeToolDescriptions(descriptionInput);
   } catch (error) {
     if (!useFallback) {
       throw error;
@@ -1110,31 +1136,19 @@ export async function regenerateCompositeToolDescription(
     // Use fallback basic description generation
     console.error('LLM description generation failed, using basic fallback:', error);
 
-    const operationData = await loadOperationActionData(
-      compositeTool.operations.map((op) => ({
-        id: op.id,
-        operationSlug: op.operationSlug,
-        displayName: op.displayName,
-        actionId: op.actionId,
-      }))
-    );
-
-    descriptions = generateBasicCompositeToolDescription({
-      name: compositeTool.name,
-      slug: compositeTool.slug,
-      description: compositeTool.description,
-      routingMode: compositeTool.routingMode,
-      unifiedInputSchema: compositeTool.unifiedInputSchema,
-      operations: operationData,
-      hasDefaultOperation: !!compositeTool.defaultOperationId,
-    });
+    descriptions = generateBasicCompositeToolDescription(descriptionInput);
   }
 
-  // Update the composite tool with new descriptions
+  // After LLM generates description, parse it for additional parameters
+  // The LLM may have inferred params from operation context that we didn't have
+  unifiedInputSchema = mergeParamsFromDescription(unifiedInputSchema, descriptions.toolDescription);
+
+  // Update the composite tool with new descriptions AND unified input schema
   await updateCompositeTool(tenantId, compositeToolId, {
     toolDescription: descriptions.toolDescription,
     toolSuccessTemplate: descriptions.toolSuccessTemplate,
     toolErrorTemplate: descriptions.toolErrorTemplate,
+    unifiedInputSchema,
   });
 
   // Return updated detail

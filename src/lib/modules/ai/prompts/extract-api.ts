@@ -34,33 +34,37 @@ Always return valid JSON matching the requested schema. Do not include markdown 
 
 /**
  * System prompt specifically for endpoint extraction
- * SIMPLIFIED: Only extracts flat endpoint objects (name, slug, method, path, description)
+ * Extracts endpoints with parameters for functional tool definitions
  */
 export const ENDPOINT_EXTRACTION_SYSTEM_PROMPT = `You are an API endpoint extraction specialist. Extract API endpoints from documentation and return them as a JSON array.
 
 ## WHAT TO EXTRACT
-For each endpoint, extract ONLY these 5 fields:
+For each endpoint, extract these fields:
 - **name**: Human-readable name (e.g., "Send Message", "List Users")
-- **slug**: URL-safe identifier (e.g., "send-message", "list-users")  
+- **slug**: URL-safe identifier (e.g., "send-message", "list-users")
 - **method**: HTTP method (GET, POST, PUT, PATCH, DELETE)
 - **path**: API path (e.g., "/users/{id}/messages")
 - **description**: Brief description of what the endpoint does
+- **pathParameters**: Array of path parameters (from {param} in the path)
+- **queryParameters**: Array of query parameters (for filtering, pagination, etc.)
+- **requestBody**: Request body schema (for POST/PUT/PATCH endpoints)
+
+## PARAMETER FORMAT
+Each parameter should have:
+- **name**: Parameter name
+- **type**: Data type (string, number, integer, boolean, array, object)
+- **required**: Whether the parameter is required
+- **description**: Brief description (optional)
 
 ## PRIORITIES
 1. Skip deprecated endpoints
 2. Focus on core CRUD operations and main features
 3. Skip admin/internal endpoints unless specifically requested
 4. Extract 10-30 of the most important endpoints
+5. ALWAYS extract parameters - they are critical for tool functionality
 
 ## OUTPUT FORMAT
-Return ONLY a JSON array. No markdown, no explanations, no code blocks.
-
-Example output:
-[
-  {"name": "List Users", "slug": "list-users", "method": "GET", "path": "/users", "description": "Returns all users"},
-  {"name": "Get User", "slug": "get-user", "method": "GET", "path": "/users/{id}", "description": "Get a user by ID"},
-  {"name": "Create User", "slug": "create-user", "method": "POST", "path": "/users", "description": "Creates a new user"}
-]`;
+Return ONLY a JSON array. No markdown, no explanations, no code blocks.`;
 
 /**
  * System prompt for authentication detection
@@ -112,7 +116,7 @@ export const RATE_LIMIT_DETECTION_SYSTEM_PROMPT = `You are an API rate limit spe
 // =============================================================================
 
 /**
- * Example input/output for endpoint extraction (SIMPLIFIED - flat output only)
+ * Example input/output for endpoint extraction with parameters
  */
 export const ENDPOINT_EXTRACTION_EXAMPLE = {
   input: `## Send a Message
@@ -126,35 +130,76 @@ Sends a message to a channel.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | channel | string | Yes | Channel ID |
-| text | string | Yes | Message text |`,
+| text | string | Yes | Message text |
+| thread_ts | string | No | Thread timestamp for replies |`,
 
-  // SIMPLIFIED: Only flat fields matching ENDPOINT_SCHEMA
   output: {
     name: 'Send Message',
     slug: 'send-message',
     method: 'POST',
     path: '/chat.postMessage',
     description: 'Sends a message to a channel.',
+    requestBody: {
+      contentType: 'application/json',
+      schema: {
+        type: 'object',
+        properties: {
+          channel: { type: 'string', description: 'Channel ID' },
+          text: { type: 'string', description: 'Message text' },
+          thread_ts: { type: 'string', description: 'Thread timestamp for replies' },
+        },
+        required: ['channel', 'text'],
+      },
+      required: true,
+    },
   },
 };
 
 /**
- * Example input/output for paginated endpoint extraction (SIMPLIFIED - flat output only)
+ * Example input/output for GET endpoint with path and query parameters
  */
 export const PAGINATED_ENDPOINT_EXTRACTION_EXAMPLE = {
-  input: `## List Messages
+  input: `## Get User
 
-GET /conversations.history
+GET /users/{user_id}
 
-Fetches messages from a channel with pagination.`,
+Retrieves a user by their ID.
 
-  // SIMPLIFIED: Only flat fields matching ENDPOINT_SCHEMA
+### Path Parameters
+- user_id (required): The unique user identifier
+
+### Query Parameters
+- include_deleted (optional, boolean): Include soft-deleted users
+- fields (optional, string): Comma-separated list of fields to return`,
+
   output: {
-    name: 'List Messages',
-    slug: 'list-messages',
+    name: 'Get User',
+    slug: 'get-user',
     method: 'GET',
-    path: '/conversations.history',
-    description: 'Fetches messages from a channel with pagination.',
+    path: '/users/{user_id}',
+    description: 'Retrieves a user by their ID.',
+    pathParameters: [
+      {
+        name: 'user_id',
+        type: 'string',
+        required: true,
+        description: 'The unique user identifier',
+      },
+    ],
+    queryParameters: [
+      {
+        name: 'include_deleted',
+        type: 'boolean',
+        required: false,
+        description: 'Include soft-deleted users',
+      },
+      {
+        name: 'fields',
+        type: 'string',
+        required: false,
+        description: 'Comma-separated list of fields to return',
+      },
+    ],
   },
 };
 
@@ -265,11 +310,26 @@ Return ONLY the JSON object, no markdown formatting.`;
 }
 
 /**
- * Build a prompt for endpoint extraction only
- * SIMPLIFIED: Only extracts flat endpoint objects to match ENDPOINT_SCHEMA
+ * Build a prompt for endpoint extraction with parameters
  */
 export function buildEndpointExtractionPrompt(documentationContent: string): string {
   return `${ENDPOINT_EXTRACTION_SYSTEM_PROMPT}
+
+## Example 1: POST endpoint with request body
+
+Input:
+${ENDPOINT_EXTRACTION_EXAMPLE.input}
+
+Output:
+${JSON.stringify(ENDPOINT_EXTRACTION_EXAMPLE.output, null, 2)}
+
+## Example 2: GET endpoint with path and query parameters
+
+Input:
+${PAGINATED_ENDPOINT_EXTRACTION_EXAMPLE.input}
+
+Output:
+${JSON.stringify(PAGINATED_ENDPOINT_EXTRACTION_EXAMPLE.output, null, 2)}
 
 ## Documentation to Parse
 
@@ -277,12 +337,13 @@ ${documentationContent}
 
 ## Task
 
-Extract API endpoints from the documentation above. Return a JSON array where each endpoint has ONLY these fields:
-- name: Human-readable name
-- slug: URL-safe identifier  
-- method: GET, POST, PUT, PATCH, or DELETE
-- path: The API path
-- description: Brief description
+Extract API endpoints from the documentation above. For each endpoint:
+1. Extract basic info: name, slug, method, path, description
+2. Extract pathParameters for any {param} placeholders in the path
+3. Extract queryParameters for query string parameters (filters, pagination, etc.)
+4. Extract requestBody with schema for POST/PUT/PATCH endpoints
+
+IMPORTANT: Parameters are critical for tools to function. Extract ALL parameters you can find.
 
 Return ONLY the JSON array. No markdown, no explanations.`;
 }
@@ -448,8 +509,49 @@ export const PAGINATION_CONFIG_SCHEMA: LLMResponseSchema = {
 };
 
 /**
- * Schema for a single endpoint - KEEP IT SIMPLE
- * No nested objects - just flat fields for reliable extraction
+ * Schema for a parameter (path, query, or header)
+ */
+export const PARAMETER_SCHEMA: LLMResponseSchema = {
+  type: 'object',
+  properties: {
+    name: { type: 'string', description: 'Parameter name' },
+    type: {
+      type: 'string',
+      enum: ['string', 'number', 'integer', 'boolean', 'array', 'object'],
+      description: 'Data type',
+    },
+    required: { type: 'boolean', description: 'Whether the parameter is required' },
+    description: { type: 'string', description: 'Parameter description', nullable: true },
+  },
+  required: ['name', 'type', 'required'],
+};
+
+/**
+ * Schema for request body
+ */
+export const REQUEST_BODY_SCHEMA: LLMResponseSchema = {
+  type: 'object',
+  properties: {
+    contentType: {
+      type: 'string',
+      description: 'Content type (usually application/json)',
+    },
+    schema: {
+      type: 'object',
+      description: 'JSON Schema for the request body',
+      properties: {
+        type: { type: 'string' },
+        properties: { type: 'object', description: 'Property definitions' },
+        required: { type: 'array', items: { type: 'string' }, description: 'Required fields' },
+      },
+    },
+    required: { type: 'boolean', description: 'Whether request body is required' },
+  },
+};
+
+/**
+ * Schema for a single endpoint with parameters
+ * Includes pathParameters, queryParameters, and requestBody for functional tools
  */
 export const ENDPOINT_SCHEMA: LLMResponseSchema = {
   type: 'object',
@@ -462,6 +564,23 @@ export const ENDPOINT_SCHEMA: LLMResponseSchema = {
     method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] },
     path: { type: 'string', description: 'API path like "/users" or "/databases/{database_id}"' },
     description: { type: 'string', description: 'One sentence description', nullable: true },
+    pathParameters: {
+      type: 'array',
+      items: PARAMETER_SCHEMA,
+      description: 'Path parameters (from {param} placeholders in path)',
+      nullable: true,
+    },
+    queryParameters: {
+      type: 'array',
+      items: PARAMETER_SCHEMA,
+      description: 'Query parameters for filtering, pagination, etc.',
+      nullable: true,
+    },
+    requestBody: {
+      ...REQUEST_BODY_SCHEMA,
+      nullable: true,
+      description: 'Request body schema for POST/PUT/PATCH',
+    },
   },
   required: ['name', 'slug', 'method', 'path'],
 };
