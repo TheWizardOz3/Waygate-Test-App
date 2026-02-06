@@ -1,15 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Wrench, Download } from 'lucide-react';
+import { Wrench, Download, Loader2 } from 'lucide-react';
 import { CompositeToolList } from '@/components/features/composite-tools';
 import { AllToolsExportTab } from '@/components/features/ai-tools';
 
 type TabValue = 'tools' | 'export';
 
-export default function AIToolsPage() {
+function AIToolsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -67,5 +67,19 @@ export default function AIToolsPage() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+export default function AIToolsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <AIToolsContent />
+    </Suspense>
   );
 }
