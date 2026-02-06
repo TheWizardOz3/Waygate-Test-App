@@ -152,7 +152,9 @@ export const GET = withApiAuth(async (request: NextRequest, { tenant }) => {
       return NextResponse.json(
         {
           success: true,
-          parameters: [],
+          data: {
+            parameters: [],
+          },
         },
         { status: 200 }
       );
@@ -189,7 +191,9 @@ export const GET = withApiAuth(async (request: NextRequest, { tenant }) => {
     return NextResponse.json(
       {
         success: true,
-        parameters: allParameters,
+        data: {
+          parameters: allParameters,
+        },
       },
       { status: 200 }
     );
