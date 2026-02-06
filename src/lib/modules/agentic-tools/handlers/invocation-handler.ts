@@ -282,7 +282,7 @@ async function logExecutionToDatabase(
       toolCalls: result.metadata.actionExecutions,
       result: result.data ?? undefined,
       status: result.success ? 'success' : 'error',
-      error: result.error ?? undefined,
+      error: result.error ? JSON.parse(JSON.stringify(result.error)) : undefined,
       totalCost: result.metadata.totalCost,
       totalTokens: result.metadata.totalTokens,
       durationMs: result.metadata.durationMs,

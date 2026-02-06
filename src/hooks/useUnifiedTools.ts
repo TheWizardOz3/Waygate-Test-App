@@ -48,25 +48,18 @@ interface ListUnifiedToolsParams extends UnifiedToolFilters {
 async function fetchUnifiedTools(
   params?: ListUnifiedToolsParams
 ): Promise<ListUnifiedToolsResponse> {
-  const response = await apiClient.get<{ success: boolean; data: ListUnifiedToolsResponse }>(
-    '/tools',
-    {
-      types: params?.types?.join(','),
-      integrationId: params?.integrationId,
-      search: params?.search,
-      status: params?.status?.join(','),
-      excludeIds: params?.excludeIds?.join(','),
-      cursor: params?.cursor,
-      limit: params?.limit,
-    }
-  );
+  // apiClient.get already extracts data.data from { success: true, data: {...} } responses
+  const response = await apiClient.get<ListUnifiedToolsResponse>('/tools', {
+    types: params?.types?.join(','),
+    integrationId: params?.integrationId,
+    search: params?.search,
+    status: params?.status?.join(','),
+    excludeIds: params?.excludeIds?.join(','),
+    cursor: params?.cursor,
+    limit: params?.limit,
+  });
 
-  // Handle both wrapped and unwrapped response formats
-  if ('success' in response && response.success && 'data' in response) {
-    return response.data;
-  }
-
-  return response as unknown as ListUnifiedToolsResponse;
+  return response;
 }
 
 // =============================================================================

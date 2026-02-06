@@ -29,14 +29,33 @@ Implemented a complete tool export system enabling Waygate actions to be consume
 
 **API Endpoints:**
 
+Per-Integration Export:
+
 - `GET /api/v1/integrations/:id/tools/universal` - Universal format export
 - `GET /api/v1/integrations/:id/tools/langchain` - LangChain format export
 - `GET /api/v1/integrations/:id/tools/mcp` - MCP format export
+
+Aggregated Export (All Tools):
+
+- `GET /api/v1/tools/export/universal` - Export all tools (simple, composite, agentic) in universal format
+- `GET /api/v1/tools/export/langchain` - Export all tools in LangChain format
+- `GET /api/v1/tools/export/mcp` - Export all tools in MCP format
+
+Tool Operations:
+
 - `POST /api/v1/tools/invoke` - Tool invocation with context injection
 - `POST /api/v1/integrations/:id/actions/:actionId/regenerate-tool-descriptions` - Regenerate AI descriptions for an action
 
 **UI:**
 
+- AI Tools page with tabbed interface:
+  - "Tools" tab: List and manage all tools (simple, composite, agentic)
+  - "Export" tab: Export all tools with format selection (Universal, LangChain, MCP)
+    - Tool summary cards showing count by type (simple, composite, agentic)
+    - Format selection cards with format-specific export options
+    - Copy/download functionality for all formats
+    - Code snippets for LangChain (TypeScript/Python)
+    - MCP server files with Claude Desktop config
 - Combined "AI Tools" tab on Integration detail page (merged Export Tools + LLM Response):
   - Tool Definitions section with format tabs (Universal, LangChain, MCP)
   - Available Tools summary showing tool names with parameter counts (link to action editor for customization)
@@ -442,14 +461,29 @@ When exporting tools, stored descriptions are used when available, with fallback
 
 ### API Endpoints
 
-| Method | Endpoint                                      | Purpose                            |
-| ------ | --------------------------------------------- | ---------------------------------- |
-| GET    | `/api/v1/integrations/:id/tools`              | List all actions as tools          |
-| GET    | `/api/v1/integrations/:id/tools/universal`    | Export in LLM-agnostic format      |
-| GET    | `/api/v1/integrations/:id/tools/langchain`    | Export as LangChain tools          |
-| GET    | `/api/v1/integrations/:id/tools/mcp`          | Export as MCP server definition    |
-| GET    | `/api/v1/integrations/:id/actions/:slug/tool` | Export single action as tool       |
-| POST   | `/api/v1/tools/invoke`                        | Invoke tool with context injection |
+**Per-Integration Export:**
+
+| Method | Endpoint                                      | Purpose                         |
+| ------ | --------------------------------------------- | ------------------------------- |
+| GET    | `/api/v1/integrations/:id/tools`              | List all actions as tools       |
+| GET    | `/api/v1/integrations/:id/tools/universal`    | Export in LLM-agnostic format   |
+| GET    | `/api/v1/integrations/:id/tools/langchain`    | Export as LangChain tools       |
+| GET    | `/api/v1/integrations/:id/tools/mcp`          | Export as MCP server definition |
+| GET    | `/api/v1/integrations/:id/actions/:slug/tool` | Export single action as tool    |
+
+**Aggregated Export (All Tools):**
+
+| Method | Endpoint                         | Purpose                                            |
+| ------ | -------------------------------- | -------------------------------------------------- |
+| GET    | `/api/v1/tools/export/universal` | Export all tools (simple, composite, agentic)      |
+| GET    | `/api/v1/tools/export/langchain` | Export all tools in LangChain format with snippets |
+| GET    | `/api/v1/tools/export/mcp`       | Export all tools as MCP server definition          |
+
+**Tool Operations:**
+
+| Method | Endpoint               | Purpose                            |
+| ------ | ---------------------- | ---------------------------------- |
+| POST   | `/api/v1/tools/invoke` | Invoke tool with context injection |
 
 ---
 

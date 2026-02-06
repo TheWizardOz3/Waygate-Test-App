@@ -1,5 +1,6 @@
 'use client';
 
+import { useTransition, useCallback } from 'react';
 import { UseFormReturn, FieldValues } from 'react-hook-form';
 import { FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
@@ -22,6 +23,8 @@ interface SettingsTabProps {
 }
 
 export function SettingsTab({ form }: SettingsTabProps) {
+  const [, startTransition] = useTransition();
+
   const cacheable = form.watch('cacheable');
   const retryConfig = form.watch('retryConfig');
   const validationConfig = form.watch('validationConfig');
@@ -29,34 +32,43 @@ export function SettingsTab({ form }: SettingsTabProps) {
   const validationMode = validationConfig?.mode ?? 'warn';
   const driftEnabled = validationConfig?.driftDetection?.enabled ?? true;
 
-  const updateValidationConfig = (updates: Record<string, unknown>) => {
-    const current = form.getValues('validationConfig') || {};
-    form.setValue('validationConfig', {
-      enabled: true,
-      mode: 'warn',
-      nullHandling: 'pass',
-      extraFields: 'preserve',
-      coercion: {
-        stringToNumber: true,
-        numberToString: true,
-        stringToBoolean: true,
-        emptyStringToNull: false,
-        nullToDefault: true,
-      },
-      driftDetection: {
-        enabled: true,
-        windowMinutes: 60,
-        failureThreshold: 5,
-        alertOnDrift: true,
-      },
-      bypassValidation: false,
-      ...current,
-      ...updates,
-    });
-  };
+  const updateValidationConfig = useCallback(
+    (updates: Record<string, unknown>) => {
+      startTransition(() => {
+        const current = form.getValues('validationConfig') || {};
+        form.setValue(
+          'validationConfig',
+          {
+            enabled: true,
+            mode: 'warn',
+            nullHandling: 'pass',
+            extraFields: 'preserve',
+            coercion: {
+              stringToNumber: true,
+              numberToString: true,
+              stringToBoolean: true,
+              emptyStringToNull: false,
+              nullToDefault: true,
+            },
+            driftDetection: {
+              enabled: true,
+              windowMinutes: 60,
+              failureThreshold: 5,
+              alertOnDrift: true,
+            },
+            bypassValidation: false,
+            ...current,
+            ...updates,
+          },
+          { shouldDirty: true }
+        );
+      });
+    },
+    [form]
+  );
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Section header */}
       <div>
         <h2 className="text-lg font-semibold">Action Settings</h2>
@@ -65,7 +77,8 @@ export function SettingsTab({ form }: SettingsTabProps) {
         </p>
       </div>
 
-      <div className="max-w-2xl space-y-6">
+      {/* Three-column grid for settings cards */}
+      <div className="grid gap-6 lg:grid-cols-3">
         {/* Response Validation */}
         <div className="space-y-4 rounded-lg border bg-card p-5">
           <div className="flex items-center justify-between">
@@ -75,9 +88,7 @@ export function SettingsTab({ form }: SettingsTabProps) {
               </div>
               <div>
                 <p className="font-medium">Response Validation</p>
-                <p className="text-xs text-muted-foreground">
-                  Validate API responses against your output schema
-                </p>
+                <p className="text-xs text-muted-foreground">Validate against output schema</p>
               </div>
             </div>
             <Switch
@@ -86,124 +97,126 @@ export function SettingsTab({ form }: SettingsTabProps) {
             />
           </div>
 
-          {validationEnabled && (
-            <div className="space-y-4 pt-2">
-              <div className="flex items-center gap-4">
-                <Label className="min-w-20 text-sm">Mode</Label>
-                <Select
-                  value={validationMode}
-                  onValueChange={(value) => updateValidationConfig({ mode: value })}
-                >
-                  <SelectTrigger className="w-48">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="warn">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="bg-amber-500/10 text-amber-600">
-                          Warn
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">Log issues, pass data</span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="strict">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="bg-red-500/10 text-red-600">
-                          Strict
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">Fail on mismatch</span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="lenient">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="bg-blue-500/10 text-blue-600">
-                          Lenient
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">Auto-coerce types</span>
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+          <div
+            className={`space-y-4 pt-2 ${!validationEnabled ? 'pointer-events-none opacity-50' : ''}`}
+          >
+            <div className="space-y-2">
+              <Label className="text-sm">Mode</Label>
+              <Select
+                value={validationMode}
+                onValueChange={(value) => updateValidationConfig({ mode: value })}
+                disabled={!validationEnabled}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="warn">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="bg-amber-500/10 text-amber-600">
+                        Warn
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">Log issues, pass data</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="strict">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="bg-red-500/10 text-red-600">
+                        Strict
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">Fail on mismatch</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="lenient">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="bg-blue-500/10 text-blue-600">
+                        Lenient
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">Auto-coerce types</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-              <Separator />
+            <Separator />
 
-              {/* Drift Detection */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm">Schema Drift Detection</Label>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <Info className="h-3.5 w-3.5 text-muted-foreground" />
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs">
-                        Monitors validation failures over time to detect when the external API
-                        changes its response format
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
-                  <Switch
-                    checked={driftEnabled}
-                    onCheckedChange={(checked) =>
-                      updateValidationConfig({
-                        driftDetection: {
-                          ...validationConfig?.driftDetection,
-                          enabled: checked,
-                        },
-                      })
-                    }
-                  />
+            {/* Drift Detection */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm">Schema Drift Detection</Label>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      Monitors validation failures over time to detect when the external API changes
+                      its response format
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
-                {driftEnabled && (
-                  <div className="grid grid-cols-2 gap-4 pl-4">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Time Window</Label>
-                      <div className="flex items-center gap-2">
-                        <Input
-                          type="number"
-                          min={5}
-                          max={1440}
-                          value={validationConfig?.driftDetection?.windowMinutes ?? 60}
-                          onChange={(e) =>
-                            updateValidationConfig({
-                              driftDetection: {
-                                ...validationConfig?.driftDetection,
-                                windowMinutes: parseInt(e.target.value, 10) || 60,
-                              },
-                            })
-                          }
-                          className="h-8 w-20"
-                        />
-                        <span className="text-xs text-muted-foreground">minutes</span>
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Alert after</Label>
-                      <div className="flex items-center gap-2">
-                        <Input
-                          type="number"
-                          min={1}
-                          max={100}
-                          value={validationConfig?.driftDetection?.failureThreshold ?? 5}
-                          onChange={(e) =>
-                            updateValidationConfig({
-                              driftDetection: {
-                                ...validationConfig?.driftDetection,
-                                failureThreshold: parseInt(e.target.value, 10) || 5,
-                              },
-                            })
-                          }
-                          className="h-8 w-20"
-                        />
-                        <span className="text-xs text-muted-foreground">failures</span>
-                      </div>
-                    </div>
+                <Switch
+                  checked={driftEnabled}
+                  disabled={!validationEnabled}
+                  onCheckedChange={(checked) =>
+                    updateValidationConfig({
+                      driftDetection: {
+                        ...validationConfig?.driftDetection,
+                        enabled: checked,
+                      },
+                    })
+                  }
+                />
+              </div>
+              <div className={`space-y-3 ${!driftEnabled ? 'pointer-events-none opacity-50' : ''}`}>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Time Window</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min={5}
+                      max={1440}
+                      value={validationConfig?.driftDetection?.windowMinutes ?? 60}
+                      onChange={(e) =>
+                        updateValidationConfig({
+                          driftDetection: {
+                            ...validationConfig?.driftDetection,
+                            windowMinutes: parseInt(e.target.value, 10) || 60,
+                          },
+                        })
+                      }
+                      disabled={!validationEnabled || !driftEnabled}
+                      className="h-8 w-20"
+                    />
+                    <span className="text-xs text-muted-foreground">minutes</span>
                   </div>
-                )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Alert after</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={validationConfig?.driftDetection?.failureThreshold ?? 5}
+                      onChange={(e) =>
+                        updateValidationConfig({
+                          driftDetection: {
+                            ...validationConfig?.driftDetection,
+                            failureThreshold: parseInt(e.target.value, 10) || 5,
+                          },
+                        })
+                      }
+                      disabled={!validationEnabled || !driftEnabled}
+                      className="h-8 w-20"
+                    />
+                    <span className="text-xs text-muted-foreground">failures</span>
+                  </div>
+                </div>
               </div>
             </div>
-          )}
+          </div>
         </div>
 
         {/* Caching */}
@@ -215,9 +228,7 @@ export function SettingsTab({ form }: SettingsTabProps) {
               </div>
               <div>
                 <p className="font-medium">Response Caching</p>
-                <p className="text-xs text-muted-foreground">
-                  Cache identical requests to reduce API calls
-                </p>
+                <p className="text-xs text-muted-foreground">Cache to reduce API calls</p>
               </div>
             </div>
             <FormField
@@ -233,39 +244,41 @@ export function SettingsTab({ form }: SettingsTabProps) {
             />
           </div>
 
-          {cacheable && (
-            <div className="pt-2">
-              <FormField
-                control={form.control}
-                name="cacheTtlSeconds"
-                render={({ field }) => (
-                  <FormItem>
-                    <div className="flex items-center gap-4">
-                      <Label className="min-w-20 text-sm">TTL</Label>
-                      <div className="flex items-center gap-2">
-                        <FormControl>
-                          <Input
-                            type="number"
-                            min={0}
-                            max={86400}
-                            placeholder="300"
-                            {...field}
-                            value={field.value ?? ''}
-                            onChange={(e) =>
-                              field.onChange(e.target.value ? parseInt(e.target.value, 10) : null)
-                            }
-                            className="h-8 w-24"
-                          />
-                        </FormControl>
-                        <span className="text-sm text-muted-foreground">seconds</span>
-                      </div>
+          <div className={`pt-2 ${!cacheable ? 'pointer-events-none opacity-50' : ''}`}>
+            <FormField
+              control={form.control}
+              name="cacheTtlSeconds"
+              render={({ field }) => (
+                <FormItem>
+                  <div className="space-y-2">
+                    <Label className="text-sm">Cache TTL</Label>
+                    <div className="flex items-center gap-2">
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={86400}
+                          placeholder="300"
+                          {...field}
+                          value={field.value ?? ''}
+                          onChange={(e) =>
+                            field.onChange(e.target.value ? parseInt(e.target.value, 10) : null)
+                          }
+                          disabled={!cacheable}
+                          className="h-8 w-24"
+                        />
+                      </FormControl>
+                      <span className="text-sm text-muted-foreground">seconds</span>
                     </div>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-          )}
+                    <p className="text-xs text-muted-foreground">
+                      How long to cache responses (0 = no cache)
+                    </p>
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
         </div>
 
         {/* Retry Configuration */}
@@ -277,9 +290,7 @@ export function SettingsTab({ form }: SettingsTabProps) {
               </div>
               <div>
                 <p className="font-medium">Automatic Retries</p>
-                <p className="text-xs text-muted-foreground">
-                  Retry failed requests on specific error codes
-                </p>
+                <p className="text-xs text-muted-foreground">Retry on specific error codes</p>
               </div>
             </div>
             <FormField
@@ -304,74 +315,63 @@ export function SettingsTab({ form }: SettingsTabProps) {
             />
           </div>
 
-          {retryConfig && (
-            <div className="space-y-4 pt-2">
-              <div className="grid grid-cols-2 gap-6">
-                <FormField
-                  control={form.control}
-                  name="retryConfig.maxRetries"
-                  render={({ field }) => (
-                    <FormItem>
-                      <div className="space-y-1">
-                        <Label className="text-sm">Max Retries</Label>
-                        <p className="text-xs text-muted-foreground">
-                          How many times to retry before failing
-                        </p>
-                      </div>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={10}
-                          {...field}
-                          onChange={(e) => field.onChange(parseInt(e.target.value, 10))}
-                          className="w-24"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+          <div className={`space-y-4 pt-2 ${!retryConfig ? 'pointer-events-none opacity-50' : ''}`}>
+            <FormField
+              control={form.control}
+              name="retryConfig.maxRetries"
+              render={({ field }) => (
+                <FormItem>
+                  <div className="space-y-2">
+                    <Label className="text-sm">Max Retries</Label>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={10}
+                        {...field}
+                        value={field.value ?? 3}
+                        onChange={(e) => field.onChange(parseInt(e.target.value, 10))}
+                        disabled={!retryConfig}
+                        className="w-24"
+                      />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">Times to retry before failing</p>
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-                <FormField
-                  control={form.control}
-                  name="retryConfig.retryableStatuses"
-                  render={({ field }) => (
-                    <FormItem>
-                      <div className="space-y-1">
-                        <Label className="text-sm">Status Codes to Retry</Label>
-                        <p className="text-xs text-muted-foreground">
-                          HTTP codes that trigger a retry
-                        </p>
-                      </div>
-                      <FormControl>
-                        <Input
-                          placeholder="429, 500, 502, 503, 504"
-                          value={field.value?.join(', ') ?? ''}
-                          onChange={(e) => {
-                            const codes = e.target.value
-                              .split(',')
-                              .map((s) => parseInt(s.trim(), 10))
-                              .filter((n) => !isNaN(n));
-                            field.onChange(codes);
-                          }}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <div className="rounded-lg border bg-muted/30 p-3">
-                <p className="text-xs text-muted-foreground">
-                  <strong>How it works:</strong> When the API returns one of these status codes,
-                  Waygate will automatically retry the request with exponential backoff. Common
-                  codes: 429 (rate limit), 500-504 (server errors).
-                </p>
-              </div>
-            </div>
-          )}
+            <FormField
+              control={form.control}
+              name="retryConfig.retryableStatuses"
+              render={({ field }) => (
+                <FormItem>
+                  <div className="space-y-2">
+                    <Label className="text-sm">Status Codes to Retry</Label>
+                    <FormControl>
+                      <Input
+                        placeholder="429, 500, 502, 503, 504"
+                        value={field.value?.join(', ') ?? '429, 500, 502, 503, 504'}
+                        onChange={(e) => {
+                          const codes = e.target.value
+                            .split(',')
+                            .map((s) => parseInt(s.trim(), 10))
+                            .filter((n) => !isNaN(n));
+                          field.onChange(codes);
+                        }}
+                        disabled={!retryConfig}
+                      />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      429 (rate limit), 500-504 (server errors)
+                    </p>
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
         </div>
       </div>
     </div>

@@ -13,7 +13,7 @@ import {
   updateAgenticTool,
   AgenticToolError,
 } from '@/lib/modules/agentic-tools';
-import { regenerateAgenticToolDescription } from '@/lib/modules/agentic-tools/export/description-generator';
+import { generateDescriptionsFromAgenticTool } from '@/lib/modules/agentic-tools/export/description-generator';
 
 /**
  * Extract agentic tool ID from URL
@@ -28,13 +28,13 @@ function extractAgenticToolId(request: NextRequest): string | null {
 /**
  * POST /api/v1/agentic-tools/:id/regenerate-prompt
  *
- * Regenerates the system prompt for an agentic tool using AI.
+ * Regenerates the tool description for an agentic tool using AI.
  * This is useful when the tool configuration changes (execution mode,
- * allocated tools, context variables, etc.) and the prompt needs to be updated.
+ * allocated tools, context variables, etc.) and the description needs to be updated.
  *
  * Response:
- * - `systemPrompt`: The newly generated system prompt
  * - `toolDescription`: The newly generated tool description
+ * - `exampleUsages`: Example usage scenarios for the tool
  * - `updated`: Whether the tool was automatically updated (false by default)
  */
 export const POST = withApiAuth(async (request: NextRequest, { tenant }) => {
@@ -63,7 +63,7 @@ export const POST = withApiAuth(async (request: NextRequest, { tenant }) => {
     const agenticTool = await getAgenticToolById(agenticToolId, tenant.id);
 
     // Regenerate descriptions
-    const regenerated = await regenerateAgenticToolDescription(agenticTool);
+    const regenerated = await generateDescriptionsFromAgenticTool(agenticTool);
 
     // Optionally auto-update the tool if requested
     const url = new URL(request.url);
@@ -72,7 +72,6 @@ export const POST = withApiAuth(async (request: NextRequest, { tenant }) => {
     let updatedTool;
     if (autoUpdate) {
       updatedTool = await updateAgenticTool(agenticToolId, tenant.id, {
-        systemPrompt: regenerated.systemPrompt,
         toolDescription: regenerated.toolDescription,
       });
     }
@@ -81,8 +80,8 @@ export const POST = withApiAuth(async (request: NextRequest, { tenant }) => {
       {
         success: true,
         data: {
-          systemPrompt: regenerated.systemPrompt,
           toolDescription: regenerated.toolDescription,
+          exampleUsages: regenerated.exampleUsages,
           updated: autoUpdate,
           ...(updatedTool && { agenticTool: updatedTool }),
         },

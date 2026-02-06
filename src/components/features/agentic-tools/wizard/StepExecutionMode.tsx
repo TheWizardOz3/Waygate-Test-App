@@ -10,7 +10,7 @@ const EXECUTION_MODES = [
   {
     mode: 'parameter_interpreter' as AgenticToolExecutionMode,
     icon: Wand2,
-    title: 'LLM Data Transformation',
+    title: 'Query Transformation',
     description:
       'LLM translates natural language into structured API parameters. Single LLM call per invocation.',
     features: ['Natural language → JSON parameters', 'One LLM call', 'Predictable execution'],

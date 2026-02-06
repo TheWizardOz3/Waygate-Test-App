@@ -14,6 +14,7 @@ import {
   processPrompt,
   buildPromptContext,
 } from '@/lib/modules/agentic-tools/llm/prompt-processor';
+import type { ContextConfig } from '@/lib/modules/agentic-tools/agentic-tool.schemas';
 
 /**
  * Request body schema for test prompt
@@ -117,12 +118,15 @@ export const POST = withApiAuth(async (request: NextRequest, { tenant }) => {
     const agenticTool = await getAgenticToolById(agenticToolId, tenant.id);
 
     // Build prompt context from test data
-    const promptContext = buildPromptContext(agenticTool.contextConfig, {
-      userInput: sampleInput,
-      integrationSchemas: testContext?.integrationSchemas,
-      referenceData: testContext?.referenceData,
-      availableTools: testContext?.availableTools,
-    });
+    const promptContext = buildPromptContext(
+      agenticTool.contextConfig as ContextConfig | undefined,
+      {
+        userInput: sampleInput,
+        integrationSchemas: testContext?.integrationSchemas,
+        referenceData: testContext?.referenceData,
+        availableTools: testContext?.availableTools,
+      }
+    );
 
     // Process the prompt
     const result = processPrompt(agenticTool.systemPrompt, promptContext);

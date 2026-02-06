@@ -70,12 +70,10 @@ const AGENTIC_TOOL_DESCRIPTION_SCHEMA: LLMResponseSchema = {
     },
     exampleUsages: {
       type: 'array',
-      description: 'Array of 2-3 example usage scenarios',
+      description: 'Array of 2-3 example usage scenarios (provide exactly 2-3 examples)',
       items: {
         type: 'string',
       },
-      minItems: 2,
-      maxItems: 3,
     },
   },
   required: ['toolDescription', 'exampleUsages'],
@@ -85,23 +83,60 @@ const AGENTIC_TOOL_DESCRIPTION_SCHEMA: LLMResponseSchema = {
 // Prompts
 // =============================================================================
 
-const SYSTEM_PROMPT = `You are an expert at writing tool descriptions for AI agents. Your goal is to create clear, actionable descriptions that help parent AI agents understand:
-1. What the agentic tool does (and that it uses an embedded LLM)
-2. What natural language input it expects
-3. How the embedded LLM processes the input
-4. What the tool outputs and how to use the response
+const SYSTEM_PROMPT = `You are an expert at writing tool descriptions for AI agents. Your goal is to create clear, actionable descriptions that help parent AI agents understand how to use agentic tools effectively.
 
-You write in a direct, technical style without unnecessary words. Focus on practical usage.`;
+You must follow the EXACT format specified below. Tool descriptions are treated as mini-prompts that guide the parent agent.
+
+CRITICAL: Always use this exact format:
+
+Use this tool to {what the tool does in actionable terms}.
+
+# Required inputs:
+- {input_name}: {description with type, constraints, defaults}
+
+# Optional inputs (include when {condition}):
+- {input_name}: {description with when to include/exclude}
+
+# What the tool outputs:
+{Description of output format and key fields}`;
 
 function buildAgenticToolGenerationPrompt(input: AgenticToolDescriptionInput): string {
-  const modeExplanation =
+  const modeDescription =
     input.executionMode === 'parameter_interpreter'
-      ? `**Parameter Interpreter Mode**: The embedded LLM translates your natural language request into structured parameters, then executes a predetermined action. This is a single-step process where the LLM acts as a parameter generator.`
-      : `**Autonomous Agent Mode**: The embedded LLM autonomously selects and executes multiple tools in sequence to accomplish your goal. The LLM reasons about which tools to use, when to use them, and how to synthesize results.`;
+      ? 'The embedded LLM translates natural language requests into structured parameters, then executes a predetermined action (single LLM call).'
+      : 'The embedded LLM autonomously selects and executes multiple tools to accomplish goals (multiple LLM calls).';
 
   const modelInfo = `${input.embeddedLLMConfig.provider}/${input.embeddedLLMConfig.model}`;
 
-  const inputSchemaText = JSON.stringify(input.inputSchema, null, 2);
+  // Extract tool information from allocation
+  const toolAllocation = input.toolAllocation as {
+    mode?: string;
+    targetActions?: { actionId: string; actionSlug: string }[];
+    availableTools?: { actionId: string; actionSlug: string; description?: string }[];
+  };
+
+  const allocatedTools: string[] = [];
+  const toolDescriptions: string[] = [];
+
+  if (toolAllocation.targetActions) {
+    toolAllocation.targetActions.forEach((t) => allocatedTools.push(t.actionSlug));
+  }
+  if (toolAllocation.availableTools) {
+    toolAllocation.availableTools.forEach((t) => {
+      allocatedTools.push(t.actionSlug);
+      if (t.description) {
+        toolDescriptions.push(`- ${t.actionSlug}: ${t.description}`);
+      }
+    });
+  }
+
+  const toolsListText =
+    allocatedTools.length > 0
+      ? `Available underlying tools: ${allocatedTools.join(', ')}`
+      : 'No specific tools configured yet';
+
+  const toolDescText =
+    toolDescriptions.length > 0 ? `\n\nTool descriptions:\n${toolDescriptions.join('\n')}` : '';
 
   // Extract key info from system prompt without exposing internal details
   const systemPromptSummary =
@@ -109,50 +144,52 @@ function buildAgenticToolGenerationPrompt(input: AgenticToolDescriptionInput): s
       ? input.systemPrompt.substring(0, 500) + '...'
       : input.systemPrompt;
 
-  return `Generate an agentic tool description for a parent AI agent to understand how to use this tool.
+  return `Generate an agentic tool description following the EXACT format specified in the system prompt.
 
 ## Agentic Tool Details
 - **Name**: ${input.name}
 - **Slug**: ${input.slug}
-- **Description**: ${input.description || 'No description provided'}
-- **Execution Mode**: ${input.executionMode}
+- **User Description**: ${input.description || 'No description provided'}
+- **Execution Mode**: ${input.executionMode} (${modeDescription})
 - **Embedded LLM**: ${modelInfo}
 
-## Execution Mode
-${modeExplanation}
+## Tool Allocation
+${toolsListText}${toolDescText}
 
-## System Prompt (Embedded LLM Instructions)
-The embedded LLM operates with these instructions:
+## System Prompt Context
+The embedded LLM uses these instructions:
 \`\`\`
 ${systemPromptSummary}
 \`\`\`
 
-## Input Schema
-The tool expects this input format:
-\`\`\`json
-${inputSchemaText}
-\`\`\`
-
-## Tool Allocation
-${JSON.stringify(input.toolAllocation, null, 2)}
-
 ---
 
-**Task**: Generate a concise, actionable tool description that:
-1. Explains what this tool does in 1-2 sentences
-2. Clarifies that it uses an embedded LLM (${input.executionMode} mode)
-3. Describes what natural language input the parent agent should provide
-4. Explains what the tool returns
-5. Provides 2-3 concrete example usage scenarios
+**Task**: Generate a tool description following this EXACT format:
 
-**Format Requirements**:
-- Tool description: 200-500 words
-- Use clear, direct language
-- Focus on practical usage, not implementation details
-- Emphasize the natural language interface
-- Include examples that show the variety of tasks this tool can handle
+\`\`\`
+Use this tool to {what the tool does - be specific about the capabilities based on allocated tools}.
 
-**Remember**: The parent agent doesn't need to know about the embedded LLM's internal workings - just how to use the tool effectively.`;
+# Required inputs:
+- task: {description of what natural language input to provide, including examples of well-formed requests}
+
+# Optional inputs (include when needed):
+- preferred_tools: {if autonomous mode, describe when to specify preferred tools}
+- context: {describe any additional context that helps the embedded LLM}
+
+# What the tool outputs:
+{Describe the output format - structured JSON response from the executed tool(s), including:
+- What data fields to expect
+- How errors are reported
+- Any metadata included}
+\`\`\`
+
+**Requirements**:
+1. Start with "Use this tool to" - be specific about what operations this tool can perform
+2. The "task" input is always required - describe it as accepting natural language
+3. Include optional inputs only if relevant to this tool's execution mode
+4. Describe outputs based on what the underlying tools return
+5. Be concise but complete - parent agents need to know exactly how to use this tool
+6. Do NOT mention internal LLM details - focus on what the tool DOES, not how it works internally`;
 }
 
 // =============================================================================
@@ -162,39 +199,62 @@ ${JSON.stringify(input.toolAllocation, null, 2)}
 /**
  * Generate a basic description without using an LLM.
  * Used as fallback or for quick previews.
+ * Follows the simple-tool-export.md mini-prompt format.
  */
 export function generateBasicAgenticToolDescription(
   input: AgenticToolDescriptionInput
 ): GeneratedAgenticToolDescriptions {
-  const modeDescription =
+  // Extract tool information from allocation
+  const toolAllocation = input.toolAllocation as {
+    mode?: string;
+    targetActions?: { actionId: string; actionSlug: string }[];
+    availableTools?: { actionId: string; actionSlug: string; description?: string }[];
+  };
+
+  const allocatedTools: string[] = [];
+  if (toolAllocation.targetActions) {
+    toolAllocation.targetActions.forEach((t) => allocatedTools.push(t.actionSlug));
+  }
+  if (toolAllocation.availableTools) {
+    toolAllocation.availableTools.forEach((t) => allocatedTools.push(t.actionSlug));
+  }
+
+  const toolsContext =
+    allocatedTools.length > 0
+      ? `specifically for ${allocatedTools.slice(0, 3).join(', ')}${allocatedTools.length > 3 ? ` and ${allocatedTools.length - 3} more tools` : ''}`
+      : 'for the configured operations';
+
+  const actionDescription =
     input.executionMode === 'parameter_interpreter'
-      ? 'This tool uses an embedded LLM to interpret your natural language request and generate precise parameters for execution. The LLM acts as a smart parameter generator, translating your intent into structured API calls.'
-      : 'This tool uses an autonomous agent with an embedded LLM that selects and executes multiple tools to accomplish your goal. The agent reasons about which tools to use and how to synthesize results.';
+      ? `translate natural language requests into structured JSON parameters ${toolsContext}`
+      : `accomplish goals by autonomously selecting and executing tools ${toolsContext}`;
 
-  const inputDescription =
-    Object.keys(input.inputSchema).length > 0
-      ? 'Provide input according to the defined schema.'
-      : 'Provide a clear, natural language description of what you want to accomplish in the "task" parameter.';
+  const modeSpecificInput =
+    input.executionMode === 'autonomous_agent'
+      ? `
+# Optional inputs (include when needed):
+- preferred_tools: Array of tool slugs to prioritize. Include when you want to guide tool selection.
+- context: Additional context or constraints for the task.`
+      : '';
 
-  const toolDescription = `# ${input.name}
+  const outputDescription =
+    input.executionMode === 'parameter_interpreter'
+      ? 'The output will be the structured JSON response from the executed tool, formatted strictly as valid JSON without markdown or explanatory text.'
+      : 'Returns the synthesized result from all tool executions, including individual tool responses and a summary of actions taken.';
 
-${input.description || 'An AI-powered tool with embedded intelligence.'}
+  const toolDescription = `Use this tool to ${actionDescription}.
 
-## How it works
-${modeDescription}
+# Required inputs:
+- task: The task or request in natural language. Be specific and include any necessary identifiers like IDs, names, or values. The embedded LLM will process this input, map it to the correct tool schema, and execute the action.
+${modeSpecificInput}
 
-## Input
-${inputDescription}
-
-## Output
-Returns the result of the operation(s) performed by the embedded agent, formatted for easy interpretation.
-
-## Usage
-Provide a clear, specific description of what you want to accomplish. The embedded LLM will handle the complexity of translating your request into the appropriate actions.`;
+# What the tool outputs:
+${outputDescription}`;
 
   const exampleUsages = [
-    `Task: "Find all records matching the criteria and format them as a summary"`,
-    `Task: "Update the status based on the latest information"`,
+    `Task: "Cancel the refund with ID re_abc123"`,
+    `Task: "Send a message to the #general channel saying 'Meeting in 5 minutes'"`,
+    `Task: "Get the latest 10 transactions for customer cus_xyz789"`,
   ];
 
   return {
@@ -218,15 +278,16 @@ export async function generateAgenticToolDescription(
     const llm = getLLM();
     const prompt = buildAgenticToolGenerationPrompt(input);
 
-    const response = await llm.generateStructuredResponse(prompt, AGENTIC_TOOL_DESCRIPTION_SCHEMA, {
-      systemPrompt: SYSTEM_PROMPT,
+    const result = await llm.generate<GeneratedAgenticToolDescriptions>(prompt, {
+      systemInstruction: SYSTEM_PROMPT,
+      responseSchema: AGENTIC_TOOL_DESCRIPTION_SCHEMA,
       temperature: 0.3, // Low temperature for consistent output
-      maxTokens: 2000,
+      maxOutputTokens: 2000,
     });
 
     return {
-      toolDescription: response.toolDescription as string,
-      exampleUsages: response.exampleUsages as string[],
+      toolDescription: result.content.toolDescription,
+      exampleUsages: result.content.exampleUsages,
     };
   } catch (error) {
     console.error('[AgenticToolDescriptionGenerator] AI generation failed, using fallback:', error);

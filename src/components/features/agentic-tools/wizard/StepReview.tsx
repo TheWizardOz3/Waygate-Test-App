@@ -93,7 +93,7 @@ export function StepReview() {
             <Label>Execution Mode</Label>
             <p className="mt-1 text-sm">
               {data.executionMode === 'parameter_interpreter'
-                ? 'LLM Data Transformation'
+                ? 'Query Transformation'
                 : 'Autonomous Agent'}
             </p>
           </div>
@@ -160,7 +160,7 @@ export function StepReview() {
           <div className="rounded-lg border p-4">
             <span className="text-sm font-medium">
               {data.executionMode === 'parameter_interpreter'
-                ? 'LLM Data Transformation'
+                ? 'Query Transformation'
                 : 'Autonomous Agent'}
             </span>
           </div>

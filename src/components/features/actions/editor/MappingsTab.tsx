@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Plus,
   Trash2,
@@ -17,7 +17,6 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Select,
   SelectContent,
@@ -78,8 +77,22 @@ export function MappingsTab({
   const mappings = useMemo(() => mappingsData?.mappings ?? [], [mappingsData?.mappings]);
   const stats = mappingsData?.stats;
   const connectionsWithOverrides = stats?.connectionsWithOverrides ?? 0;
-  const enabled = config?.enabled ?? false;
-  const failureMode = config?.failureMode ?? 'passthrough';
+
+  // Optimistic state for responsive toggles
+  const [optimisticEnabled, setOptimisticEnabled] = useState<boolean | null>(null);
+  const [optimisticFailureMode, setOptimisticFailureMode] = useState<string | null>(null);
+
+  // Use optimistic state if set, otherwise fall back to server state
+  const enabled = optimisticEnabled ?? config?.enabled ?? false;
+  const failureMode = optimisticFailureMode ?? config?.failureMode ?? 'passthrough';
+
+  // Reset optimistic state when server state updates
+  useEffect(() => {
+    if (config) {
+      setOptimisticEnabled(null);
+      setOptimisticFailureMode(null);
+    }
+  }, [config]);
 
   // Determine if schemas are array types at root
   const isOutputArray = outputSchema?.type === 'array';
@@ -124,174 +137,199 @@ export function MappingsTab({
   const hasRootOutputMapping = configuredOutputPaths.has('$');
   const hasRootInputMapping = configuredInputPaths.has('$');
 
-  const handleToggleEnabled = async (value: boolean) => {
-    try {
-      await updateConfig({ enabled: value });
-      toast.success(value ? 'Mapping enabled' : 'Mapping disabled');
-      refetch();
-    } catch {
-      toast.error('Failed to update');
-    }
-  };
+  const handleToggleEnabled = useCallback(
+    async (value: boolean) => {
+      // Optimistic update - set immediately for responsive UI
+      setOptimisticEnabled(value);
+      try {
+        await updateConfig({ enabled: value });
+        toast.success(value ? 'Mapping enabled' : 'Mapping disabled');
+        refetch();
+      } catch {
+        // Revert optimistic update on error
+        setOptimisticEnabled(null);
+        toast.error('Failed to update');
+      }
+    },
+    [updateConfig, refetch]
+  );
 
-  const handleChangeFailureMode = async (value: string) => {
-    try {
-      await updateConfig({ failureMode: value as 'fail' | 'passthrough' });
-      toast.success('Failure mode updated');
-      refetch();
-    } catch {
-      toast.error('Failed to update');
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <Card>
-        <CardContent className="flex items-center justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </CardContent>
-      </Card>
-    );
-  }
+  const handleChangeFailureMode = useCallback(
+    async (value: string) => {
+      // Optimistic update - set immediately for responsive UI
+      setOptimisticFailureMode(value);
+      try {
+        await updateConfig({ failureMode: value as 'fail' | 'passthrough' });
+        toast.success('Failure mode updated');
+        refetch();
+      } catch {
+        // Revert optimistic update on error
+        setOptimisticFailureMode(null);
+        toast.error('Failed to update');
+      }
+    },
+    [updateConfig, refetch]
+  );
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="text-base">Field Mapping</CardTitle>
-            <CardDescription>
-              Transform fields between your app and the external API using JSONPath
-            </CardDescription>
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h2 className="text-lg font-semibold">Field Mapping</h2>
+        <p className="text-sm text-muted-foreground">
+          Transform fields between your app and the external API using JSONPath
+        </p>
+      </div>
+
+      {/* Main controls - always visible */}
+      <div className="flex items-center justify-between rounded-lg border bg-card p-4">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Label className="font-medium">Enable Mapping</Label>
+            <Tooltip>
+              <TooltipTrigger>
+                <Info className="h-3.5 w-3.5 text-muted-foreground" />
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                When enabled, field mappings will be applied to transform data between your app and
+                the external API.
+              </TooltipContent>
+            </Tooltip>
           </div>
-          <div className="flex items-center gap-3">
-            {/* Connection Overrides Indicator */}
-            {connectionsWithOverrides > 0 && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge
-                    variant="outline"
-                    className="gap-1.5 border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400"
-                  >
-                    <Users className="h-3 w-3" />
-                    {connectionsWithOverrides} connection{connectionsWithOverrides !== 1 ? 's' : ''}{' '}
-                    with overrides
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  <p className="text-xs">
-                    {connectionsWithOverrides} connection
-                    {connectionsWithOverrides !== 1 ? 's have' : ' has'} custom mapping overrides.
-                    View connection details to manage per-app mappings.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            )}
-            <Switch
-              checked={enabled}
-              onCheckedChange={handleToggleEnabled}
-              disabled={configPending}
-            />
-          </div>
+          <Switch
+            checked={enabled}
+            onCheckedChange={handleToggleEnabled}
+            disabled={configPending || isLoading}
+          />
         </div>
-      </CardHeader>
 
-      {enabled && (
-        <CardContent className="space-y-4">
+        <div className="flex items-center gap-4">
           {/* Failure Mode */}
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Label>On Error</Label>
-              <Tooltip>
-                <TooltipTrigger>
-                  <Info className="h-3.5 w-3.5 text-muted-foreground" />
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  <strong>Passthrough:</strong> Return original data if mapping fails (safe).
-                  <br />
-                  <strong>Strict:</strong> Fail the request if mapping fails.
-                </TooltipContent>
-              </Tooltip>
-            </div>
-            <Select
-              value={failureMode}
-              onValueChange={handleChangeFailureMode}
-              disabled={configPending}
-            >
-              <SelectTrigger className="h-8 w-36">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="passthrough">Passthrough</SelectItem>
-                <SelectItem value="fail">Strict</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="flex items-center gap-2">
+            <Label className="text-sm">On Error</Label>
+            <Tooltip>
+              <TooltipTrigger>
+                <Info className="h-3.5 w-3.5 text-muted-foreground" />
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                <strong>Passthrough:</strong> Return original data if mapping fails (safe).
+                <br />
+                <strong>Strict:</strong> Fail the request if mapping fails.
+              </TooltipContent>
+            </Tooltip>
           </div>
+          <Select
+            value={failureMode}
+            onValueChange={handleChangeFailureMode}
+            disabled={configPending || !enabled || isLoading}
+          >
+            <SelectTrigger className="h-8 w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="passthrough">Passthrough</SelectItem>
+              <SelectItem value="fail">Strict</SelectItem>
+            </SelectContent>
+          </Select>
 
-          {/* Configured Mappings Table - Only show if there are mappings */}
-          {mappings.length > 0 && (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="w-24">Direction</TableHead>
-                    <TableHead>Source</TableHead>
-                    <TableHead className="w-8"></TableHead>
-                    <TableHead>Target</TableHead>
-                    <TableHead className="w-24">Coerce To</TableHead>
-                    <TableHead className="w-12"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {mappings.map((mapping) => (
-                    <MappingRow
-                      key={mapping.id}
-                      mapping={mapping}
-                      actionId={actionId}
-                      integrationId={integrationId}
-                      onDelete={refetch}
-                    />
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+          {/* Connection Overrides Indicator */}
+          {connectionsWithOverrides > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge
+                  variant="outline"
+                  className="gap-1.5 border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400"
+                >
+                  <Users className="h-3 w-3" />
+                  {connectionsWithOverrides} connection{connectionsWithOverrides !== 1 ? 's' : ''}{' '}
+                  with overrides
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                <p className="text-xs">
+                  {connectionsWithOverrides} connection
+                  {connectionsWithOverrides !== 1 ? 's have' : ' has'} custom mapping overrides.
+                  View connection details to manage per-app mappings.
+                </p>
+              </TooltipContent>
+            </Tooltip>
           )}
+        </div>
+      </div>
 
-          {/* Schema Fields Section - Primary way to add mappings */}
-          {hasSchemaFields && (
-            <SchemaFieldsSection
-              outputFields={availableOutputFields}
-              inputFields={availableInputFields}
-              isOutputArray={isOutputArray}
-              isInputArray={isInputArray}
-              hasRootOutputMapping={hasRootOutputMapping}
-              hasRootInputMapping={hasRootInputMapping}
-              actionId={actionId}
-              integrationId={integrationId}
-              onMappingAdded={refetch}
-            />
-          )}
+      {/* Content area - always visible but styled based on enabled state */}
+      <div className={`space-y-4 ${!enabled ? 'pointer-events-none opacity-50' : ''}`}>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <>
+            {/* Configured Mappings Table - Only show if there are mappings */}
+            {mappings.length > 0 && (
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="w-24">Direction</TableHead>
+                      <TableHead>Source</TableHead>
+                      <TableHead className="w-8"></TableHead>
+                      <TableHead>Target</TableHead>
+                      <TableHead className="w-24">Coerce To</TableHead>
+                      <TableHead className="w-12"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {mappings.map((mapping) => (
+                      <MappingRow
+                        key={mapping.id}
+                        mapping={mapping}
+                        actionId={actionId}
+                        integrationId={integrationId}
+                        onDelete={refetch}
+                      />
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
 
-          {/* Manual add fallback - Only show when no schema fields available */}
-          {!hasSchemaFields && (
-            <ManualAddSection actionId={actionId} integrationId={integrationId} onAdd={refetch} />
-          )}
+            {/* Schema Fields Section - Primary way to add mappings */}
+            {hasSchemaFields && (
+              <SchemaFieldsSection
+                outputFields={availableOutputFields}
+                inputFields={availableInputFields}
+                isOutputArray={isOutputArray}
+                isInputArray={isInputArray}
+                hasRootOutputMapping={hasRootOutputMapping}
+                hasRootInputMapping={hasRootInputMapping}
+                actionId={actionId}
+                integrationId={integrationId}
+                onMappingAdded={refetch}
+              />
+            )}
 
-          {/* Empty state */}
-          {mappings.length === 0 && !hasSchemaFields && (
-            <div className="rounded-lg bg-muted/50 p-4 text-center">
-              <p className="text-sm text-muted-foreground">
-                No schema detected. Add mappings manually using the form above.
-              </p>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Example: <code className="rounded bg-muted px-1">$.data.user_email</code> →{' '}
-                <code className="rounded bg-muted px-1">$.email</code>
-              </p>
-            </div>
-          )}
-        </CardContent>
-      )}
-    </Card>
+            {/* Manual add fallback - Only show when no schema fields available */}
+            {!hasSchemaFields && (
+              <ManualAddSection actionId={actionId} integrationId={integrationId} onAdd={refetch} />
+            )}
+
+            {/* Empty state */}
+            {mappings.length === 0 && !hasSchemaFields && (
+              <div className="rounded-lg bg-muted/50 p-4 text-center">
+                <p className="text-sm text-muted-foreground">
+                  No schema detected. Add mappings manually using the form above.
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Example: <code className="rounded bg-muted px-1">$.data.user_email</code> →{' '}
+                  <code className="rounded bg-muted px-1">$.email</code>
+                </p>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 

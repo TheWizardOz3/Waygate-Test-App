@@ -88,17 +88,17 @@ export function AIToolDashboard({ toolId }: AIToolDashboardProps) {
     async function detectToolType() {
       try {
         // Try fetching as agentic tool first
-        const agenticResponse = await fetch(`/api/v1/agentic-tools/${toolId}`);
+        // Note: apiClient.get already extracts the 'data' field from the API response
+        const agenticResult = await apiClient
+          .get<AgenticToolResponse>(`/agentic-tools/${toolId}`)
+          .catch(() => null);
 
-        if (agenticResponse.ok) {
-          const result = await agenticResponse.json();
-          setAgenticTool(result.data);
+        if (agenticResult) {
+          setAgenticTool(agenticResult);
           setToolType('agentic');
-        } else if (agenticResponse.status === 404) {
+        } else {
           // If not found as agentic, assume it's composite
           setToolType('composite');
-        } else {
-          throw new Error('Failed to fetch tool');
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load tool');
@@ -144,9 +144,11 @@ export function AIToolDashboard({ toolId }: AIToolDashboardProps) {
       refetchComposite();
     } else {
       // Refetch agentic tool
-      fetch(`/api/v1/agentic-tools/${toolId}`)
-        .then((res) => res.json())
-        .then((result) => setAgenticTool(result.data));
+      // Note: apiClient.get already extracts the 'data' field from the API response
+      apiClient
+        .get<AgenticToolResponse>(`/agentic-tools/${toolId}`)
+        .then((result) => setAgenticTool(result))
+        .catch(console.error);
     }
   };
 
@@ -285,7 +287,7 @@ export function AIToolDashboard({ toolId }: AIToolDashboardProps) {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="details">
+        <TabsContent value="details" forceMount className="data-[state=inactive]:hidden">
           <DetailsTab
             tool={tool as CompositeToolDetailResponse | AgenticToolResponse}
             toolType={toolType!}
@@ -293,7 +295,7 @@ export function AIToolDashboard({ toolId }: AIToolDashboardProps) {
           />
         </TabsContent>
 
-        <TabsContent value="tools">
+        <TabsContent value="tools" forceMount className="min-w-0 data-[state=inactive]:hidden">
           <ToolsActionsTab
             tool={tool as CompositeToolDetailResponse | AgenticToolResponse}
             toolType={toolType!}
@@ -301,7 +303,7 @@ export function AIToolDashboard({ toolId }: AIToolDashboardProps) {
           />
         </TabsContent>
 
-        <TabsContent value="intelligence">
+        <TabsContent value="intelligence" forceMount className="data-[state=inactive]:hidden">
           <IntelligenceTab
             tool={tool as CompositeToolDetailResponse | AgenticToolResponse}
             toolType={toolType!}
@@ -309,7 +311,7 @@ export function AIToolDashboard({ toolId }: AIToolDashboardProps) {
           />
         </TabsContent>
 
-        <TabsContent value="export">
+        <TabsContent value="export" forceMount className="data-[state=inactive]:hidden">
           <ExportTab
             tool={tool as CompositeToolDetailResponse | AgenticToolResponse}
             toolType={toolType!}

@@ -206,7 +206,8 @@ export class GoogleProvider implements ILLMProvider {
    */
   private convertToGeminiTools(
     tools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }>
-  ) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ): any[] {
     return [
       {
         functionDeclarations: tools.map((tool) => ({
@@ -221,15 +222,12 @@ export class GoogleProvider implements ILLMProvider {
   /**
    * Convert input schema to Gemini function parameter schema
    */
-  private convertToGeminiFunctionSchema(schema: Record<string, unknown>): {
-    type: SchemaType;
-    properties?: Record<string, unknown>;
-    required?: string[];
-  } {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private convertToGeminiFunctionSchema(schema: Record<string, unknown>): any {
     return {
       type: SchemaType.OBJECT,
-      properties: schema.properties as Record<string, unknown>,
-      required: schema.required as string[],
+      properties: schema.properties,
+      required: schema.required,
     };
   }
 

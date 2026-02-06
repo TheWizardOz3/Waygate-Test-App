@@ -311,7 +311,8 @@ export function ExportTab({ tool, toolType, onUpdate }: ExportTabProps) {
       const endpoint =
         toolType === 'agentic' ? `/agentic-tools/${tool.id}` : `/composite-tools/${tool.id}`;
 
-      await apiClient.patch(endpoint, { description: aiDescription });
+      // Save to toolDescription field (the AI-generated description field)
+      await apiClient.patch(endpoint, { toolDescription: aiDescription });
       toast.success('Description saved');
       onUpdate?.();
     } catch (error) {

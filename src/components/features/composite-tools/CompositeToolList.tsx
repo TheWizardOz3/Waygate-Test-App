@@ -3,7 +3,6 @@
 import * as React from 'react';
 import {
   Search,
-  Filter,
   Plus,
   LayoutGrid,
   List,
@@ -14,18 +13,14 @@ import {
   Download,
   GitBranch,
   Sparkles,
+  Bot,
+  Zap,
+  ChevronDown,
 } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -36,6 +31,7 @@ import {
 } from '@/components/ui/table';
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -44,13 +40,15 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent } from '@/components/ui/card';
-import { useCompositeTools, useDeleteCompositeTool } from '@/hooks/useCompositeTools';
+import { useUnifiedTools } from '@/hooks/useUnifiedTools';
+import { useDeleteCompositeTool } from '@/hooks/useCompositeTools';
+import { useIntegrations } from '@/hooks/useIntegrations';
 import { cn } from '@/lib/utils';
 import type {
-  CompositeToolStatus,
-  CompositeToolRoutingMode,
-  CompositeToolResponse,
-} from '@/lib/modules/composite-tools/composite-tool.schemas';
+  UnifiedToolResponse,
+  ToolType,
+  ToolStatus,
+} from '@/lib/modules/tools/unified-tool.schemas';
 
 // =============================================================================
 // Types
@@ -61,13 +59,38 @@ interface CompositeToolListProps {
 }
 
 type ViewMode = 'grid' | 'list';
-type ToolTypeFilter = 'all' | 'composite';
+
+// Tool type filter options (sorted alphabetically)
+const TOOL_TYPE_OPTIONS = [
+  { value: 'agentic:autonomous_agent', label: 'Agentic: Autonomous Agent' },
+  { value: 'agentic:parameter_interpreter', label: 'Agentic: Parameter Interpreter' },
+  { value: 'composite:agent_driven', label: 'Composite: Agent-Driven' },
+  { value: 'composite:rule_based', label: 'Composite: Rule-Based' },
+  { value: 'simple', label: 'Simple' },
+] as const;
+
+type ToolTypeFilterValue = (typeof TOOL_TYPE_OPTIONS)[number]['value'];
+
+// Status filter options (sorted alphabetically)
+const STATUS_OPTIONS = [
+  { value: 'active', label: 'Active' },
+  { value: 'disabled', label: 'Disabled' },
+  { value: 'draft', label: 'Draft' },
+] as const;
+
+// Default type filters (composite and agentic, not simple)
+const DEFAULT_TYPE_FILTERS: ToolTypeFilterValue[] = [
+  'agentic:autonomous_agent',
+  'agentic:parameter_interpreter',
+  'composite:agent_driven',
+  'composite:rule_based',
+];
 
 // =============================================================================
 // Helpers
 // =============================================================================
 
-function getStatusBadgeVariant(status: CompositeToolStatus) {
+function getStatusBadgeVariant(status: ToolStatus) {
   switch (status) {
     case 'active':
       return 'default';
@@ -80,33 +103,117 @@ function getStatusBadgeVariant(status: CompositeToolStatus) {
   }
 }
 
-function getRoutingModeLabel(mode: CompositeToolRoutingMode) {
-  switch (mode) {
-    case 'rule_based':
-      return 'Rule-Based';
-    case 'agent_driven':
-      return 'Agent-Driven';
-    default:
-      return mode;
+function getToolTypeLabel(tool: UnifiedToolResponse): string {
+  if (tool.type === 'simple') {
+    return 'Simple';
   }
+  if (tool.type === 'composite') {
+    return 'Composite';
+  }
+  if (tool.type === 'agentic') {
+    if (tool.executionMode === 'parameter_interpreter') {
+      return 'Agentic: Param Interpreter';
+    }
+    if (tool.executionMode === 'autonomous_agent') {
+      return 'Agentic: Autonomous';
+    }
+    return 'Agentic';
+  }
+  return tool.type;
+}
+
+function getToolIcon(type: ToolType) {
+  switch (type) {
+    case 'simple':
+      return Zap;
+    case 'composite':
+      return GitBranch;
+    case 'agentic':
+      return Bot;
+    default:
+      return Wand2;
+  }
+}
+
+function getToolIconColor(type: ToolType) {
+  switch (type) {
+    case 'simple':
+      return 'text-emerald-600 dark:text-emerald-400';
+    case 'composite':
+      return 'text-violet-600 dark:text-violet-400';
+    case 'agentic':
+      return 'text-amber-600 dark:text-amber-400';
+    default:
+      return 'text-violet-600 dark:text-violet-400';
+  }
+}
+
+function getToolIconBg(type: ToolType) {
+  switch (type) {
+    case 'simple':
+      return 'bg-gradient-to-br from-emerald-500/10 to-teal-500/10';
+    case 'composite':
+      return 'bg-gradient-to-br from-violet-500/10 to-indigo-500/10';
+    case 'agentic':
+      return 'bg-gradient-to-br from-amber-500/10 to-orange-500/10';
+    default:
+      return 'bg-gradient-to-br from-violet-500/10 to-indigo-500/10';
+  }
+}
+
+function getToolDetailUrl(tool: UnifiedToolResponse): string {
+  switch (tool.type) {
+    case 'simple':
+      if (tool.integrationId && tool.actionId) {
+        return `/integrations/${tool.integrationId}/actions/${tool.actionId}`;
+      }
+      return '#';
+    case 'composite':
+      return `/ai-tools/${tool.id}`;
+    case 'agentic':
+      return `/ai-tools/${tool.id}`;
+    default:
+      return `/ai-tools/${tool.id}`;
+  }
+}
+
+function getApiTypesFromFilters(filters: ToolTypeFilterValue[]): ToolType[] | undefined {
+  if (filters.length === 0) return undefined;
+
+  const types = new Set<ToolType>();
+  for (const filter of filters) {
+    if (filter === 'simple') types.add('simple');
+    else if (filter.startsWith('composite:')) types.add('composite');
+    else if (filter.startsWith('agentic:')) types.add('agentic');
+  }
+  return types.size > 0 ? Array.from(types) : undefined;
+}
+
+function getFilterSummary(
+  selected: string[],
+  options: readonly { value: string; label: string }[],
+  allLabel: string
+): string {
+  if (selected.length === 0 || selected.length === options.length) {
+    return allLabel;
+  }
+  if (selected.length === 1) {
+    return options.find((o) => o.value === selected[0])?.label ?? selected[0];
+  }
+  return `${selected.length} selected`;
 }
 
 // =============================================================================
 // Component
 // =============================================================================
 
-/**
- * Main AI Tools list component with search, filters, and grid/list view.
- */
 export function CompositeToolList({ className }: CompositeToolListProps) {
   // State
   const [search, setSearch] = React.useState('');
-  const [statusFilter, setStatusFilter] = React.useState<CompositeToolStatus | 'all'>('all');
-  const [typeFilter, setTypeFilter] = React.useState<ToolTypeFilter>('all');
-  const [routingModeFilter, setRoutingModeFilter] = React.useState<
-    CompositeToolRoutingMode | 'all'
-  >('all');
-  const [viewMode, setViewMode] = React.useState<ViewMode>('grid');
+  const [typeFilters, setTypeFilters] = React.useState<ToolTypeFilterValue[]>(DEFAULT_TYPE_FILTERS);
+  const [statusFilters, setStatusFilters] = React.useState<ToolStatus[]>([]);
+  const [integrationFilters, setIntegrationFilters] = React.useState<string[]>([]);
+  const [viewMode, setViewMode] = React.useState<ViewMode>('list');
 
   // Debounced search
   const [debouncedSearch, setDebouncedSearch] = React.useState('');
@@ -115,18 +222,30 @@ export function CompositeToolList({ className }: CompositeToolListProps) {
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Query
-  const { data, isLoading, error } = useCompositeTools({
+  // Fetch integrations for the filter dropdown
+  const { data: integrationsData } = useIntegrations({ limit: 100 });
+  const integrations = React.useMemo(() => {
+    const list = integrationsData?.integrations ?? [];
+    return [...list].sort((a, b) => a.name.localeCompare(b.name));
+  }, [integrationsData?.integrations]);
+
+  // Query unified tools
+  const { data, isLoading, error } = useUnifiedTools({
     search: debouncedSearch || undefined,
-    status: statusFilter === 'all' ? undefined : statusFilter,
-    routingMode: routingModeFilter === 'all' ? undefined : routingModeFilter,
+    status: statusFilters.length > 0 ? statusFilters : undefined,
+    types: getApiTypesFromFilters(typeFilters),
+    integrationId: integrationFilters.length === 1 ? integrationFilters[0] : undefined,
   });
 
   // Mutations
   const deleteTool = useDeleteCompositeTool();
 
   const handleDelete = React.useCallback(
-    (id: string) => {
+    (id: string, type: ToolType) => {
+      if (type !== 'composite') {
+        alert('Only composite tools can be deleted from this view.');
+        return;
+      }
       if (confirm('Are you sure you want to delete this tool? This cannot be undone.')) {
         deleteTool.mutate(id);
       }
@@ -134,15 +253,66 @@ export function CompositeToolList({ className }: CompositeToolListProps) {
     [deleteTool]
   );
 
+  // Toggle helpers for multi-select
+  const toggleTypeFilter = (value: ToolTypeFilterValue) => {
+    setTypeFilters((prev) =>
+      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
+    );
+  };
+
+  const toggleStatusFilter = (value: ToolStatus) => {
+    setStatusFilters((prev) =>
+      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
+    );
+  };
+
+  const toggleIntegrationFilter = (id: string) => {
+    setIntegrationFilters((prev) =>
+      prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id]
+    );
+  };
+
+  // Filter tools client-side for execution mode and integration
+  const filteredTools = React.useMemo(() => {
+    let tools = data?.tools ?? [];
+
+    // Filter by type + execution mode
+    if (typeFilters.length > 0 && typeFilters.length < TOOL_TYPE_OPTIONS.length) {
+      tools = tools.filter((t) => {
+        if (t.type === 'simple') return typeFilters.includes('simple');
+        if (t.type === 'composite') {
+          // For now, include composite if any composite filter is selected
+          return typeFilters.some((f) => f.startsWith('composite:'));
+        }
+        if (t.type === 'agentic') {
+          if (t.executionMode === 'parameter_interpreter') {
+            return typeFilters.includes('agentic:parameter_interpreter');
+          }
+          if (t.executionMode === 'autonomous_agent') {
+            return typeFilters.includes('agentic:autonomous_agent');
+          }
+          return typeFilters.some((f) => f.startsWith('agentic:'));
+        }
+        return true;
+      });
+    }
+
+    // Filter by multiple integrations (client-side)
+    if (integrationFilters.length > 1) {
+      tools = tools.filter((t) => t.integrationId && integrationFilters.includes(t.integrationId));
+    }
+
+    return tools;
+  }, [data?.tools, typeFilters, integrationFilters]);
+
   // Computed
-  const tools = data?.compositeTools ?? [];
-  const hasTools = tools.length > 0;
+  const hasTools = filteredTools.length > 0;
   const hasFilters =
     debouncedSearch ||
-    statusFilter !== 'all' ||
-    routingModeFilter !== 'all' ||
-    typeFilter !== 'all';
-  const isEmpty = !isLoading && tools.length === 0;
+    typeFilters.length !== DEFAULT_TYPE_FILTERS.length ||
+    statusFilters.length > 0 ||
+    integrationFilters.length > 0;
+  const isEmpty = !isLoading && filteredTools.length === 0;
 
   return (
     <div className={cn('space-y-6', className)}>
@@ -150,7 +320,7 @@ export function CompositeToolList({ className }: CompositeToolListProps) {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-heading text-2xl font-bold">AI Tools</h1>
-          <p className="text-muted-foreground">Manage your composite and agentic tools</p>
+          <p className="text-muted-foreground">Manage your simple, composite, and agentic tools</p>
         </div>
         <Button asChild className="gap-2">
           <Link href="/ai-tools/new">
@@ -174,48 +344,94 @@ export function CompositeToolList({ className }: CompositeToolListProps) {
           />
         </div>
 
-        {/* Type Filter (for future: Simple | Composite | Agentic) */}
-        <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as ToolTypeFilter)}>
-          <SelectTrigger className="w-[140px]">
-            <Filter className="mr-2 h-4 w-4" />
-            <SelectValue placeholder="Type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            <SelectItem value="composite">Composite</SelectItem>
-          </SelectContent>
-        </Select>
+        {/* Type Filter (Multi-select) */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="w-[200px] justify-between">
+              <span className="truncate">
+                {getFilterSummary(typeFilters, TOOL_TYPE_OPTIONS, 'All Types')}
+              </span>
+              <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="w-[220px]" align="start">
+            {TOOL_TYPE_OPTIONS.map((option) => (
+              <DropdownMenuCheckboxItem
+                key={option.value}
+                checked={typeFilters.includes(option.value)}
+                onCheckedChange={() => toggleTypeFilter(option.value)}
+                onSelect={(e) => e.preventDefault()}
+              >
+                {option.label}
+              </DropdownMenuCheckboxItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => setTypeFilters([])}>Clear All</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
-        {/* Status Filter */}
-        <Select
-          value={statusFilter}
-          onValueChange={(v) => setStatusFilter(v as CompositeToolStatus | 'all')}
-        >
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="draft">Draft</SelectItem>
-            <SelectItem value="disabled">Disabled</SelectItem>
-          </SelectContent>
-        </Select>
+        {/* Status Filter (Multi-select) */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="w-[140px] justify-between">
+              <span className="truncate">
+                {getFilterSummary(statusFilters, STATUS_OPTIONS, 'All Status')}
+              </span>
+              <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="w-[160px]" align="start">
+            {STATUS_OPTIONS.map((option) => (
+              <DropdownMenuCheckboxItem
+                key={option.value}
+                checked={statusFilters.includes(option.value as ToolStatus)}
+                onCheckedChange={() => toggleStatusFilter(option.value as ToolStatus)}
+                onSelect={(e) => e.preventDefault()}
+              >
+                {option.label}
+              </DropdownMenuCheckboxItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => setStatusFilters([])}>Clear All</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
-        {/* Routing Mode Filter */}
-        <Select
-          value={routingModeFilter}
-          onValueChange={(v) => setRoutingModeFilter(v as CompositeToolRoutingMode | 'all')}
-        >
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Routing" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Routing</SelectItem>
-            <SelectItem value="rule_based">Rule-Based</SelectItem>
-            <SelectItem value="agent_driven">Agent-Driven</SelectItem>
-          </SelectContent>
-        </Select>
+        {/* Integration Filter (Multi-select) */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="w-[180px] justify-between">
+              <span className="truncate">
+                {integrationFilters.length === 0
+                  ? 'All Integrations'
+                  : integrationFilters.length === 1
+                    ? (integrations.find((i) => i.id === integrationFilters[0])?.name ??
+                      '1 selected')
+                    : `${integrationFilters.length} selected`}
+              </span>
+              <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="max-h-[300px] w-[220px] overflow-y-auto" align="start">
+            {integrations.map((integration) => (
+              <DropdownMenuCheckboxItem
+                key={integration.id}
+                checked={integrationFilters.includes(integration.id)}
+                onCheckedChange={() => toggleIntegrationFilter(integration.id)}
+                onSelect={(e) => e.preventDefault()}
+              >
+                {integration.name}
+              </DropdownMenuCheckboxItem>
+            ))}
+            {integrations.length > 0 && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setIntegrationFilters([])}>
+                  Clear All
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         {/* View Toggle */}
         <div className="flex rounded-md border">
@@ -243,25 +459,23 @@ export function CompositeToolList({ className }: CompositeToolListProps) {
       {/* Results Count */}
       {!isLoading && hasTools && (
         <p className="text-sm text-muted-foreground">
-          {data?.pagination.totalCount ?? tools.length} tool{tools.length !== 1 ? 's' : ''}
+          {filteredTools.length} tool{filteredTools.length !== 1 ? 's' : ''}
           {hasFilters && ' found'}
         </p>
       )}
 
       {/* Content */}
       {isLoading ? (
-        // Loading State
         viewMode === 'grid' ? (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
-              <CompositeToolCardSkeleton key={i} />
+              <UnifiedToolCardSkeleton key={i} />
             ))}
           </div>
         ) : (
-          <CompositeToolTableSkeleton />
+          <UnifiedToolTableSkeleton />
         )
       ) : error ? (
-        // Error State
         <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-center">
           <p className="font-medium text-destructive">Failed to load tools</p>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -269,21 +483,17 @@ export function CompositeToolList({ className }: CompositeToolListProps) {
           </p>
         </div>
       ) : isEmpty && !hasFilters ? (
-        // Empty State (no tools at all)
-        <CompositeToolEmptyState />
+        <UnifiedToolEmptyState />
       ) : isEmpty && hasFilters ? (
-        // No Results State (filters applied but no matches)
-        <CompositeToolNoResults />
+        <UnifiedToolNoResults />
       ) : viewMode === 'grid' ? (
-        // Grid View
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {tools.map((tool) => (
-            <CompositeToolCard key={tool.id} tool={tool} onDelete={handleDelete} />
+          {filteredTools.map((tool) => (
+            <UnifiedToolCard key={`${tool.type}-${tool.id}`} tool={tool} onDelete={handleDelete} />
           ))}
         </div>
       ) : (
-        // Table/List View
-        <CompositeToolTable tools={tools} onDelete={handleDelete} />
+        <UnifiedToolTable tools={filteredTools} onDelete={handleDelete} />
       )}
     </div>
   );
@@ -293,20 +503,30 @@ export function CompositeToolList({ className }: CompositeToolListProps) {
 // Card Component
 // =============================================================================
 
-interface CompositeToolCardProps {
-  tool: CompositeToolResponse;
-  onDelete: (id: string) => void;
+interface UnifiedToolCardProps {
+  tool: UnifiedToolResponse;
+  onDelete: (id: string, type: ToolType) => void;
 }
 
-function CompositeToolCard({ tool, onDelete }: CompositeToolCardProps) {
+function UnifiedToolCard({ tool, onDelete }: UnifiedToolCardProps) {
+  const Icon = getToolIcon(tool.type);
+  const iconColor = getToolIconColor(tool.type);
+  const iconBg = getToolIconBg(tool.type);
+  const detailUrl = getToolDetailUrl(tool);
+
   return (
     <Card className="group relative overflow-hidden transition-shadow hover:shadow-md">
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-4">
-          <Link href={`/ai-tools/${tool.id}`} className="min-w-0 flex-1">
+          <Link href={detailUrl} className="min-w-0 flex-1">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500/10 to-indigo-500/10">
-                <Wand2 className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+              <div
+                className={cn(
+                  'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
+                  iconBg
+                )}
+              >
+                <Icon className={cn('h-5 w-5', iconColor)} />
               </div>
               <div className="min-w-0">
                 <h3 className="truncate font-medium group-hover:text-primary">{tool.name}</h3>
@@ -323,25 +543,31 @@ function CompositeToolCard({ tool, onDelete }: CompositeToolCardProps) {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem asChild>
-                <Link href={`/ai-tools/${tool.id}`}>
+                <Link href={detailUrl}>
                   <Edit className="mr-2 h-4 w-4" />
-                  Edit
+                  {tool.type === 'simple' ? 'View' : 'Edit'}
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href={`/ai-tools/${tool.id}?tab=export`}>
-                  <Download className="mr-2 h-4 w-4" />
-                  Export
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onClick={() => onDelete(tool.id)}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete
-              </DropdownMenuItem>
+              {tool.type !== 'simple' && (
+                <DropdownMenuItem asChild>
+                  <Link href={`/ai-tools/${tool.id}?tab=export`}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Export
+                  </Link>
+                </DropdownMenuItem>
+              )}
+              {tool.type === 'composite' && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={() => onDelete(tool.id, tool.type)}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -353,16 +579,21 @@ function CompositeToolCard({ tool, onDelete }: CompositeToolCardProps) {
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <Badge variant={getStatusBadgeVariant(tool.status)}>{tool.status}</Badge>
           <Badge variant="outline" className="gap-1">
-            <GitBranch className="h-3 w-3" />
-            {getRoutingModeLabel(tool.routingMode)}
+            <Icon className="h-3 w-3" />
+            {getToolTypeLabel(tool)}
           </Badge>
+          {tool.integrationName && (
+            <Badge variant="outline" className="text-muted-foreground">
+              {tool.integrationName}
+            </Badge>
+          )}
         </div>
       </CardContent>
     </Card>
   );
 }
 
-function CompositeToolCardSkeleton() {
+function UnifiedToolCardSkeleton() {
   return (
     <Card>
       <CardContent className="p-4">
@@ -387,112 +618,136 @@ function CompositeToolCardSkeleton() {
 // Table View Component
 // =============================================================================
 
-interface CompositeToolTableProps {
-  tools: CompositeToolResponse[];
-  onDelete: (id: string) => void;
+interface UnifiedToolTableProps {
+  tools: UnifiedToolResponse[];
+  onDelete: (id: string, type: ToolType) => void;
 }
 
-function CompositeToolTable({ tools, onDelete }: CompositeToolTableProps) {
+function UnifiedToolTable({ tools, onDelete }: UnifiedToolTableProps) {
   return (
     <div className="rounded-md border">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[300px]">Tool</TableHead>
-            <TableHead>Slug</TableHead>
-            <TableHead>Routing</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="w-[40px]"></TableHead>
+            <TableHead className="w-[350px]">Tool</TableHead>
+            <TableHead className="w-[150px]">Slug</TableHead>
+            <TableHead className="w-[180px]">Type</TableHead>
+            <TableHead className="w-[150px]">Integration</TableHead>
+            <TableHead className="w-[100px]">Status</TableHead>
+            <TableHead className="w-[50px]"></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {tools.map((tool) => (
-            <TableRow key={tool.id} className="group">
-              <TableCell>
-                <Link
-                  href={`/ai-tools/${tool.id}`}
-                  className="flex items-center gap-3 hover:text-primary"
-                >
-                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-gradient-to-br from-violet-500/10 to-indigo-500/10">
-                    <Wand2 className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-                  </div>
-                  <div className="min-w-0">
-                    <span className="block truncate font-medium">{tool.name}</span>
-                    {tool.description && (
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {tool.description}
-                      </span>
-                    )}
-                  </div>
-                </Link>
-              </TableCell>
-              <TableCell>
-                <code className="text-sm text-muted-foreground">{tool.slug}</code>
-              </TableCell>
-              <TableCell>
-                <Badge variant="outline" className="gap-1">
-                  <GitBranch className="h-3 w-3" />
-                  {getRoutingModeLabel(tool.routingMode)}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                <Badge variant={getStatusBadgeVariant(tool.status)}>{tool.status}</Badge>
-              </TableCell>
-              <TableCell>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 opacity-0 group-hover:opacity-100"
+          {tools.map((tool) => {
+            const Icon = getToolIcon(tool.type);
+            const iconColor = getToolIconColor(tool.type);
+            const iconBg = getToolIconBg(tool.type);
+            const detailUrl = getToolDetailUrl(tool);
+
+            return (
+              <TableRow key={`${tool.type}-${tool.id}`} className="group">
+                <TableCell className="max-w-[350px]">
+                  <Link href={detailUrl} className="flex items-center gap-3 hover:text-primary">
+                    <div
+                      className={cn(
+                        'flex h-8 w-8 shrink-0 items-center justify-center rounded-md',
+                        iconBg
+                      )}
                     >
-                      <MoreHorizontal className="h-4 w-4" />
-                      <span className="sr-only">More actions</span>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem asChild>
-                      <Link href={`/ai-tools/${tool.id}`}>
-                        <Edit className="mr-2 h-4 w-4" />
-                        Edit
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href={`/ai-tools/${tool.id}?tab=export`}>
-                        <Download className="mr-2 h-4 w-4" />
-                        Export
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      className="text-destructive focus:text-destructive"
-                      onClick={() => onDelete(tool.id)}
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </TableCell>
-            </TableRow>
-          ))}
+                      <Icon className={cn('h-4 w-4', iconColor)} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">{tool.name}</span>
+                      {tool.description && (
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {tool.description}
+                        </span>
+                      )}
+                    </div>
+                  </Link>
+                </TableCell>
+                <TableCell className="max-w-[150px]">
+                  <code className="block truncate text-sm text-muted-foreground">{tool.slug}</code>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline" className="gap-1 whitespace-nowrap">
+                    <Icon className="h-3 w-3" />
+                    {getToolTypeLabel(tool)}
+                  </Badge>
+                </TableCell>
+                <TableCell className="max-w-[150px]">
+                  {tool.integrationName ? (
+                    <span className="block truncate text-sm">{tool.integrationName}</span>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">—</span>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <Badge variant={getStatusBadgeVariant(tool.status)}>{tool.status}</Badge>
+                </TableCell>
+                <TableCell>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 opacity-0 group-hover:opacity-100"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                        <span className="sr-only">More actions</span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem asChild>
+                        <Link href={detailUrl}>
+                          <Edit className="mr-2 h-4 w-4" />
+                          {tool.type === 'simple' ? 'View' : 'Edit'}
+                        </Link>
+                      </DropdownMenuItem>
+                      {tool.type !== 'simple' && (
+                        <DropdownMenuItem asChild>
+                          <Link href={`/ai-tools/${tool.id}?tab=export`}>
+                            <Download className="mr-2 h-4 w-4" />
+                            Export
+                          </Link>
+                        </DropdownMenuItem>
+                      )}
+                      {tool.type === 'composite' && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => onDelete(tool.id, tool.type)}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
     </div>
   );
 }
 
-function CompositeToolTableSkeleton() {
+function UnifiedToolTableSkeleton() {
   return (
     <div className="rounded-md border">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[300px]">Tool</TableHead>
-            <TableHead>Slug</TableHead>
-            <TableHead>Routing</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="w-[40px]"></TableHead>
+            <TableHead className="w-[350px]">Tool</TableHead>
+            <TableHead className="w-[150px]">Slug</TableHead>
+            <TableHead className="w-[180px]">Type</TableHead>
+            <TableHead className="w-[150px]">Integration</TableHead>
+            <TableHead className="w-[100px]">Status</TableHead>
+            <TableHead className="w-[50px]"></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -514,6 +769,9 @@ function CompositeToolTableSkeleton() {
                 <Skeleton className="h-5 w-24 rounded-full" />
               </TableCell>
               <TableCell>
+                <Skeleton className="h-4 w-20" />
+              </TableCell>
+              <TableCell>
                 <Skeleton className="h-5 w-16 rounded-full" />
               </TableCell>
               <TableCell></TableCell>
@@ -529,7 +787,7 @@ function CompositeToolTableSkeleton() {
 // Empty States
 // =============================================================================
 
-function CompositeToolEmptyState() {
+function UnifiedToolEmptyState() {
   return (
     <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
       <div className="flex h-16 w-16 items-center justify-center rounded-full bg-violet-100 dark:bg-violet-900/20">
@@ -537,8 +795,8 @@ function CompositeToolEmptyState() {
       </div>
       <h3 className="mt-4 font-heading text-lg font-semibold">No AI Tools Yet</h3>
       <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-        Create your first composite tool to combine multiple operations into a single, intelligent
-        tool for your AI agents.
+        Create your first tool to expose your integrations to AI agents. Tools can be simple (single
+        action), composite (multiple actions), or agentic (AI-powered).
       </p>
       <Button asChild className="mt-6 gap-2">
         <Link href="/ai-tools/new">
@@ -550,7 +808,7 @@ function CompositeToolEmptyState() {
   );
 }
 
-function CompositeToolNoResults() {
+function UnifiedToolNoResults() {
   return (
     <div className="flex flex-col items-center justify-center rounded-lg border p-12 text-center">
       <Sparkles className="h-10 w-10 text-muted-foreground" />

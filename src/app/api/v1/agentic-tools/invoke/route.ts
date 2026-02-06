@@ -21,24 +21,14 @@ import {
 const InvokeAgenticToolSchema = z.object({
   /** The agentic tool slug or ID */
   tool: z.string().min(1, 'Tool slug is required'),
-  /** Input parameters for the tool */
-  params: z.record(z.string(), z.unknown()).default({}),
+  /** The natural language task/request for the tool to process */
+  task: z.string().min(1, 'Task is required'),
   /** Optional invocation options */
   options: z
     .object({
       connectionId: z.string().uuid().optional(),
-      context: z
-        .record(
-          z.string(),
-          z.array(
-            z.object({
-              id: z.string(),
-              name: z.string(),
-              metadata: z.record(z.string(), z.unknown()).optional(),
-            })
-          )
-        )
-        .optional(),
+      requestId: z.string().optional(),
+      logExecution: z.boolean().optional(),
       tracing: z
         .object({
           provider: z.enum(['langsmith', 'opentelemetry']).optional(),
@@ -55,23 +45,24 @@ const InvokeAgenticToolSchema = z.object({
 /**
  * POST /api/v1/agentic-tools/invoke
  *
- * Invokes an agentic tool with the provided parameters.
+ * Invokes an agentic tool with the provided task.
  * The tool uses its embedded LLM to either:
  * - (Parameter Interpreter) Generate structured parameters and execute target action
  * - (Autonomous Agent) Autonomously select and execute tools to accomplish task
  *
  * Request Body:
- * - `tool` (required): The agentic tool slug
- * - `params` (required): Input parameters for the tool
+ * - `tool` (required): The agentic tool slug or ID
+ * - `task` (required): Natural language task/request for the tool to process
  * - `options` (optional): Additional invocation options
  *   - `connectionId` (optional): Specific connection to use
- *   - `context` (optional): Reference data context
+ *   - `requestId` (optional): Request ID for tracing
+ *   - `logExecution` (optional): Whether to log execution (default: true)
  *   - `tracing` (optional): Tracing configuration (Langsmith/OpenTelemetry)
  *
  * Response:
  * - `success`: Whether the invocation was successful
  * - `data`: Response data from execution
- * - `meta`: Metadata including mode, LLM calls, cost, tokens, duration
+ * - `metadata`: Execution metadata including mode, LLM calls, cost, tokens, duration
  */
 export const POST = withApiAuth(async (request: NextRequest, { tenant }) => {
   try {
@@ -98,48 +89,35 @@ export const POST = withApiAuth(async (request: NextRequest, { tenant }) => {
       );
     }
 
-    const { tool, params, options } = parsed.data;
+    const { tool, task, options } = parsed.data;
 
-    // Extract tracing info from headers if provided
-    const tracingHeaders = {
-      provider: request.headers.get('X-Trace-Provider') as 'langsmith' | 'opentelemetry' | null,
-      apiKey: request.headers.get('X-Trace-API-Key'),
-      endpoint: request.headers.get('X-Trace-Endpoint'),
-      parentRunId: request.headers.get('X-Trace-Run-ID'),
-    };
+    // Generate request ID if not provided
+    const requestId = options?.requestId ?? crypto.randomUUID();
 
-    // Merge tracing config from body and headers (headers take precedence)
-    const tracing = {
-      ...options?.tracing,
-      ...(tracingHeaders.provider && { provider: tracingHeaders.provider }),
-      ...(tracingHeaders.apiKey && { apiKey: tracingHeaders.apiKey }),
-      ...(tracingHeaders.endpoint && { endpoint: tracingHeaders.endpoint }),
-      ...(tracingHeaders.parentRunId && { parentRunId: tracingHeaders.parentRunId }),
-    };
-
-    // Build invocation input
+    // Build invocation input matching the InvokeAgenticToolInput interface
     const invokeInput: InvokeAgenticToolInput = {
-      toolSlug: tool,
-      params,
-      options: {
-        ...options,
-        tracing: Object.keys(tracing).length > 0 ? tracing : undefined,
-      },
+      toolIdentifier: tool,
+      tenantId: tenant.id,
+      task,
+      requestId,
+      connectionId: options?.connectionId,
+      logExecution: options?.logExecution ?? true,
     };
 
     // Invoke the agentic tool
-    const result = await invokeAgenticTool(tenant.id, invokeInput);
+    const result = await invokeAgenticTool(invokeInput);
 
     // Return the result
     if (result.success) {
       return NextResponse.json(result, { status: 200 });
     } else {
       // Determine appropriate status code from error
-      const statusCode = getStatusCodeForError(result.error.code);
+      const statusCode = getStatusCodeForError(result.error?.code ?? 'UNKNOWN_ERROR');
       return NextResponse.json(result, { status: statusCode });
     }
   } catch (error) {
     if (error instanceof InvocationError) {
+      const statusCode = getStatusCodeForError(error.code);
       return NextResponse.json(
         {
           success: false,
@@ -149,11 +127,11 @@ export const POST = withApiAuth(async (request: NextRequest, { tenant }) => {
             suggestedResolution: {
               action: 'RETRY_WITH_MODIFIED_INPUT',
               description: getErrorDescription(error.code),
-              retryable: error.statusCode >= 500,
+              retryable: statusCode >= 500,
             },
           },
         },
-        { status: error.statusCode }
+        { status: statusCode }
       );
     }
 

@@ -48,8 +48,8 @@ const STEP_CONFIG: Record<CompositeToolWizardStep, { title: string; description:
 };
 
 const STEPS: CompositeToolWizardStep[] = [
-  'name-description',
   'select-operations',
+  'name-description',
   'routing-mode',
   'routing-rules',
   'review',

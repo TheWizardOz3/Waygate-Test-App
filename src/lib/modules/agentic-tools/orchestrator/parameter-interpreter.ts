@@ -22,7 +22,7 @@ import { createLLMClient, type LLMCallResponse } from '../llm/llm-client';
 import { processPrompt } from '../llm/prompt-processor';
 import { buildContext } from '../context/variable-injector';
 import { invokeAction } from '../../gateway/gateway.service';
-import type { GatewaySuccessResponse, GatewayErrorResponse } from '../../gateway/gateway.schemas';
+import type { GatewaySuccessResponse } from '../../gateway/gateway.schemas';
 import { validateActionInput } from '../../actions/json-schema-validator';
 import { findActionById } from '../../actions/action.repository';
 import { prisma } from '@/lib/db/client';
@@ -229,7 +229,8 @@ export async function executeParameterInterpreter(
     }
 
     // Step 7: Execute target action(s)
-    const executionResults: Array<GatewaySuccessResponse | GatewayErrorResponse> = [];
+    // Only successful results are pushed (failures throw), so type as GatewaySuccessResponse[]
+    const executionResults: GatewaySuccessResponse[] = [];
 
     for (const targetAction of targetActions) {
       const actionStart = Date.now();
@@ -268,28 +269,35 @@ export async function executeParameterInterpreter(
           generatedParams.parameters,
           {
             connectionId,
-            requestId,
           }
         );
 
-        executionResults.push(result);
-
-        // Track execution
-        actionExecutions.push({
-          actionId: targetAction.actionId,
-          actionSlug: targetAction.actionSlug,
-          success: result.success,
-          durationMs: Date.now() - actionStart,
-        });
-
         // If action failed, throw error
         if (!result.success) {
+          // Track failed execution
+          actionExecutions.push({
+            actionId: targetAction.actionId,
+            actionSlug: targetAction.actionSlug,
+            success: false,
+            durationMs: Date.now() - actionStart,
+          });
           throw new ParameterInterpreterError(
             'ACTION_EXECUTION_FAILED',
             `Action execution failed: ${result.error?.message}`,
             { actionSlug: targetAction.actionSlug, error: result.error }
           );
         }
+
+        // Only push successful results
+        executionResults.push(result);
+
+        // Track successful execution
+        actionExecutions.push({
+          actionId: targetAction.actionId,
+          actionSlug: targetAction.actionSlug,
+          success: true,
+          durationMs: Date.now() - actionStart,
+        });
       } catch (error) {
         // Track failed execution
         actionExecutions.push({
@@ -454,9 +462,8 @@ async function validateParameters(
 
   // Validate parameters against action's input schema
   const validationResult = validateActionInput(
-    parameters,
     action.inputSchema as Record<string, unknown>,
-    action.slug
+    parameters
   );
 
   if (!validationResult.valid) {

@@ -83,15 +83,17 @@ export type AvailableTool = z.infer<typeof AvailableToolSchema>;
 
 /**
  * Tool allocation configuration
+ * Note: Empty arrays are allowed for draft tools. Validation of at least 1 tool
+ * should happen at invocation time, not creation time.
  */
 export const ToolAllocationSchema = z.discriminatedUnion('mode', [
   z.object({
     mode: z.literal('parameter_interpreter'),
-    targetActions: z.array(TargetActionSchema).min(1),
+    targetActions: z.array(TargetActionSchema),
   }),
   z.object({
     mode: z.literal('autonomous_agent'),
-    availableTools: z.array(AvailableToolSchema).min(1),
+    availableTools: z.array(AvailableToolSchema),
   }),
 ]);
 export type ToolAllocation = z.infer<typeof ToolAllocationSchema>;

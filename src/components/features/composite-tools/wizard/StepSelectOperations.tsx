@@ -176,7 +176,7 @@ export function StepSelectOperations() {
 
   // Handle continue
   const handleContinue = () => {
-    goToStep('routing-mode');
+    goToStep('name-description');
   };
 
   return (

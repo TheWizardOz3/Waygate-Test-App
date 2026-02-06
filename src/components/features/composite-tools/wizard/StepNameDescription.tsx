@@ -77,7 +77,7 @@ export function StepNameDescription() {
 
   const onSubmit = (values: FormData) => {
     setNameAndDescription(values.name, values.slug, values.description || '');
-    goToStep('select-operations');
+    goToStep('routing-mode');
   };
 
   return (

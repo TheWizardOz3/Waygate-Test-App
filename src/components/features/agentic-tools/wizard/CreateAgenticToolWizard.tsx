@@ -54,11 +54,11 @@ const STEP_CONFIG: Record<AgenticToolWizardStep, { title: string; description: s
 };
 
 const STEPS: AgenticToolWizardStep[] = [
+  'tool-allocation',
   'name-description',
   'execution-mode',
   'llm-config',
   'system-prompt',
-  'tool-allocation',
   'context-config',
   'review',
 ];

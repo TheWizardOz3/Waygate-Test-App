@@ -73,14 +73,37 @@ interface DerivedField {
   description: string;
 }
 
-function deriveFieldsFromOperations(
-  operations: CompositeToolDetailResponse['operations']
-): DerivedField[] {
+interface JsonSchemaProperty {
+  type?: string;
+  description?: string;
+  properties?: Record<string, JsonSchemaProperty>;
+}
+
+interface JsonSchema {
+  type?: string;
+  properties?: Record<string, JsonSchemaProperty>;
+  required?: string[];
+}
+
+function deriveFieldsFromTool(tool: CompositeToolDetailResponse): DerivedField[] {
   const fieldsMap = new Map<string, DerivedField>();
 
-  // Note: The API response for operations doesn't include inputSchema,
-  // so we derive fields from parameterMapping keys if available
-  for (const operation of operations) {
+  // First, try to extract fields from the unifiedInputSchema (JSON Schema format)
+  const unifiedSchema = tool.unifiedInputSchema as JsonSchema | undefined;
+  if (unifiedSchema?.properties) {
+    for (const [fieldName, fieldSchema] of Object.entries(unifiedSchema.properties)) {
+      if (!fieldsMap.has(fieldName)) {
+        fieldsMap.set(fieldName, {
+          value: fieldName,
+          label: fieldName,
+          description: fieldSchema.description || `${fieldSchema.type || 'any'} field`,
+        });
+      }
+    }
+  }
+
+  // Also check parameterMapping keys from operations as fallback
+  for (const operation of tool.operations) {
     const paramMapping = operation.parameterMapping as Record<string, unknown> | undefined;
     if (paramMapping) {
       for (const fieldName of Object.keys(paramMapping)) {
@@ -93,6 +116,16 @@ function deriveFieldsFromOperations(
         }
       }
     }
+  }
+
+  // If no fields found, add common input field suggestions
+  if (fieldsMap.size === 0) {
+    // Add "input" as a common catch-all field
+    fieldsMap.set('input', {
+      value: 'input',
+      label: 'input',
+      description: 'Primary input text/data',
+    });
   }
 
   const fields = Array.from(fieldsMap.values()).sort((a, b) => a.label.localeCompare(b.label));
@@ -139,7 +172,11 @@ export function CompositeIntelligence({ tool, onUpdate }: CompositeIntelligenceP
   );
   const [isSaving, setIsSaving] = React.useState(false);
 
-  const availableFields = React.useMemo(() => deriveFieldsFromOperations(tool.operations), [tool]);
+  // State for editing operation slugs (for agent_driven mode)
+  // Maps operation ID to edited slug value
+  const [operationEdits, setOperationEdits] = React.useState<Map<string, string>>(() => new Map());
+
+  const availableFields = React.useMemo(() => deriveFieldsFromTool(tool), [tool]);
 
   // Get the original default operation slug for comparison
   const originalDefaultSlug = React.useMemo(() => {
@@ -151,6 +188,9 @@ export function CompositeIntelligence({ tool, onUpdate }: CompositeIntelligenceP
   const hasChanges = React.useMemo(() => {
     if (routingMode !== tool.routingMode) return true;
     if (defaultOperationSlug !== originalDefaultSlug) return true;
+
+    // Check for operation edits
+    if (operationEdits.size > 0) return true;
 
     const originalRules = tool.routingRules || [];
     if (routingRules.length !== originalRules.length) return true;
@@ -173,7 +213,7 @@ export function CompositeIntelligence({ tool, onUpdate }: CompositeIntelligenceP
     }
 
     return false;
-  }, [routingMode, defaultOperationSlug, routingRules, tool, originalDefaultSlug]);
+  }, [routingMode, defaultOperationSlug, routingRules, tool, originalDefaultSlug, operationEdits]);
 
   const handleAddRule = () => {
     const firstOperation = tool.operations[0];
@@ -207,6 +247,13 @@ export function CompositeIntelligence({ tool, onUpdate }: CompositeIntelligenceP
   const handleSave = async () => {
     setIsSaving(true);
     try {
+      // Save operation slug edits first
+      for (const [operationId, newSlug] of Array.from(operationEdits.entries())) {
+        await apiClient.patch(`/composite-tools/${tool.id}/operations/${operationId}`, {
+          operationSlug: newSlug,
+        });
+      }
+
       // Map operation slug to operation ID for the API
       const defaultOp = defaultOperationSlug
         ? tool.operations.find((o) => o.operationSlug === defaultOperationSlug)
@@ -227,6 +274,9 @@ export function CompositeIntelligence({ tool, onUpdate }: CompositeIntelligenceP
               }))
             : [],
       });
+
+      // Clear operation edits after successful save
+      setOperationEdits(new Map());
       onUpdate?.();
     } catch (error) {
       console.error('Failed to save routing config:', error);
@@ -235,8 +285,22 @@ export function CompositeIntelligence({ tool, onUpdate }: CompositeIntelligenceP
     }
   };
 
+  // Check if there are no operations
+  const hasNoOperations = tool.operations.length === 0;
+
   return (
     <div className="space-y-6">
+      {/* Warning if no operations */}
+      {hasNoOperations && (
+        <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-4">
+          <p className="font-medium text-amber-700 dark:text-amber-400">No tools selected</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Add tools in the <strong>Tools/Actions</strong> tab and save your changes before
+            configuring routing rules.
+          </p>
+        </div>
+      )}
+
       {/* Routing Mode Selection */}
       <div className="space-y-4">
         <h3 className="text-sm font-medium">Routing Mode</h3>
@@ -271,9 +335,12 @@ export function CompositeIntelligence({ tool, onUpdate }: CompositeIntelligenceP
             <Select
               value={defaultOperationSlug || '_none'}
               onValueChange={(v) => setDefaultOperationSlug(v === '_none' ? null : v)}
+              disabled={hasNoOperations}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select default operation" />
+                <SelectValue
+                  placeholder={hasNoOperations ? 'No tools available' : 'Select default operation'}
+                />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="_none">No default (require matching rule)</SelectItem>
@@ -293,7 +360,13 @@ export function CompositeIntelligence({ tool, onUpdate }: CompositeIntelligenceP
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-medium">Routing Rules ({routingRules.length})</h3>
-              <Button variant="outline" size="sm" onClick={handleAddRule} className="gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleAddRule}
+                disabled={hasNoOperations}
+                className="gap-1"
+              >
                 <Plus className="h-3 w-3" />
                 Add Rule
               </Button>
@@ -302,15 +375,23 @@ export function CompositeIntelligence({ tool, onUpdate }: CompositeIntelligenceP
             {routingRules.length === 0 ? (
               <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center">
                 <p className="text-sm text-muted-foreground">
-                  No routing rules defined.
-                  {defaultOperationSlug
-                    ? ' All requests will use the default operation.'
-                    : ' Add rules to route requests to operations.'}
+                  {hasNoOperations
+                    ? 'Add tools first before creating routing rules.'
+                    : defaultOperationSlug
+                      ? 'No routing rules defined. All requests will use the default operation.'
+                      : 'No routing rules defined. Add rules to route requests to operations.'}
                 </p>
-                <Button variant="outline" size="sm" onClick={handleAddRule} className="mt-4 gap-1">
-                  <Plus className="h-3 w-3" />
-                  Add Your First Rule
-                </Button>
+                {!hasNoOperations && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAddRule}
+                    className="mt-4 gap-1"
+                  >
+                    <Plus className="h-3 w-3" />
+                    Add Your First Rule
+                  </Button>
+                )}
               </div>
             ) : (
               <div className="space-y-2">
@@ -363,14 +444,73 @@ export function CompositeIntelligence({ tool, onUpdate }: CompositeIntelligenceP
           </p>
           <div className="mt-3">
             <p className="text-xs font-medium text-muted-foreground">Operations available:</p>
-            <ul className="mt-1 space-y-1">
-              {tool.operations.map((op) => (
-                <li key={op.operationSlug} className="text-sm">
-                  <code className="rounded bg-muted px-1">{op.operationSlug}</code>
-                  <span className="text-muted-foreground"> - {op.displayName}</span>
-                </li>
-              ))}
-            </ul>
+            {hasNoOperations ? (
+              <p className="mt-1 text-sm italic text-muted-foreground">
+                No operations yet. Add tools in the Tools/Actions tab.
+              </p>
+            ) : (
+              <div className="mt-2 space-y-2">
+                {tool.operations.map((op) => {
+                  const editedSlug = operationEdits.get(op.id);
+                  const currentSlug = editedSlug ?? op.operationSlug;
+
+                  return (
+                    <div
+                      key={op.id}
+                      className="flex items-center gap-3 rounded-lg border bg-background p-3"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{op.displayName}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {op.action?.integration?.name ? `${op.action.integration.name} · ` : ''}
+                          {op.action?.slug || 'action'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Label className="whitespace-nowrap text-xs text-muted-foreground">
+                          Enum value:
+                        </Label>
+                        <Input
+                          value={currentSlug}
+                          onChange={(e) => {
+                            const newSlug = e.target.value
+                              .toLowerCase()
+                              .replace(/[^a-z0-9-]/g, '-');
+                            setOperationEdits((prev) => {
+                              const next = new Map(prev);
+                              if (newSlug === op.operationSlug) {
+                                next.delete(op.id);
+                              } else {
+                                next.set(op.id, newSlug);
+                              }
+                              return next;
+                            });
+                          }}
+                          className="h-8 w-48 font-mono text-sm"
+                          placeholder="operation-slug"
+                        />
+                        {editedSlug && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setOperationEdits((prev) => {
+                                const next = new Map(prev);
+                                next.delete(op.id);
+                                return next;
+                              });
+                            }}
+                            className="h-8 px-2 text-muted-foreground"
+                          >
+                            Reset
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}

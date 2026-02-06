@@ -55,7 +55,7 @@ export function StepRoutingMode() {
         />
         <RoutingModeCard
           mode="agent_driven"
-          title="Route via Tool Arg"
+          title="Argument-Driven Routing"
           description="Let the AI agent choose which operation to use by passing it as a tool argument."
           icon={Bot}
           selected={data.routingMode === 'agent_driven'}
@@ -98,7 +98,7 @@ export function StepRoutingMode() {
       {/* Info about agent-driven mode */}
       {data.routingMode === 'agent_driven' && (
         <div className="rounded-lg bg-muted/50 p-4">
-          <h4 className="font-medium">How Agent-Driven Selection Works</h4>
+          <h4 className="font-medium">How Argument-Driven Routing Works</h4>
           <p className="mt-1 text-sm text-muted-foreground">
             When exported, the tool will include an &quot;operation&quot; parameter as an enum. The
             AI agent will see all available operations and choose the appropriate one based on the

@@ -164,7 +164,7 @@ function getArrayPaths(schema: JsonSchema | undefined): string[] {
 
 function AIToolsTabInner({
   form,
-  integrationName,
+  // integrationName is available for future use
   outputSchema,
   onRegenerateToolDescriptions,
   actionId,
@@ -417,7 +417,7 @@ function AIToolsTabInner({
   );
 
   return (
-    <div className="space-y-8 pb-16">
+    <div className="space-y-6 pb-16">
       {/* Header */}
       <div>
         <h2 className="text-lg font-semibold">AI Tools</h2>
@@ -426,9 +426,9 @@ function AIToolsTabInner({
         </p>
       </div>
 
-      <div className="max-w-2xl space-y-8">
+      <div className="space-y-6">
         {/* Section 1: AI Tool Description */}
-        <section className="space-y-6">
+        <section className="space-y-4 rounded-lg border bg-card p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Sparkles className="h-5 w-5 text-violet-500" />
@@ -449,46 +449,69 @@ function AIToolsTabInner({
                   Using defaults
                 </Badge>
               )}
+              {/* Generate with AI button inline */}
+              {onRegenerateToolDescriptions && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRegenerate}
+                  disabled={isGenerating}
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-2 h-3.5 w-3.5" />
+                      Generate
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
           </div>
 
-          <div className="space-y-6 pl-8">
-            {/* Tool Description */}
-            <FormField
-              control={form.control}
-              name="toolDescription"
-              render={({ field }) => (
-                <FormItem>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm font-medium">Description</Label>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <Info className="h-3.5 w-3.5 text-muted-foreground" />
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs">
-                        The mini-prompt description shown to AI agents explaining what this tool
-                        does, when to use it, and what inputs are required.
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Use this tool to..."
-                      className="min-h-[100px] font-mono text-xs"
-                      {...field}
-                      value={field.value ?? ''}
-                    />
-                  </FormControl>
-                  <p className="text-xs text-muted-foreground">
-                    Leave empty to use auto-generated descriptions based on action schema.
-                  </p>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          {/* Tool Description */}
+          <FormField
+            control={form.control}
+            name="toolDescription"
+            render={({ field }) => (
+              <FormItem>
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm font-medium">Description</Label>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      The mini-prompt description shown to AI agents explaining what this tool does,
+                      when to use it, and what inputs are required.
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <FormControl>
+                  <Textarea
+                    placeholder="Use this tool to..."
+                    className="min-h-[100px] font-mono text-xs"
+                    {...field}
+                    value={field.value ?? ''}
+                    onChange={(e) => {
+                      field.onChange(e.target.value || null);
+                    }}
+                  />
+                </FormControl>
+                <p className="text-xs text-muted-foreground">
+                  Leave empty to use auto-generated descriptions based on action schema.
+                </p>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-            <Separator />
-
+          {/* Success & Error Templates side by side */}
+          <div className="grid gap-4 lg:grid-cols-2">
             {/* Success Response Template */}
             <FormField
               control={form.control}
@@ -513,27 +536,27 @@ function AIToolsTabInner({
                       className="min-h-[80px] font-mono text-xs"
                       {...field}
                       value={field.value ?? ''}
+                      onChange={(e) => {
+                        field.onChange(e.target.value || null);
+                      }}
                     />
                   </FormControl>
                   {/* Variable badges */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Available Variables</Label>
-                    <div className="flex flex-wrap gap-1.5">
-                      {SUCCESS_TEMPLATE_VARIABLES.map((v) => (
-                        <Tooltip key={v.name}>
-                          <TooltipTrigger asChild>
-                            <Badge
-                              variant="outline"
-                              className="cursor-pointer font-mono text-xs hover:bg-muted"
-                              onClick={() => insertSuccessVariable(v.name)}
-                            >
-                              {`{{${v.name}}}`}
-                            </Badge>
-                          </TooltipTrigger>
-                          <TooltipContent>{v.description}</TooltipContent>
-                        </Tooltip>
-                      ))}
-                    </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {SUCCESS_TEMPLATE_VARIABLES.map((v) => (
+                      <Tooltip key={v.name}>
+                        <TooltipTrigger asChild>
+                          <Badge
+                            variant="outline"
+                            className="cursor-pointer font-mono text-xs hover:bg-muted"
+                            onClick={() => insertSuccessVariable(v.name)}
+                          >
+                            {`{{${v.name}}}`}
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent>{v.description}</TooltipContent>
+                      </Tooltip>
+                    ))}
                   </div>
                   <FormMessage />
                 </FormItem>
@@ -564,63 +587,32 @@ function AIToolsTabInner({
                       className="min-h-[80px] font-mono text-xs"
                       {...field}
                       value={field.value ?? ''}
+                      onChange={(e) => {
+                        field.onChange(e.target.value || null);
+                      }}
                     />
                   </FormControl>
                   {/* Variable badges */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Available Variables</Label>
-                    <div className="flex flex-wrap gap-1.5">
-                      {ERROR_TEMPLATE_VARIABLES.map((v) => (
-                        <Tooltip key={v.name}>
-                          <TooltipTrigger asChild>
-                            <Badge
-                              variant="outline"
-                              className="cursor-pointer font-mono text-xs hover:bg-muted"
-                              onClick={() => insertErrorVariable(v.name)}
-                            >
-                              {`{{${v.name}}}`}
-                            </Badge>
-                          </TooltipTrigger>
-                          <TooltipContent>{v.description}</TooltipContent>
-                        </Tooltip>
-                      ))}
-                    </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ERROR_TEMPLATE_VARIABLES.map((v) => (
+                      <Tooltip key={v.name}>
+                        <TooltipTrigger asChild>
+                          <Badge
+                            variant="outline"
+                            className="cursor-pointer font-mono text-xs hover:bg-muted"
+                            onClick={() => insertErrorVariable(v.name)}
+                          >
+                            {`{{${v.name}}}`}
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent>{v.description}</TooltipContent>
+                      </Tooltip>
+                    ))}
                   </div>
                   <FormMessage />
                 </FormItem>
               )}
             />
-
-            {/* Generate with AI */}
-            {onRegenerateToolDescriptions && (
-              <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-4">
-                <div>
-                  <p className="text-sm font-medium">Generate with AI</p>
-                  <p className="text-xs text-muted-foreground">
-                    Create optimized descriptions based on
-                    {integrationName ? ` ${integrationName}` : ''} action schema
-                  </p>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleRegenerate}
-                  disabled={isGenerating}
-                >
-                  {isGenerating ? (
-                    <>
-                      <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="mr-2 h-3.5 w-3.5" />
-                      Generate
-                    </>
-                  )}
-                </Button>
-              </div>
-            )}
           </div>
         </section>
 

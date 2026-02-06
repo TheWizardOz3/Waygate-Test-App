@@ -94,7 +94,7 @@ export interface AutonomousAgentResult {
     /** Whether execution hit safety limits */
     hitSafetyLimit?: boolean;
     /** Which safety limit was hit (if any) */
-    safetyLimitType?: 'MAX_TOOL_CALLS' | 'TIMEOUT' | 'MAX_COST';
+    safetyLimitType?: 'MAX_TOOL_CALLS_EXCEEDED' | 'TIMEOUT' | 'MAX_COST_EXCEEDED';
   };
 }
 
@@ -329,7 +329,6 @@ export async function executeAutonomousAgent(
               toolCall.input,
               {
                 connectionId,
-                requestId,
               }
             );
 

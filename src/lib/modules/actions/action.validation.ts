@@ -26,8 +26,8 @@ export const ActionEditorSchema = z.object({
     .min(1, 'Name is required')
     .max(255, 'Name must be 255 characters or less')
     .regex(
-      /^[a-zA-Z][a-zA-Z0-9._-]*$/,
-      'Name must start with a letter and contain only letters, numbers, dots, underscores, and hyphens'
+      /^[a-zA-Z][a-zA-Z0-9\s._-]*$/,
+      'Name must start with a letter and contain only letters, numbers, spaces, dots, underscores, and hyphens'
     ),
   slug: z
     .string()

@@ -237,22 +237,24 @@ describe('ToolAllocationSchema', () => {
     expect(parsed).toEqual(allocation);
   });
 
-  it('should require at least one target action for parameter_interpreter', () => {
+  it('should allow empty targetActions for draft tools (validated at invocation time)', () => {
     const allocation = {
       mode: 'parameter_interpreter' as const,
       targetActions: [],
     };
 
-    expect(() => ToolAllocationSchema.parse(allocation)).toThrow();
+    const parsed = ToolAllocationSchema.parse(allocation);
+    expect(parsed.targetActions).toEqual([]);
   });
 
-  it('should require at least one available tool for autonomous_agent', () => {
+  it('should allow empty availableTools for draft tools (validated at invocation time)', () => {
     const allocation = {
       mode: 'autonomous_agent' as const,
       availableTools: [],
     };
 
-    expect(() => ToolAllocationSchema.parse(allocation)).toThrow();
+    const parsed = ToolAllocationSchema.parse(allocation);
+    expect(parsed.availableTools).toEqual([]);
   });
 
   it('should reject mismatched mode and fields', () => {

@@ -69,7 +69,7 @@ export function DashboardLayout({ children, title }: DashboardLayoutProps) {
       </div>
 
       {/* Main Content Area */}
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {/* Header with mobile menu */}
         <header className="flex h-16 items-center justify-between border-b bg-background px-4 md:px-6">
           {/* Mobile menu button */}
@@ -132,7 +132,14 @@ export function DashboardLayout({ children, title }: DashboardLayoutProps) {
         </header>
 
         {/* Page Content */}
-        <main className={cn('flex-1 overflow-y-auto p-4 md:p-6', 'scroll-smooth')}>{children}</main>
+        <main
+          className={cn(
+            'min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6',
+            'scroll-smooth'
+          )}
+        >
+          {children}
+        </main>
       </div>
     </div>
   );

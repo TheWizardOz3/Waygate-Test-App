@@ -43,7 +43,7 @@ interface ListToolsOptions {
  * Aggregates simple tools (actions), composite tools, and agentic tools.
  */
 export async function listUnifiedTools(options: ListToolsOptions): Promise<PaginatedUnifiedTools> {
-  const { tenantId, filters = {}, pagination = { limit: 50 } } = options;
+  const { tenantId, filters = {}, pagination = { limit: 500 } } = options;
   const { types, integrationId, search, status, excludeIds } = filters;
   const { limit } = pagination;
 
@@ -56,14 +56,31 @@ export async function listUnifiedTools(options: ListToolsOptions): Promise<Pagin
   const statusFilter = status ?? ['active', 'draft', 'disabled'];
 
   // Fetch tools from each source in parallel
+  // Wrap each in try-catch to handle missing tables gracefully
   const [simpleTools, compositeTools, agenticTools] = await Promise.all([
     fetchSimple
-      ? fetchSimpleTools(tenantId, { integrationId, search, status: statusFilter, excludeIds })
+      ? fetchSimpleTools(tenantId, {
+          integrationId,
+          search,
+          status: statusFilter,
+          excludeIds,
+        }).catch((err) => {
+          console.warn('[UNIFIED_TOOLS] Failed to fetch simple tools:', err.message);
+          return [];
+        })
       : [],
     fetchComposite
-      ? fetchCompositeTools(tenantId, { search, status: statusFilter, excludeIds })
+      ? fetchCompositeTools(tenantId, { search, status: statusFilter, excludeIds }).catch((err) => {
+          console.warn('[UNIFIED_TOOLS] Failed to fetch composite tools:', err.message);
+          return [];
+        })
       : [],
-    fetchAgentic ? fetchAgenticTools(tenantId, { search, status: statusFilter, excludeIds }) : [],
+    fetchAgentic
+      ? fetchAgenticTools(tenantId, { search, status: statusFilter, excludeIds }).catch((err) => {
+          console.warn('[UNIFIED_TOOLS] Failed to fetch agentic tools:', err.message);
+          return [];
+        })
+      : [],
   ]);
 
   // Combine and sort by name

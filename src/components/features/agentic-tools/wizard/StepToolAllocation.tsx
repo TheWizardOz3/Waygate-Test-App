@@ -246,7 +246,7 @@ export function StepToolAllocation() {
         <p className="text-sm">
           {isParameterInterpreter ? (
             <>
-              <span className="font-medium">LLM Data Transformation Mode:</span> Select the tool(s)
+              <span className="font-medium">Query Transformation Mode:</span> Select the tool(s)
               that the LLM will generate parameters for. The LLM won&apos;t choose which tool to
               execute - it will generate parameters for the specified tool(s).
             </>

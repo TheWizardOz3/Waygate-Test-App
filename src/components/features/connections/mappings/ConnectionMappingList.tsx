@@ -274,13 +274,29 @@ export function ConnectionMappingList({ connectionId, actions }: ConnectionMappi
       </CardHeader>
 
       <CardContent className="space-y-6">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        {/* Mapping Config Info - always visible when disabled */}
+        {config && !config.enabled && !isLoading && selectedActionId && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+            <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+            <div className="text-sm">
+              <p className="font-medium text-amber-600 dark:text-amber-400">
+                Mapping is disabled for this action
+              </p>
+              <p className="text-muted-foreground">
+                Enable mapping in the action settings for these mappings to take effect.
+              </p>
+            </div>
           </div>
-        ) : !selectedActionId ? (
+        )}
+
+        {/* Content area */}
+        {!selectedActionId ? (
           <div className="py-12 text-center">
             <p className="text-sm text-muted-foreground">Select an action to view its mappings</p>
+          </div>
+        ) : isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : mappings.length === 0 &&
           unconfiguredOutputFields.length === 0 &&
@@ -301,74 +317,44 @@ export function ConnectionMappingList({ connectionId, actions }: ConnectionMappi
               Add First Override
             </Button>
           </div>
-        ) : mappings.length === 0 &&
-          (unconfiguredOutputFields.length > 0 ||
-            unconfiguredInputFields.length > 0 ||
-            (isOutputArray && !hasRootOutputMapping) ||
-            (isInputArray && !hasRootInputMapping)) ? (
-          // Show schema fields when no mappings exist yet
-          <SchemaFieldsSection
-            connectionId={connectionId}
-            actionId={selectedActionId}
-            outputFields={unconfiguredOutputFields}
-            inputFields={unconfiguredInputFields}
-            isOutputArray={isOutputArray}
-            isInputArray={isInputArray}
-            hasRootOutputMapping={hasRootOutputMapping}
-            hasRootInputMapping={hasRootInputMapping}
-            onMappingCreated={() => refetch()}
-          />
         ) : (
           <>
-            {/* Mapping Config Info */}
-            {config && !config.enabled && (
-              <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
-                <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-                <div className="text-sm">
-                  <p className="font-medium text-amber-600 dark:text-amber-400">
-                    Mapping is disabled for this action
-                  </p>
-                  <p className="text-muted-foreground">
-                    Enable mapping in the action settings for these mappings to take effect.
-                  </p>
-                </div>
+            {/* Mappings Table - always show if there are mappings */}
+            {mappings.length > 0 && (
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="w-20">Type</TableHead>
+                      <TableHead>Source Path</TableHead>
+                      <TableHead className="w-8"></TableHead>
+                      <TableHead>Target Path</TableHead>
+                      <TableHead className="w-24">Transform</TableHead>
+                      <TableHead className="w-24">Source</TableHead>
+                      <TableHead className="w-16"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {mappings.map((rm, idx) => (
+                      <MappingTableRow
+                        key={rm.mapping.id ?? `mapping-${idx}`}
+                        resolvedMapping={rm}
+                        connectionId={connectionId}
+                        actionId={selectedActionId}
+                        onDeleted={() => refetch()}
+                      />
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
             )}
 
-            {/* Mappings Table */}
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="w-20">Type</TableHead>
-                    <TableHead>Source Path</TableHead>
-                    <TableHead className="w-8"></TableHead>
-                    <TableHead>Target Path</TableHead>
-                    <TableHead className="w-24">Transform</TableHead>
-                    <TableHead className="w-24">Source</TableHead>
-                    <TableHead className="w-16"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {mappings.map((rm, idx) => (
-                    <MappingTableRow
-                      key={rm.mapping.id ?? `mapping-${idx}`}
-                      resolvedMapping={rm}
-                      connectionId={connectionId}
-                      actionId={selectedActionId}
-                      onDeleted={() => refetch()}
-                    />
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-
-            {/* Show remaining unconfigured schema fields */}
+            {/* Schema Fields Section - show when there are unconfigured fields */}
             {(unconfiguredOutputFields.length > 0 ||
               unconfiguredInputFields.length > 0 ||
               (isOutputArray && !hasRootOutputMapping) ||
               (isInputArray && !hasRootInputMapping)) &&
-              showSchemaFields && (
+              (showSchemaFields || mappings.length === 0) && (
                 <SchemaFieldsSection
                   connectionId={connectionId}
                   actionId={selectedActionId}
@@ -379,8 +365,8 @@ export function ConnectionMappingList({ connectionId, actions }: ConnectionMappi
                   hasRootOutputMapping={hasRootOutputMapping}
                   hasRootInputMapping={hasRootInputMapping}
                   onMappingCreated={() => refetch()}
-                  collapsible
-                  onDismiss={() => setShowSchemaFields(false)}
+                  collapsible={mappings.length > 0}
+                  onDismiss={mappings.length > 0 ? () => setShowSchemaFields(false) : undefined}
                 />
               )}
           </>

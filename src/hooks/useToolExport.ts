@@ -142,3 +142,188 @@ export function useMCPExport(integrationId: string | undefined, options?: MCPExp
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 }
+
+// =============================================================================
+// All Tools Export (Aggregated across all integrations)
+// =============================================================================
+
+export const allToolsExportKeys = {
+  all: ['allToolsExport'] as const,
+  universal: () => [...allToolsExportKeys.all, 'universal'] as const,
+  langchain: () => [...allToolsExportKeys.all, 'langchain'] as const,
+  mcp: () => [...allToolsExportKeys.all, 'mcp'] as const,
+};
+
+// Types for aggregated export responses
+export interface AggregatedUniversalExportResponse {
+  tools: Array<{
+    name: string;
+    description: string;
+    parameters: {
+      type: 'object';
+      properties: Record<string, unknown>;
+      required: string[];
+    };
+    contextTypes?: string[];
+  }>;
+  summary: {
+    total: number;
+    simple: number;
+    composite: number;
+    agentic: number;
+  };
+  contextTypes: string[];
+  format: {
+    name: 'universal';
+    version: '1.0';
+    compatibleWith: string[];
+  };
+}
+
+export interface AggregatedLangChainExportResponse {
+  tools: Array<{
+    name: string;
+    description: string;
+    schema: {
+      type: 'object';
+      properties: Record<string, unknown>;
+      required: string[];
+      additionalProperties?: boolean;
+    };
+    contextTypes?: string[];
+  }>;
+  summary: {
+    total: number;
+    simple: number;
+    composite: number;
+    agentic: number;
+  };
+  contextTypes: string[];
+  format: {
+    name: 'langchain';
+    version: '1.0';
+    compatibleWith: string[];
+  };
+  codeSnippets: {
+    typescript: string;
+    python: string;
+  };
+}
+
+export interface AggregatedMCPExportResponse {
+  server: {
+    name: string;
+    version: string;
+    capabilities: {
+      tools: Record<string, never>;
+      resources?: Record<string, never>;
+    };
+    tools: Array<{
+      name: string;
+      description: string;
+      inputSchema: {
+        type: 'object';
+        properties: Record<string, unknown>;
+        required: string[];
+      };
+    }>;
+    resources: Array<{
+      uri: string;
+      name: string;
+      description: string;
+      mimeType: string;
+    }>;
+  };
+  summary: {
+    total: number;
+    simple: number;
+    composite: number;
+    agentic: number;
+  };
+  format: {
+    name: 'mcp';
+    version: '1.0';
+    compatibleWith: string[];
+  };
+  serverFile: {
+    typescript: string;
+    packageJson: string;
+    claudeDesktopConfig: string;
+  };
+}
+
+// API Functions for all tools export
+async function fetchAllToolsUniversalExport(
+  options?: UniversalExportOptions
+): Promise<AggregatedUniversalExportResponse> {
+  const params: Record<string, string | number | boolean | undefined> = {};
+  if (options?.includeMetadata !== undefined) params.includeMetadata = options.includeMetadata;
+  if (options?.maxDescriptionLength !== undefined)
+    params.maxDescriptionLength = options.maxDescriptionLength;
+  if (options?.includeContextTypes !== undefined)
+    params.includeContextTypes = options.includeContextTypes;
+
+  // apiClient.get already extracts the data field from the response
+  return apiClient.get<AggregatedUniversalExportResponse>('/tools/export/universal', params);
+}
+
+async function fetchAllToolsLangChainExport(
+  options?: LangChainExportOptions
+): Promise<AggregatedLangChainExportResponse> {
+  const params: Record<string, string | number | boolean | undefined> = {};
+  if (options?.includeCodeSnippets !== undefined)
+    params.includeCodeSnippets = options.includeCodeSnippets;
+  if (options?.apiBaseUrl !== undefined) params.apiBaseUrl = options.apiBaseUrl;
+
+  // apiClient.get already extracts the data field from the response
+  return apiClient.get<AggregatedLangChainExportResponse>('/tools/export/langchain', params);
+}
+
+async function fetchAllToolsMCPExport(
+  options?: MCPExportOptions
+): Promise<AggregatedMCPExportResponse> {
+  const params: Record<string, string | number | boolean | undefined> = {};
+  if (options?.includeServerFile !== undefined)
+    params.includeServerFile = options.includeServerFile;
+  if (options?.includeResources !== undefined) params.includeResources = options.includeResources;
+  if (options?.serverVersion !== undefined) params.serverVersion = options.serverVersion;
+
+  // apiClient.get already extracts the data field from the response
+  return apiClient.get<AggregatedMCPExportResponse>('/tools/export/mcp', params);
+}
+
+/**
+ * Hook to fetch all tools exported in Universal (LLM-agnostic) format.
+ * Includes simple, composite, and agentic tools across all integrations.
+ */
+export function useAllToolsUniversalExport(options?: UniversalExportOptions) {
+  return useQuery({
+    queryKey: allToolsExportKeys.universal(),
+    queryFn: () => fetchAllToolsUniversalExport(options),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}
+
+/**
+ * Hook to fetch all tools exported in LangChain format with code snippets.
+ * Includes simple, composite, and agentic tools across all integrations.
+ */
+export function useAllToolsLangChainExport(options?: LangChainExportOptions) {
+  return useQuery({
+    queryKey: allToolsExportKeys.langchain(),
+    queryFn: () => fetchAllToolsLangChainExport(options),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}
+
+/**
+ * Hook to fetch all tools exported in MCP format with server file generation.
+ * Includes simple, composite, and agentic tools across all integrations.
+ */
+export function useAllToolsMCPExport(options?: MCPExportOptions) {
+  return useQuery({
+    queryKey: allToolsExportKeys.mcp(),
+    queryFn: () => fetchAllToolsMCPExport(options),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}
