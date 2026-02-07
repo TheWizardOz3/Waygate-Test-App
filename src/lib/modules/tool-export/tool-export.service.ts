@@ -37,6 +37,7 @@ import {
 } from './tool-export.schemas';
 import { transformPipelineToUniversalTool } from '../pipelines/export/pipeline.transformer';
 import { toPipelineResponse } from '../pipelines/pipeline.schemas';
+import { generateBatchVariants } from '../batch-operations/batch-tool-variant';
 
 // =============================================================================
 // Error Class
@@ -377,6 +378,7 @@ export interface AggregatedToolExportResponse {
     composite: number;
     agentic: number;
     pipeline: number;
+    batch: number;
   };
   /** Available context types across all integrations */
   contextTypes: string[];
@@ -463,6 +465,9 @@ export async function exportAllToolsUniversal(
     .filter((r): r is { success: true; tool: UniversalTool } => r.success)
     .map((r) => r.tool);
 
+  // Generate batch variants for batch-enabled actions
+  const batchVariantTools = generateBatchVariants(simpleTools, actions);
+
   // Transform composite tools to universal format
   const compositeUniversalTools: UniversalTool[] = compositeTools.map((tool) => {
     // Get operation names for agent_driven mode
@@ -524,6 +529,7 @@ export async function exportAllToolsUniversal(
   // Combine all tools
   const allTools = [
     ...simpleTools,
+    ...batchVariantTools,
     ...compositeUniversalTools,
     ...agenticUniversalTools,
     ...pipelineUniversalTools,
@@ -540,6 +546,7 @@ export async function exportAllToolsUniversal(
       composite: compositeUniversalTools.length,
       agentic: agenticUniversalTools.length,
       pipeline: pipelineUniversalTools.length,
+      batch: batchVariantTools.length,
     },
     contextTypes,
     format: {
@@ -561,6 +568,7 @@ export interface AggregatedLangChainExportResponse {
     composite: number;
     agentic: number;
     pipeline: number;
+    batch: number;
   };
   contextTypes: string[];
   format: {
@@ -634,6 +642,7 @@ export interface AggregatedMCPExportResponse {
     composite: number;
     agentic: number;
     pipeline: number;
+    batch: number;
   };
   format: {
     name: 'mcp';

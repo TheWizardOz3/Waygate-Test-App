@@ -153,3 +153,11 @@ export {
   type JobsResponse,
   type JobItemsResponse,
 } from './useJobs';
+
+// Batch operations hooks
+export {
+  useSubmitBatch,
+  useBatchProgress,
+  batchKeys,
+  type SubmitBatchInput,
+} from './useBatchOperations';

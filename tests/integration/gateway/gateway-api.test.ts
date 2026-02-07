@@ -96,6 +96,9 @@ const mockAction = {
   toolDescription: null,
   toolSuccessTemplate: null,
   toolErrorTemplate: null,
+  batchEnabled: false,
+  batchConfig: null,
+  bulkConfig: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 };

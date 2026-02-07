@@ -244,6 +244,7 @@ describe('ToolAllocationSchema', () => {
     };
 
     const parsed = ToolAllocationSchema.parse(allocation);
+    if (parsed.mode !== 'parameter_interpreter') throw new Error('Unexpected mode');
     expect(parsed.targetActions).toEqual([]);
   });
 
@@ -254,6 +255,7 @@ describe('ToolAllocationSchema', () => {
     };
 
     const parsed = ToolAllocationSchema.parse(allocation);
+    if (parsed.mode !== 'autonomous_agent') throw new Error('Unexpected mode');
     expect(parsed.availableTools).toEqual([]);
   });
 

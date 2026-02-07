@@ -414,6 +414,11 @@ model Action {
   toolSuccessTemplate String? @map("tool_success_template") @db.Text /// Template for formatting successful tool responses
   toolErrorTemplate   String? @map("tool_error_template") @db.Text /// Template for formatting error responses
 
+  // Batch Operations configuration
+  batchEnabled Boolean @default(false) @map("batch_enabled") /// Whether this action supports batch processing
+  batchConfig  Json?   @map("batch_config") /// Batch behavior: maxItems, defaultConcurrency, defaultDelayMs, toolDescription
+  bulkConfig   Json?   @map("bulk_config") /// Optional bulk API routing: endpoint, httpMethod, payloadTransform, responseMapping
+
   // Relations
   integration              Integration              @relation(fields: [integrationId], references: [id], onDelete: Cascade)
   fieldMappings            FieldMapping[]
