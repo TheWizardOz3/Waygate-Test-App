@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Sparkles,
   Wand2,
+  ListChecks,
   ScrollText,
   Settings,
   ChevronLeft,
@@ -42,6 +43,12 @@ const navItems: NavItem[] = [
     href: '/ai-tools',
     icon: Wand2,
     description: 'Composite and agentic tools',
+  },
+  {
+    title: 'Jobs',
+    href: '/jobs',
+    icon: ListChecks,
+    description: 'Background jobs and batch operations',
   },
   {
     title: 'Logs',

@@ -3,7 +3,15 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Menu, Sparkles, LayoutDashboard, Puzzle, ScrollText, Settings } from 'lucide-react';
+import {
+  Menu,
+  Sparkles,
+  LayoutDashboard,
+  Puzzle,
+  ListChecks,
+  ScrollText,
+  Settings,
+} from 'lucide-react';
 
 import { DashboardSidebar } from './DashboardSidebar';
 import { DashboardHeader } from './DashboardHeader';
@@ -20,6 +28,7 @@ interface DashboardLayoutProps {
 const navItems = [
   { title: 'Dashboard', href: '/', icon: LayoutDashboard },
   { title: 'Integrations', href: '/integrations', icon: Puzzle },
+  { title: 'Jobs', href: '/jobs', icon: ListChecks },
   { title: 'Logs', href: '/logs', icon: ScrollText },
   { title: 'Settings', href: '/settings', icon: Settings },
 ];

@@ -16,6 +16,10 @@
     {
       "path": "/api/v1/internal/reference-sync",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/v1/internal/job-worker",
+      "schedule": "* * * * *"
     }
   ]
 }

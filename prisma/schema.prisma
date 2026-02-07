@@ -269,6 +269,7 @@ model Tenant {
   agenticToolExecutions  AgenticToolExecution[]
   pipelines              Pipeline[]
   pipelineExecutions     PipelineExecution[]
+  asyncJobs              AsyncJob[]
 
   @@map("tenants")
 }
@@ -1000,4 +1001,59 @@ model StepExecution {
   @@index([pipelineStepId], name: "step_executions_step_id_idx")
   @@index([status], name: "step_executions_status_idx")
   @@map("step_executions")
+}
+
+// =============================================================================
+// ASYNC JOB MODELS
+// =============================================================================
+
+/// Generic async job for background processing (batch ops, schema drift, scraping, etc.)
+model AsyncJob {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String?   @map("tenant_id") @db.Uuid
+  type            String    // e.g., "batch_operation", "schema_drift", "scrape"
+  status          String    @default("queued") // queued, running, completed, failed, cancelled
+  input           Json?     // Job-specific input parameters (sanitized)
+  output          Json?     // Job result on completion
+  error           Json?     // Error details on failure
+  progress        Int       @default(0) // 0-100
+  progressDetails Json?     @map("progress_details") // Stage-specific details
+  attempts        Int       @default(0)
+  maxAttempts     Int       @default(3) @map("max_attempts")
+  timeoutSeconds  Int       @default(300) @map("timeout_seconds") // Per-job-type timeout
+  nextRunAt       DateTime? @map("next_run_at") @db.Timestamptz // For retry backoff scheduling
+  startedAt       DateTime? @map("started_at") @db.Timestamptz
+  completedAt     DateTime? @map("completed_at") @db.Timestamptz
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  tenant Tenant?      @relation(fields: [tenantId], references: [id])
+  items  AsyncJobItem[]
+
+  // Indexes
+  @@index([tenantId, createdAt(sort: Desc)], map: "async_jobs_tenant_created_idx")
+  @@index([type, status], map: "async_jobs_type_status_idx")
+  @@index([status, nextRunAt], map: "async_jobs_status_next_run_idx")
+  @@map("async_jobs")
+}
+
+/// Individual items within a batch async job
+model AsyncJobItem {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId       String    @map("job_id") @db.Uuid
+  status      String    @default("pending") // pending, running, completed, failed, skipped
+  input       Json?     // Item-specific input
+  output      Json?     // Item result
+  error       Json?     // Item error details
+  attempts    Int       @default(0)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  completedAt DateTime? @map("completed_at") @db.Timestamptz
+
+  // Relations
+  job AsyncJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([jobId, status], map: "async_job_items_job_status_idx")
+  @@map("async_job_items")
 }

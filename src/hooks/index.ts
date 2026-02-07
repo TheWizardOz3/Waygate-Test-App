@@ -140,3 +140,16 @@ export {
   BUILT_IN_VARIABLES,
   type BuiltInVariable,
 } from './useVariables';
+
+// Job hooks
+export {
+  useJobs,
+  useJob,
+  useJobItems,
+  useCancelJob,
+  useRetryJob,
+  jobKeys,
+  type JobsQueryParams,
+  type JobsResponse,
+  type JobItemsResponse,
+} from './useJobs';
