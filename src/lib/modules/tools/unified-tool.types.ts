@@ -12,7 +12,7 @@
 /**
  * Type discriminator for different tool sources
  */
-export type ToolType = 'simple' | 'composite' | 'agentic';
+export type ToolType = 'simple' | 'composite' | 'agentic' | 'pipeline';
 
 /**
  * Unified tool representation that can represent any tool type.
@@ -69,6 +69,11 @@ export interface UnifiedTool {
    * For agentic tools only - execution mode
    */
   executionMode?: 'parameter_interpreter' | 'autonomous_agent';
+
+  /**
+   * For pipeline tools only - number of steps
+   */
+  stepCount?: number;
 
   /** Tool status */
   status: 'active' | 'draft' | 'disabled';

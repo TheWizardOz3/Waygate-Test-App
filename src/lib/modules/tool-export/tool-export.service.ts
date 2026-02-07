@@ -35,6 +35,8 @@ import {
   type ToolExportResponse,
   type SingleToolExportResponse,
 } from './tool-export.schemas';
+import { transformPipelineToUniversalTool } from '../pipelines/export/pipeline.transformer';
+import { toPipelineResponse } from '../pipelines/pipeline.schemas';
 
 // =============================================================================
 // Error Class
@@ -374,6 +376,7 @@ export interface AggregatedToolExportResponse {
     simple: number;
     composite: number;
     agentic: number;
+    pipeline: number;
   };
   /** Available context types across all integrations */
   contextTypes: string[];
@@ -431,6 +434,14 @@ export async function exportAllToolsUniversal(
 
   // Fetch all agentic tools
   const agenticTools = await prisma.agenticTool.findMany({
+    where: {
+      tenantId,
+      status: { in: ['active', 'draft'] },
+    },
+  });
+
+  // Fetch all pipeline tools
+  const pipelineTools = await prisma.pipeline.findMany({
     where: {
       tenantId,
       status: { in: ['active', 'draft'] },
@@ -498,8 +509,25 @@ export async function exportAllToolsUniversal(
     contextTypes: [],
   }));
 
+  // Transform pipeline tools to universal format
+  const pipelineUniversalTools: UniversalTool[] = pipelineTools
+    .map((pipeline) => {
+      const pipelineResponse = toPipelineResponse(pipeline);
+      const result = transformPipelineToUniversalTool(pipelineResponse);
+      if (result.success) {
+        return result.tool;
+      }
+      return null;
+    })
+    .filter((tool): tool is UniversalTool => tool !== null);
+
   // Combine all tools
-  const allTools = [...simpleTools, ...compositeUniversalTools, ...agenticUniversalTools];
+  const allTools = [
+    ...simpleTools,
+    ...compositeUniversalTools,
+    ...agenticUniversalTools,
+    ...pipelineUniversalTools,
+  ];
 
   // Aggregate context types
   const contextTypes = aggregateContextTypes(allTools);
@@ -511,6 +539,7 @@ export async function exportAllToolsUniversal(
       simple: simpleTools.length,
       composite: compositeUniversalTools.length,
       agentic: agenticUniversalTools.length,
+      pipeline: pipelineUniversalTools.length,
     },
     contextTypes,
     format: {
@@ -531,6 +560,7 @@ export interface AggregatedLangChainExportResponse {
     simple: number;
     composite: number;
     agentic: number;
+    pipeline: number;
   };
   contextTypes: string[];
   format: {
@@ -603,6 +633,7 @@ export interface AggregatedMCPExportResponse {
     simple: number;
     composite: number;
     agentic: number;
+    pipeline: number;
   };
   format: {
     name: 'mcp';

@@ -199,6 +199,45 @@ enum AgenticToolExecutionStatus {
   timeout
 }
 
+/// Status of a pipeline tool
+enum PipelineStatus {
+  draft
+  active
+  disabled
+}
+
+/// Tool type for a pipeline step
+enum PipelineStepToolType {
+  simple
+  composite
+  agentic
+}
+
+/// Error handling strategy for a pipeline step
+enum StepOnError {
+  fail_pipeline
+  continue
+  skip_remaining
+}
+
+/// Status of a pipeline execution
+enum PipelineExecutionStatus {
+  running
+  completed
+  failed
+  timeout
+  cancelled
+}
+
+/// Status of a step execution within a pipeline
+enum StepExecutionStatus {
+  pending
+  running
+  completed
+  failed
+  skipped
+}
+
 // =============================================================================
 // MODELS
 // =============================================================================
@@ -228,6 +267,8 @@ model Tenant {
   compositeTools         CompositeTool[]
   agenticTools           AgenticTool[]
   agenticToolExecutions  AgenticToolExecution[]
+  pipelines              Pipeline[]
+  pipelineExecutions     PipelineExecution[]
 
   @@map("tenants")
 }
@@ -831,4 +872,132 @@ model AgenticToolExecution {
   @@index([tenantId, createdAt(sort: Desc)], name: "agentic_tool_executions_tenant_created_idx")
   @@index([status], name: "agentic_tool_executions_status_idx")
   @@map("agentic_tool_executions")
+}
+
+// =============================================================================
+// PIPELINE MODELS
+// =============================================================================
+
+/// Pipeline tools - multi-step orchestrated workflows that appear as single tools
+model Pipeline {
+  id                  String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String         @map("tenant_id") @db.Uuid
+  name                String         @db.VarChar(255)
+  slug                String         @db.VarChar(100)
+  description         String?        @db.Text
+  inputSchema         Json           @default("{}") @map("input_schema")
+  outputMapping       Json           @default("{}") @map("output_mapping")
+  toolDescription     String?        @map("tool_description") @db.Text
+  toolSuccessTemplate String?        @map("tool_success_template") @db.Text
+  toolErrorTemplate   String?        @map("tool_error_template") @db.Text
+  safetyLimits        Json           @default("{\"maxCostUsd\": 5, \"maxDurationSeconds\": 1800}") @map("safety_limits")
+  reasoningConfig     Json           @default("{}") @map("reasoning_config")
+  status              PipelineStatus @default(draft)
+  metadata            Json           @default("{}")
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+
+  // Relations
+  tenant     Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  steps      PipelineStep[]
+  executions PipelineExecution[]
+
+  // Indexes
+  @@unique([tenantId, slug], name: "pipelines_tenant_slug_idx")
+  @@index([tenantId], name: "pipelines_tenant_id_idx")
+  @@index([status], name: "pipelines_status_idx")
+  @@map("pipelines")
+}
+
+/// Steps within a pipeline - each step optionally invokes a tool with optional LLM reasoning
+model PipelineStep {
+  id               String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  pipelineId       String                @map("pipeline_id") @db.Uuid
+  stepNumber       Int                   @map("step_number")
+  name             String                @db.VarChar(255)
+  slug             String                @db.VarChar(100)
+  toolId           String?               @map("tool_id") @db.Uuid
+  toolType         PipelineStepToolType? @map("tool_type")
+  toolSlug         String?               @map("tool_slug") @db.VarChar(200)
+  inputMapping     Json                  @default("{}") @map("input_mapping")
+  onError          StepOnError           @default(fail_pipeline) @map("on_error")
+  retryConfig      Json                  @default("{\"maxRetries\": 0, \"backoffMs\": 1000}") @map("retry_config")
+  timeoutSeconds   Int                   @default(300) @map("timeout_seconds")
+  condition        Json?
+  reasoningEnabled Boolean               @default(false) @map("reasoning_enabled")
+  reasoningPrompt  String?               @map("reasoning_prompt") @db.Text
+  reasoningConfig  Json?                 @map("reasoning_config")
+  metadata         Json                  @default("{}")
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @updatedAt @map("updated_at")
+
+  // Relations
+  pipeline       Pipeline        @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  stepExecutions StepExecution[]
+
+  // Indexes
+  @@unique([pipelineId, stepNumber], name: "pipeline_steps_pipeline_step_number_idx")
+  @@unique([pipelineId, slug], name: "pipeline_steps_pipeline_slug_idx")
+  @@index([pipelineId], name: "pipeline_steps_pipeline_id_idx")
+  @@map("pipeline_steps")
+}
+
+/// Execution records for pipeline invocations
+model PipelineExecution {
+  id                String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  pipelineId        String                  @map("pipeline_id") @db.Uuid
+  tenantId          String                  @map("tenant_id") @db.Uuid
+  input             Json                    @default("{}")
+  state             Json                    @default("{}")
+  output            Json?
+  status            PipelineExecutionStatus @default(running)
+  currentStepNumber Int                     @default(1) @map("current_step_number")
+  totalSteps        Int                     @map("total_steps")
+  totalCostUsd      Decimal                 @default(0) @map("total_cost_usd") @db.Decimal(10, 6)
+  totalTokens       Int                     @default(0) @map("total_tokens")
+  error             Json?
+  startedAt         DateTime                @default(now()) @map("started_at")
+  completedAt       DateTime?               @map("completed_at")
+  createdAt         DateTime                @default(now()) @map("created_at")
+
+  // Relations
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pipeline       Pipeline        @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  stepExecutions StepExecution[]
+
+  // Indexes
+  @@index([pipelineId, createdAt(sort: Desc)], name: "pipeline_executions_pipeline_created_idx")
+  @@index([tenantId, createdAt(sort: Desc)], name: "pipeline_executions_tenant_created_idx")
+  @@index([status], name: "pipeline_executions_status_idx")
+  @@map("pipeline_executions")
+}
+
+/// Execution records for individual steps within a pipeline execution
+model StepExecution {
+  id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  pipelineExecutionId String              @map("pipeline_execution_id") @db.Uuid
+  pipelineStepId      String              @map("pipeline_step_id") @db.Uuid
+  stepNumber          Int                 @map("step_number")
+  status              StepExecutionStatus @default(pending)
+  resolvedInput       Json?               @map("resolved_input")
+  toolOutput          Json?               @map("tool_output")
+  reasoningOutput     Json?               @map("reasoning_output")
+  error               Json?
+  retryCount          Int                 @default(0) @map("retry_count")
+  costUsd             Decimal             @default(0) @map("cost_usd") @db.Decimal(10, 6)
+  tokensUsed          Int                 @default(0) @map("tokens_used")
+  durationMs          Int                 @default(0) @map("duration_ms")
+  startedAt           DateTime?           @map("started_at")
+  completedAt         DateTime?           @map("completed_at")
+  createdAt           DateTime            @default(now()) @map("created_at")
+
+  // Relations
+  pipelineExecution PipelineExecution @relation(fields: [pipelineExecutionId], references: [id], onDelete: Cascade)
+  pipelineStep      PipelineStep      @relation(fields: [pipelineStepId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([pipelineExecutionId, stepNumber], name: "step_executions_execution_step_idx")
+  @@index([pipelineStepId], name: "step_executions_step_id_idx")
+  @@index([status], name: "step_executions_status_idx")
+  @@map("step_executions")
 }

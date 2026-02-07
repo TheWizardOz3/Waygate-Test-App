@@ -15,6 +15,7 @@ import {
   Sparkles,
   Bot,
   Zap,
+  Workflow,
   ChevronDown,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -42,6 +43,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent } from '@/components/ui/card';
 import { useUnifiedTools } from '@/hooks/useUnifiedTools';
 import { useDeleteCompositeTool } from '@/hooks/useCompositeTools';
+import { useDeletePipeline } from '@/hooks/usePipelines';
 import { useIntegrations } from '@/hooks/useIntegrations';
 import { cn } from '@/lib/utils';
 import type {
@@ -66,6 +68,7 @@ const TOOL_TYPE_OPTIONS = [
   { value: 'agentic:parameter_interpreter', label: 'Agentic: Parameter Interpreter' },
   { value: 'composite:agent_driven', label: 'Composite: Agent-Driven' },
   { value: 'composite:rule_based', label: 'Composite: Rule-Based' },
+  { value: 'pipeline', label: 'Pipeline' },
   { value: 'simple', label: 'Simple' },
 ] as const;
 
@@ -84,6 +87,7 @@ const DEFAULT_TYPE_FILTERS: ToolTypeFilterValue[] = [
   'agentic:parameter_interpreter',
   'composite:agent_driven',
   'composite:rule_based',
+  'pipeline',
 ];
 
 // =============================================================================
@@ -119,6 +123,9 @@ function getToolTypeLabel(tool: UnifiedToolResponse): string {
     }
     return 'Agentic';
   }
+  if (tool.type === 'pipeline') {
+    return 'Pipeline';
+  }
   return tool.type;
 }
 
@@ -130,6 +137,8 @@ function getToolIcon(type: ToolType) {
       return GitBranch;
     case 'agentic':
       return Bot;
+    case 'pipeline':
+      return Workflow;
     default:
       return Wand2;
   }
@@ -143,6 +152,8 @@ function getToolIconColor(type: ToolType) {
       return 'text-violet-600 dark:text-violet-400';
     case 'agentic':
       return 'text-amber-600 dark:text-amber-400';
+    case 'pipeline':
+      return 'text-blue-600 dark:text-blue-400';
     default:
       return 'text-violet-600 dark:text-violet-400';
   }
@@ -156,6 +167,8 @@ function getToolIconBg(type: ToolType) {
       return 'bg-gradient-to-br from-violet-500/10 to-indigo-500/10';
     case 'agentic':
       return 'bg-gradient-to-br from-amber-500/10 to-orange-500/10';
+    case 'pipeline':
+      return 'bg-gradient-to-br from-blue-500/10 to-cyan-500/10';
     default:
       return 'bg-gradient-to-br from-violet-500/10 to-indigo-500/10';
   }
@@ -183,6 +196,7 @@ function getApiTypesFromFilters(filters: ToolTypeFilterValue[]): ToolType[] | un
   const types = new Set<ToolType>();
   for (const filter of filters) {
     if (filter === 'simple') types.add('simple');
+    else if (filter === 'pipeline') types.add('pipeline');
     else if (filter.startsWith('composite:')) types.add('composite');
     else if (filter.startsWith('agentic:')) types.add('agentic');
   }
@@ -238,19 +252,24 @@ export function CompositeToolList({ className }: CompositeToolListProps) {
   });
 
   // Mutations
-  const deleteTool = useDeleteCompositeTool();
+  const deleteCompositeTool = useDeleteCompositeTool();
+  const deletePipeline = useDeletePipeline();
 
   const handleDelete = React.useCallback(
     (id: string, type: ToolType) => {
-      if (type !== 'composite') {
-        alert('Only composite tools can be deleted from this view.');
+      if (type !== 'composite' && type !== 'pipeline') {
+        alert('Only composite tools and pipelines can be deleted from this view.');
         return;
       }
       if (confirm('Are you sure you want to delete this tool? This cannot be undone.')) {
-        deleteTool.mutate(id);
+        if (type === 'pipeline') {
+          deletePipeline.mutate(id);
+        } else {
+          deleteCompositeTool.mutate(id);
+        }
       }
     },
-    [deleteTool]
+    [deleteCompositeTool, deletePipeline]
   );
 
   // Toggle helpers for multi-select
@@ -280,6 +299,7 @@ export function CompositeToolList({ className }: CompositeToolListProps) {
     if (typeFilters.length > 0 && typeFilters.length < TOOL_TYPE_OPTIONS.length) {
       tools = tools.filter((t) => {
         if (t.type === 'simple') return typeFilters.includes('simple');
+        if (t.type === 'pipeline') return typeFilters.includes('pipeline');
         if (t.type === 'composite') {
           // For now, include composite if any composite filter is selected
           return typeFilters.some((f) => f.startsWith('composite:'));
@@ -320,7 +340,9 @@ export function CompositeToolList({ className }: CompositeToolListProps) {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-heading text-2xl font-bold">AI Tools</h1>
-          <p className="text-muted-foreground">Manage your simple, composite, and agentic tools</p>
+          <p className="text-muted-foreground">
+            Manage your simple, composite, agentic, and pipeline tools
+          </p>
         </div>
         <Button asChild className="gap-2">
           <Link href="/ai-tools/new">
@@ -556,7 +578,7 @@ function UnifiedToolCard({ tool, onDelete }: UnifiedToolCardProps) {
                   </Link>
                 </DropdownMenuItem>
               )}
-              {tool.type === 'composite' && (
+              {(tool.type === 'composite' || tool.type === 'pipeline') && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -712,7 +734,7 @@ function UnifiedToolTable({ tools, onDelete }: UnifiedToolTableProps) {
                           </Link>
                         </DropdownMenuItem>
                       )}
-                      {tool.type === 'composite' && (
+                      {(tool.type === 'composite' || tool.type === 'pipeline') && (
                         <>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem

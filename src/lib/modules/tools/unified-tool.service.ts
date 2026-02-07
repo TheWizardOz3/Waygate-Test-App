@@ -5,14 +5,17 @@
  * - Simple Tools (Actions with tool export enhancements)
  * - Composite Tools
  * - Agentic Tools
+ * - Pipeline Tools
  */
 
 import { prisma } from '@/lib/db/client';
-import { CompositeToolStatus, AgenticToolStatus } from '@prisma/client';
+import { CompositeToolStatus, AgenticToolStatus, PipelineStatus } from '@prisma/client';
 import type {
   Action,
   CompositeTool,
   AgenticTool,
+  Pipeline,
+  PipelineStep,
   CompositeToolOperation,
   Prisma,
 } from '@prisma/client';
@@ -51,13 +54,14 @@ export async function listUnifiedTools(options: ListToolsOptions): Promise<Pagin
   const fetchSimple = !types || types.includes('simple');
   const fetchComposite = !types || types.includes('composite');
   const fetchAgentic = !types || types.includes('agentic');
+  const fetchPipelines = !types || types.includes('pipeline');
 
   // Build status filter
   const statusFilter = status ?? ['active', 'draft', 'disabled'];
 
   // Fetch tools from each source in parallel
   // Wrap each in try-catch to handle missing tables gracefully
-  const [simpleTools, compositeTools, agenticTools] = await Promise.all([
+  const [simpleTools, compositeTools, agenticTools, pipelineTools] = await Promise.all([
     fetchSimple
       ? fetchSimpleTools(tenantId, {
           integrationId,
@@ -81,10 +85,16 @@ export async function listUnifiedTools(options: ListToolsOptions): Promise<Pagin
           return [];
         })
       : [],
+    fetchPipelines
+      ? fetchPipelineTools(tenantId, { search, status: statusFilter, excludeIds }).catch((err) => {
+          console.warn('[UNIFIED_TOOLS] Failed to fetch pipeline tools:', err.message);
+          return [];
+        })
+      : [],
   ]);
 
   // Combine and sort by name
-  let allTools = [...simpleTools, ...compositeTools, ...agenticTools];
+  let allTools = [...simpleTools, ...compositeTools, ...agenticTools, ...pipelineTools];
   allTools.sort((a, b) => a.name.localeCompare(b.name));
 
   // Apply global exclusions if provided
@@ -122,6 +132,8 @@ export async function getUnifiedToolById(
       return getCompositeToolById(tenantId, toolId);
     case 'agentic':
       return getAgenticToolById(tenantId, toolId);
+    case 'pipeline':
+      return getPipelineToolById(tenantId, toolId);
     default:
       return null;
   }
@@ -375,5 +387,86 @@ function agenticToolToUnifiedTool(tool: AgenticTool): UnifiedTool {
     status: tool.status as 'active' | 'draft' | 'disabled',
     createdAt: tool.createdAt.toISOString(),
     updatedAt: tool.updatedAt.toISOString(),
+  };
+}
+
+// =============================================================================
+// Pipeline Tools
+// =============================================================================
+
+interface PipelineToolFilters {
+  search?: string;
+  status: string[];
+  excludeIds?: string[];
+}
+
+async function fetchPipelineTools(
+  tenantId: string,
+  filters: PipelineToolFilters
+): Promise<UnifiedTool[]> {
+  const { search, status, excludeIds } = filters;
+
+  const where: Prisma.PipelineWhereInput = {
+    tenantId,
+    status: { in: status as PipelineStatus[] },
+    ...(excludeIds && excludeIds.length > 0 ? { id: { notIn: excludeIds } } : {}),
+    ...(search
+      ? {
+          OR: [
+            { name: { contains: search, mode: 'insensitive' } },
+            { description: { contains: search, mode: 'insensitive' } },
+            { slug: { contains: search, mode: 'insensitive' } },
+          ],
+        }
+      : {}),
+  };
+
+  const pipelines = await prisma.pipeline.findMany({
+    where,
+    include: {
+      steps: {
+        select: { id: true },
+      },
+    },
+    orderBy: { name: 'asc' },
+    take: 200,
+  });
+
+  return pipelines.map(pipelineToUnifiedTool);
+}
+
+async function getPipelineToolById(tenantId: string, toolId: string): Promise<UnifiedTool | null> {
+  const pipeline = await prisma.pipeline.findFirst({
+    where: {
+      id: toolId,
+      tenantId,
+    },
+    include: {
+      steps: {
+        select: { id: true },
+      },
+    },
+  });
+
+  if (!pipeline) return null;
+  return pipelineToUnifiedTool(pipeline);
+}
+
+type PipelineWithStepIds = Pipeline & {
+  steps: Pick<PipelineStep, 'id'>[];
+};
+
+function pipelineToUnifiedTool(pipeline: PipelineWithStepIds): UnifiedTool {
+  return {
+    id: pipeline.id,
+    type: 'pipeline',
+    name: pipeline.name,
+    slug: pipeline.slug,
+    description: pipeline.toolDescription || pipeline.description || '',
+    inputSchema: (pipeline.inputSchema as Record<string, unknown>) ?? {},
+    stepCount: pipeline.steps.length,
+    status: pipeline.status as 'active' | 'draft' | 'disabled',
+    createdAt: pipeline.createdAt.toISOString(),
+    updatedAt: pipeline.updatedAt.toISOString(),
   };
 }

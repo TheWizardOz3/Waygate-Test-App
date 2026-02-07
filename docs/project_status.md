@@ -1,31 +1,40 @@
 # Project Status: Waygate
 
-**Last Updated:** 2026-02-05
+**Last Updated:** 2026-02-07
 
 ---
 
-## Current Milestone: V1.5 (AI Tool Factory - Agentic Tools)
+## Current Milestone: V2 (Deploy & Scale)
 
-**Goal:** Agent-embedded tools with LLM interpretation. Multi-agent pipelines with inter-step reasoning.
+**Goal:** Production deployment, background job infrastructure, bulk operations, and proactive API maintenance.
 
 ### Build Order
 
-| Order | Feature               | Status                  | Dependencies                   |
-| ----- | --------------------- | ----------------------- | ------------------------------ |
-| 1     | Composite Tools       | ✅ Complete (Tabbed UI) | Simple Tool Export (V1.1)      |
-| 2     | Agentic Tools         | ✅ Complete (Tabbed UI) | Composite Tools                |
-| 3     | Multi-Agent Pipelines | Pending                 | Composite Tools, Agentic Tools |
+| Order | Feature                   | Status  | Dependencies           |
+| ----- | ------------------------- | ------- | ---------------------- |
+| 1     | TypeScript Error Fixes    | Pending | None                   |
+| 2     | Vercel Deployment & CI/CD | Pending | TS Error Fixes         |
+| 3     | Async Job System          | Pending | Deployment             |
+| 4     | Batch Operations          | Pending | Async Job System       |
+| 5     | Schema Drift Detection    | Pending | Async Job System       |
+| 6     | Auto-Maintenance System   | Pending | Schema Drift Detection |
 
 **Feature Summaries:**
 
-- **Composite Tools:** Chain multiple actions into a single tool (sequential/parallel/conditional execution, data passing between steps)
-- **Agentic Tools:** Embed LLM reasoning inside tools (parameter interpretation, action selection, output validation, intelligent error recovery)
-- **Multi-Agent Pipelines:** Orchestrated multi-step workflows with inter-step LLM reasoning, state management, and pipeline monitoring
+- **TypeScript Error Fixes:** Resolve 33 existing TS errors across composite tools (13) and agentic tools (20) to enable clean builds
+- **Vercel Deployment & CI/CD:** Production Vercel config, GitHub Actions CI pipeline (lint, type-check, test), environment variable management, database migration strategy
+- **Async Job System:** Trigger.dev or BullMQ integration for background processing, scheduled jobs, and queue management
+- **Batch Operations:** Queue and batch high-volume write operations to avoid rate limits, with progress tracking
+- **Schema Drift Detection:** Periodic re-scraping of API docs, compare against stored schemas, alert on discrepancies
+- **Auto-Maintenance System:** Detect API changes, auto-propose integration config updates with approval workflow
 
 ### Definition of Done
 
-- Agent-embedded tools with LLM interpretation
-- Multi-agent pipelines with inter-step reasoning
+- Application deployed to Vercel with CI/CD pipeline
+- Background job system running scheduled tasks
+- Batch operations complete via job queue
+- Schema drift alerts trigger on detected API changes
+- Auto-maintenance proposes updates with approval workflow
 
 ---
 
@@ -38,20 +47,21 @@
 | **V0.75** | 2026-01-25 | Multi-tenancy: connections, hybrid auth, health checks, per-app mappings                                 |
 | **V1**    | 2026-01-28 | E2E testing, performance optimization (query deduplication, code splitting), polish                      |
 | **V1.1**  | 2026-01-31 | AI Tool Foundations: reference data sync, tool export (Universal/LangChain/MCP), variable/context system |
+| **V1.5**  | 2026-02-06 | AI Tool Factory: composite tools, agentic tools, multi-agent pipelines with inter-step reasoning         |
 
 ---
 
 ## Future Milestones
 
-### V2: Scale & Safety
+### V2.1: Environments & Versioning
 
-Async job system, batch operations, sandbox/production environments, versioning & rollbacks, schema drift detection, auto-maintenance.
+Sandbox/production environments, versioning & rollbacks.
 
-### V2.1: Self-Service & Access
+### V2.2: Self-Service & Access
 
 Full no-code UI, RBAC & team management, just-in-time auth, platform connector admin UI (manage Waygate's default OAuth apps).
 
-### V2.2: Developer Experience
+### V2.3: Developer Experience
 
 Webhook ingestion, SDK generation.
 

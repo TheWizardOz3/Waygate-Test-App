@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { GitMerge, Brain, Loader2, ArrowLeft, ArrowRight } from 'lucide-react';
+import { GitMerge, Brain, Workflow, Loader2, ArrowLeft, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -17,7 +17,7 @@ import { apiClient } from '@/lib/api/client';
 // Types
 // =============================================================================
 
-type ToolType = 'composite' | 'agentic';
+type ToolType = 'composite' | 'agentic' | 'pipeline';
 
 // =============================================================================
 // Helper Functions
@@ -78,6 +78,24 @@ export function AIToolQuickCreate() {
           routingRules: [],
         });
         router.push(`/ai-tools/${result.id}`);
+      } else if (toolType === 'pipeline') {
+        // Create pipeline with default configuration
+        const result = await apiClient.post<{ id: string }>('/pipelines', {
+          name: name.trim(),
+          slug: slug.trim(),
+          description: description.trim() || undefined,
+          inputSchema: {},
+          safetyLimits: { maxCostUsd: 5, maxDurationSeconds: 1800 },
+          reasoningConfig: {
+            provider: 'anthropic',
+            model: 'claude-sonnet-4.5',
+            temperature: 0.2,
+            maxTokens: 2000,
+          },
+          status: 'draft',
+          metadata: {},
+        });
+        router.push(`/ai-tools/${result.id}`);
       } else {
         // Create agentic tool with default configuration
         const result = await apiClient.post<{ id: string }>('/agentic-tools', {
@@ -133,7 +151,7 @@ export function AIToolQuickCreate() {
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-3">
           {/* Composite Tool Card */}
           <Card
             className={cn('cursor-pointer transition-all hover:border-primary/50 hover:shadow-md')}
@@ -185,6 +203,33 @@ export function AIToolQuickCreate() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Pipeline Tool Card */}
+          <Card
+            className={cn('cursor-pointer transition-all hover:border-blue-500/50 hover:shadow-md')}
+            onClick={() => setToolType('pipeline')}
+          >
+            <CardHeader>
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-600/10">
+                <Workflow className="h-6 w-6 text-blue-600" />
+              </div>
+              <CardTitle className="mt-4">Pipeline</CardTitle>
+              <CardDescription>
+                Build multi-step tools with sequential execution, inter-step LLM reasoning, and
+                automatic data passing between steps.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                <span className="rounded-md bg-blue-600/10 px-2 py-1 text-xs text-blue-600">
+                  Multi-step execution
+                </span>
+                <span className="rounded-md bg-blue-600/10 px-2 py-1 text-xs text-blue-600">
+                  Inter-step reasoning
+                </span>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
@@ -201,18 +246,30 @@ export function AIToolQuickCreate() {
           <div
             className={cn(
               'flex h-10 w-10 items-center justify-center rounded-lg',
-              toolType === 'composite' ? 'bg-primary/10' : 'bg-violet-600/10'
+              toolType === 'composite'
+                ? 'bg-primary/10'
+                : toolType === 'pipeline'
+                  ? 'bg-blue-600/10'
+                  : 'bg-violet-600/10'
             )}
           >
             {toolType === 'composite' ? (
               <GitMerge className="h-5 w-5 text-primary" />
+            ) : toolType === 'pipeline' ? (
+              <Workflow className="h-5 w-5 text-blue-600" />
             ) : (
               <Brain className="h-5 w-5 text-violet-600" />
             )}
           </div>
           <div>
             <h1 className="font-heading text-2xl font-bold">
-              Create {toolType === 'composite' ? 'Composite' : 'Agentic'} Tool
+              Create{' '}
+              {toolType === 'composite'
+                ? 'Composite'
+                : toolType === 'pipeline'
+                  ? 'Pipeline'
+                  : 'Agentic'}{' '}
+              Tool
             </h1>
             <p className="text-muted-foreground">Enter the basic details for your tool</p>
           </div>

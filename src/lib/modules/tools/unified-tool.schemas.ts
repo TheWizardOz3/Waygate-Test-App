@@ -13,7 +13,7 @@ import { z } from 'zod';
 /**
  * Tool type discriminator
  */
-export const ToolTypeSchema = z.enum(['simple', 'composite', 'agentic']);
+export const ToolTypeSchema = z.enum(['simple', 'composite', 'agentic', 'pipeline']);
 export type ToolType = z.infer<typeof ToolTypeSchema>;
 
 /**
@@ -83,6 +83,7 @@ export const UnifiedToolResponseSchema = z.object({
   actionSlug: z.string().optional(),
   childOperationIds: z.array(z.string().uuid()).optional(),
   executionMode: z.enum(['parameter_interpreter', 'autonomous_agent']).optional(),
+  stepCount: z.number().int().optional(),
   status: ToolStatusSchema,
   createdAt: z.string(),
   updatedAt: z.string(),

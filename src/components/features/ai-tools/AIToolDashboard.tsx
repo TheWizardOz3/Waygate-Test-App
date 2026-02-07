@@ -30,6 +30,7 @@ import {
 import { useCompositeTool, useDeleteCompositeTool } from '@/hooks/useCompositeTools';
 import { apiClient } from '@/lib/api/client';
 import { DetailsTab, ToolsActionsTab, IntelligenceTab, ExportTab } from './tabs';
+import { PipelineDashboard } from '@/components/features/pipelines';
 import type { CompositeToolDetailResponse } from '@/lib/modules/composite-tools/composite-tool.schemas';
 import type { AgenticToolResponse } from '@/lib/modules/agentic-tools/agentic-tool.schemas';
 
@@ -41,7 +42,7 @@ interface AIToolDashboardProps {
   toolId: string;
 }
 
-type ToolType = 'composite' | 'agentic';
+type ToolType = 'composite' | 'agentic' | 'pipeline';
 type TabValue = 'details' | 'tools' | 'intelligence' | 'export';
 
 // =============================================================================
@@ -87,7 +88,16 @@ export function AIToolDashboard({ toolId }: AIToolDashboardProps) {
   useEffect(() => {
     async function detectToolType() {
       try {
-        // Try fetching as agentic tool first
+        // Try fetching as pipeline first
+        const pipelineResult = await apiClient.get(`/pipelines/${toolId}`).catch(() => null);
+
+        if (pipelineResult) {
+          setToolType('pipeline');
+          setIsLoading(false);
+          return;
+        }
+
+        // Try fetching as agentic tool
         // Note: apiClient.get already extracts the 'data' field from the API response
         const agenticResult = await apiClient
           .get<AgenticToolResponse>(`/agentic-tools/${toolId}`)
@@ -166,6 +176,11 @@ export function AIToolDashboard({ toolId }: AIToolDashboardProps) {
         <AlertDescription>{error}</AlertDescription>
       </Alert>
     );
+  }
+
+  // Pipeline tools use their own dashboard
+  if (toolType === 'pipeline') {
+    return <PipelineDashboard pipelineId={toolId} />;
   }
 
   // Get the tool data
