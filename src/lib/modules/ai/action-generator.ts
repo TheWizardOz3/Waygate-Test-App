@@ -158,6 +158,8 @@ export interface ActionMetadata {
   rateLimit?: { requests: number; window: number };
   /** Source documentation URL */
   sourceUrl?: string;
+  /** Specific documentation page URLs for targeted re-scraping */
+  sourceUrls?: string[];
   /** Wishlist match score (1 = matched, 0 = not matched) */
   wishlistScore?: number;
 }
@@ -267,12 +269,16 @@ export function generateActions(
     // Calculate wishlist match score
     const wishlistScore = calculateWishlistScore(endpoint, normalizedWishlist);
 
+    // Build sourceUrls for targeted re-scraping: combine sourceUrl option with parsed doc metadata
+    const actionSourceUrls = buildSourceUrls(sourceUrl, parsedDoc.metadata?.sourceUrls);
+
     // Generate the action definition
     const action = generateActionDefinition(endpoint, {
       slug,
       baseUrl: parsedDoc.baseUrl,
       rateLimits: parsedDoc.rateLimits,
       sourceUrl,
+      sourceUrls: actionSourceUrls,
       aiConfidence,
       defaultCacheTtl,
       wishlistScore,
@@ -322,6 +328,7 @@ interface ActionGenerationContext {
   baseUrl: string;
   rateLimits?: RateLimitsConfig;
   sourceUrl?: string;
+  sourceUrls?: string[];
   aiConfidence?: number;
   defaultCacheTtl: number;
   wishlistScore: number;
@@ -331,8 +338,16 @@ function generateActionDefinition(
   endpoint: ApiEndpoint,
   context: ActionGenerationContext
 ): ActionDefinition {
-  const { slug, baseUrl, rateLimits, sourceUrl, aiConfidence, defaultCacheTtl, wishlistScore } =
-    context;
+  const {
+    slug,
+    baseUrl,
+    rateLimits,
+    sourceUrl,
+    sourceUrls,
+    aiConfidence,
+    defaultCacheTtl,
+    wishlistScore,
+  } = context;
 
   // Build endpoint template (baseUrl + path with {param} placeholders)
   const endpointTemplate = buildEndpointTemplate(baseUrl, endpoint.path);
@@ -399,6 +414,7 @@ function generateActionDefinition(
       aiConfidence,
       rateLimit: endpointRateLimit,
       sourceUrl,
+      sourceUrls: sourceUrls && sourceUrls.length > 0 ? sourceUrls : undefined,
       wishlistScore: wishlistScore > 0 ? wishlistScore : undefined,
     },
   };
@@ -992,6 +1008,24 @@ function calculateWishlistScore(endpoint: ApiEndpoint, normalizedWishlist: strin
 // =============================================================================
 // Utility Functions
 // =============================================================================
+
+/**
+ * Build deduplicated sourceUrls array from the sourceUrl option and parsed doc metadata.
+ * These URLs enable targeted re-scraping for auto-maintenance.
+ */
+function buildSourceUrls(
+  sourceUrl: string | undefined,
+  metadataSourceUrls: string[] | undefined
+): string[] | undefined {
+  const urls = new Set<string>();
+  if (sourceUrl) urls.add(sourceUrl);
+  if (metadataSourceUrls) {
+    for (const url of metadataSourceUrls) {
+      urls.add(url);
+    }
+  }
+  return urls.size > 0 ? Array.from(urls) : undefined;
+}
 
 /**
  * Convert auth methods from ParsedApiDoc to action-compatible format

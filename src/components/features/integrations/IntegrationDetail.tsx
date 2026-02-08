@@ -14,6 +14,7 @@ import {
   Database,
   Sparkles,
   ShieldAlert,
+  Wrench,
 } from 'lucide-react';
 import { useIntegration, useConnections } from '@/hooks';
 import { IntegrationHeader } from './IntegrationHeader';
@@ -26,6 +27,8 @@ import { IntegrationAIToolsTab } from './IntegrationAIToolsTab';
 import { ConnectionList, ConnectionSelector } from '@/components/features/connections';
 import { DriftReportsList } from '@/components/features/schema-drift/DriftReportsList';
 import { DriftBadge } from '@/components/features/schema-drift/DriftBadge';
+import { MaintenanceTab } from '@/components/features/auto-maintenance/MaintenanceTab';
+import { MaintenanceBadge } from '@/components/features/auto-maintenance/MaintenanceBadge';
 
 interface IntegrationDetailProps {
   integrationId: string;
@@ -154,6 +157,14 @@ export function IntegrationDetail({ integrationId }: IntegrationDetailProps) {
             <DriftBadge integrationId={integrationId} className="ml-1" />
           </TabsTrigger>
           <TabsTrigger
+            value="maintenance"
+            className="relative gap-2 rounded-none border-b-2 border-transparent px-4 pb-3 pt-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+          >
+            <Wrench className="h-4 w-4" />
+            Maintenance
+            <MaintenanceBadge integrationId={integrationId} className="ml-1" />
+          </TabsTrigger>
+          <TabsTrigger
             value="connections"
             className="relative gap-2 rounded-none border-b-2 border-transparent px-4 pb-3 pt-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
           >
@@ -199,6 +210,10 @@ export function IntegrationDetail({ integrationId }: IntegrationDetailProps) {
 
         <TabsContent value="schema-drift" className="mt-6 space-y-4">
           <DriftReportsList integrationId={integrationId} />
+        </TabsContent>
+
+        <TabsContent value="maintenance" className="mt-6 space-y-4">
+          <MaintenanceTab integrationId={integrationId} />
         </TabsContent>
 
         <TabsContent value="connections" className="mt-6 space-y-4">

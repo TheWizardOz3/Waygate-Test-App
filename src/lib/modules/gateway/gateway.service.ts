@@ -77,6 +77,7 @@ import {
   type MappingResult,
   type FullMappingResult,
 } from '../execution/mapping/server';
+import { driftRepository } from '../execution/validation/drift/drift.repository';
 import { applyPreamble, type PreambleResult } from '../execution/preamble';
 import { resolveConnection } from '../connections';
 import {
@@ -271,6 +272,10 @@ export async function invokeAction(
     if (!options.skipValidation) {
       const validationResult = validateInput(action, mappedInput);
       if (!validationResult.valid) {
+        // Record input validation failures for drift detection (non-blocking)
+        recordInputValidationFailures(action.id, tenantId, validationResult).catch((err) => {
+          console.error('[GATEWAY] Failed to record input validation failures:', err);
+        });
         throw createValidationError(validationResult);
       }
     }
@@ -640,6 +645,63 @@ function validateInput(action: Action, input: Record<string, unknown>): Validati
   }
 
   return validateActionInput(inputSchema, input);
+}
+
+/**
+ * Record input validation failures for drift detection.
+ * Maps Ajv validation errors to drift repository format.
+ * Non-blocking — failures are recorded best-effort.
+ */
+async function recordInputValidationFailures(
+  actionId: string,
+  tenantId: string,
+  result: ValidationResult
+): Promise<void> {
+  const errors = result.errors || [];
+  if (errors.length === 0) return;
+
+  await Promise.all(
+    errors.map(async (error) => {
+      try {
+        const issueCode = mapConstraintToIssueCode(error.constraint?.type);
+        if (!issueCode) return;
+
+        await driftRepository.recordFailure({
+          actionId,
+          tenantId,
+          direction: 'input',
+          issueCode,
+          fieldPath: error.path || '/',
+          expectedType:
+            error.constraint?.expected != null ? String(error.constraint.expected) : undefined,
+          receivedType:
+            error.constraint?.received != null ? String(error.constraint.received) : undefined,
+        });
+      } catch (err) {
+        console.error('[GATEWAY] Failed to record input validation failure:', err);
+      }
+    })
+  );
+}
+
+/**
+ * Map Ajv constraint types to ValidationIssueCode values
+ */
+function mapConstraintToIssueCode(
+  constraintType: string | undefined
+): 'MISSING_REQUIRED_FIELD' | 'TYPE_MISMATCH' | 'INVALID_ENUM_VALUE' | 'INVALID_FORMAT' | null {
+  switch (constraintType) {
+    case 'required':
+      return 'MISSING_REQUIRED_FIELD';
+    case 'type':
+      return 'TYPE_MISMATCH';
+    case 'enum':
+      return 'INVALID_ENUM_VALUE';
+    case 'format':
+      return 'INVALID_FORMAT';
+    default:
+      return null;
+  }
 }
 
 /**

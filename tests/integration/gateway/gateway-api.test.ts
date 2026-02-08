@@ -66,6 +66,7 @@ const mockIntegration = {
   metadata: {},
   healthCheckConfig: {},
   driftConfig: null,
+  maintenanceConfig: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 };

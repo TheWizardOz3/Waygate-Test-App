@@ -36,6 +36,7 @@ export interface AnalyzeIntegrationResult {
 interface FailurePattern {
   actionId: string;
   integrationId: string;
+  direction: string;
   issueCode: string;
   fieldPath: string;
   failureCount: number;
@@ -48,45 +49,65 @@ interface FailurePattern {
 // =============================================================================
 
 /**
- * Classify severity from a ValidationFailure issue code.
+ * Classify severity from a ValidationFailure issue code and direction.
+ * Input drift is always at least 'breaking' for missing_required_field and type_mismatch,
+ * since these cause invocation failures.
  * Falls back to DEFAULT_DRIFT_SEVERITY for unknown codes.
  */
-export function classifySeverity(issueCode: string): DriftSeverity {
+export function classifySeverity(issueCode: string, direction: string = 'output'): DriftSeverity {
+  if (direction === 'input') {
+    // Input failures are inherently breaking — they cause invocation errors
+    if (issueCode === 'missing_required_field' || issueCode === 'type_mismatch') {
+      return 'breaking';
+    }
+  }
   return ISSUE_CODE_SEVERITY_MAP[issueCode] ?? DEFAULT_DRIFT_SEVERITY;
 }
 
 /**
  * Build a stable fingerprint for deduplication.
- * Hash of actionId + issueCode + fieldPath ensures no duplicate reports
- * for the same drift pattern on the same action.
+ * Hash of actionId + direction + issueCode + fieldPath ensures no duplicate reports
+ * for the same drift pattern on the same action and direction.
  */
-export function buildFingerprint(actionId: string, issueCode: string, fieldPath: string): string {
-  const input = `${actionId}:${issueCode}:${fieldPath}`;
+export function buildFingerprint(
+  actionId: string,
+  issueCode: string,
+  fieldPath: string,
+  direction: string = 'output'
+): string {
+  const input = `${actionId}:${direction}:${issueCode}:${fieldPath}`;
   return createHash('sha256').update(input).digest('hex').slice(0, 64);
 }
 
 /**
  * Build a human-readable description of the drift pattern.
+ * Includes direction context for input vs output drift.
  */
 export function buildDescription(
   issueCode: string,
   fieldPath: string,
   expectedType: string | null,
-  currentType: string | null
+  currentType: string | null,
+  direction: string = 'output'
 ): string {
+  const isInput = direction === 'input';
+  const context = isInput ? 'request input' : 'API response';
+
   switch (issueCode) {
     case 'type_mismatch':
-      return `Field '${fieldPath}' type changed from ${expectedType ?? 'unknown'} to ${currentType ?? 'unknown'}`;
+      return `${isInput ? '[Input] ' : ''}Field '${fieldPath}' type changed from ${expectedType ?? 'unknown'} to ${currentType ?? 'unknown'}`;
     case 'missing_required_field':
-      return `Required field '${fieldPath}' is no longer present in API response`;
+      return isInput
+        ? `[Input] New required parameter '${fieldPath}' is now expected by the API`
+        : `Required field '${fieldPath}' is no longer present in API response`;
     case 'unexpected_field':
-      return `New field '${fieldPath}' appeared in API response (type: ${currentType ?? 'unknown'})`;
+      return `New field '${fieldPath}' appeared in ${context} (type: ${currentType ?? 'unknown'})`;
     case 'invalid_enum_value':
-      return `Enum value for '${fieldPath}' changed — expected ${expectedType ?? 'known values'}, received ${currentType ?? 'unknown'}`;
+      return `${isInput ? '[Input] ' : ''}Enum value for '${fieldPath}' changed — expected ${expectedType ?? 'known values'}, received ${currentType ?? 'unknown'}`;
     case 'schema_validation_error':
-      return `Schema validation failed for field '${fieldPath}'`;
+      return `${isInput ? '[Input] ' : ''}Schema validation failed for field '${fieldPath}'`;
     default:
-      return `Validation issue '${issueCode}' detected on field '${fieldPath}'`;
+      return `${isInput ? '[Input] ' : ''}Validation issue '${issueCode}' detected on field '${fieldPath}'`;
   }
 }
 
@@ -156,13 +177,19 @@ export async function analyzeIntegration(
   let reportsUpdated = 0;
 
   for (const pattern of failurePatterns) {
-    const fingerprint = buildFingerprint(pattern.actionId, pattern.issueCode, pattern.fieldPath);
-    const severity = classifySeverity(pattern.issueCode);
+    const fingerprint = buildFingerprint(
+      pattern.actionId,
+      pattern.issueCode,
+      pattern.fieldPath,
+      pattern.direction
+    );
+    const severity = classifySeverity(pattern.issueCode, pattern.direction);
     const description = buildDescription(
       pattern.issueCode,
       pattern.fieldPath,
       pattern.expectedType,
-      pattern.receivedType
+      pattern.receivedType,
+      pattern.direction
     );
 
     const wasCreated = await upsertDriftReport({
@@ -230,11 +257,12 @@ async function queryFailurePatterns(
     whereClause.fieldPath = { notIn: ignoreFieldPaths };
   }
 
-  // Query failures that meet the threshold
+  // Query failures that meet the threshold (both input and output directions)
   const failures = await prisma.validationFailure.findMany({
     where: whereClause,
     select: {
       actionId: true,
+      direction: true,
       issueCode: true,
       fieldPath: true,
       failureCount: true,
@@ -246,6 +274,7 @@ async function queryFailurePatterns(
   return failures.map((f) => ({
     actionId: f.actionId,
     integrationId,
+    direction: f.direction,
     issueCode: f.issueCode,
     fieldPath: f.fieldPath,
     failureCount: f.failureCount,

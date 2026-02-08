@@ -9,13 +9,16 @@
  * 1. Queries all integrations (drift is enabled by default)
  * 2. Calls analyzeIntegration() for each
  * 3. Tracks totals and updates progress
- * 4. Returns summary as job output
+ * 4. If new drift reports were created, enqueues an auto_maintenance job
+ * 5. Returns summary as job output
  */
 
 import type { Prisma } from '@prisma/client';
 
 import prisma from '@/lib/db/client';
 import type { JobHandlerContext } from '@/lib/modules/jobs/jobs.handlers';
+
+import { jobQueue } from '@/lib/modules/jobs/jobs.queue';
 
 import { analyzeIntegration } from '../passive-drift-analyzer';
 
@@ -93,6 +96,31 @@ export async function driftPassiveAnalysisHandler(
     });
   }
 
+  // Enqueue auto-maintenance job if new drift reports were created
+  let maintenanceJobEnqueued = false;
+  if (totalReportsCreated > 0) {
+    try {
+      // Check if an auto_maintenance job is already queued or running
+      const existingJob = await prisma.asyncJob.findFirst({
+        where: {
+          type: 'auto_maintenance',
+          status: { in: ['queued', 'running'] },
+        },
+        select: { id: true },
+      });
+
+      if (!existingJob) {
+        await jobQueue.enqueue({
+          type: 'auto_maintenance',
+          input: { triggerSource: 'drift_analyzer' },
+        });
+        maintenanceJobEnqueued = true;
+      }
+    } catch (error) {
+      console.error('[DRIFT_PASSIVE] Error enqueuing auto_maintenance job:', error);
+    }
+  }
+
   await updateProgress(100, { stage: 'completed' });
 
   const summary: Record<string, unknown> = {
@@ -100,6 +128,7 @@ export async function driftPassiveAnalysisHandler(
     totalIntegrations,
     reportsCreated: totalReportsCreated,
     reportsUpdated: totalReportsUpdated,
+    maintenanceJobEnqueued,
   };
 
   if (errors.length > 0) {

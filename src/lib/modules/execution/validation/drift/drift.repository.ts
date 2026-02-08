@@ -15,6 +15,7 @@ import type { ValidationIssueCode } from '../validation.schemas';
 export interface RecordFailureParams {
   actionId: string;
   tenantId: string;
+  direction?: 'input' | 'output';
   issueCode: ValidationIssueCode;
   fieldPath: string;
   expectedType?: string;
@@ -48,13 +49,22 @@ export const driftRepository = {
    * Record a validation failure (upsert - increment count if exists)
    */
   async recordFailure(params: RecordFailureParams): Promise<ValidationFailure> {
-    const { actionId, tenantId, issueCode, fieldPath, expectedType, receivedType } = params;
+    const {
+      actionId,
+      tenantId,
+      direction = 'output',
+      issueCode,
+      fieldPath,
+      expectedType,
+      receivedType,
+    } = params;
 
     // Upsert: create or update existing failure record
     return prisma.validationFailure.upsert({
       where: {
         validation_failures_unique_idx: {
           actionId,
+          direction,
           issueCode,
           fieldPath,
         },
@@ -62,6 +72,7 @@ export const driftRepository = {
       create: {
         actionId,
         tenantId,
+        direction,
         issueCode,
         fieldPath,
         expectedType,

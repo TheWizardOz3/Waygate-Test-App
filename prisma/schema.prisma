@@ -286,6 +286,7 @@ model Tenant {
   pipelineExecutions     PipelineExecution[]
   asyncJobs              AsyncJob[]
   driftReports           DriftReport[]
+  maintenanceProposals   MaintenanceProposal[]
 
   @@map("tenants")
 }
@@ -314,15 +315,20 @@ model Integration {
   // { enabled: boolean, sensitivity: "low" | "medium" | "high", ignoreFieldPaths: string[] }
   driftConfig Json? @map("drift_config")
 
+  // Auto-maintenance configuration
+  // { enabled: boolean, autoApproveInfoLevel: boolean, rescrapeOnBreaking: boolean }
+  maintenanceConfig Json? @map("maintenance_config")
+
   // Relations
-  tenant            Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  actions           Action[]
-  credentials       IntegrationCredential[]
-  connections       Connection[]
-  requestLogs       RequestLog[]
-  referenceData     ReferenceData[]
-  referenceSyncJobs ReferenceSyncJob[]
-  driftReports      DriftReport[]
+  tenant                Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actions               Action[]
+  credentials           IntegrationCredential[]
+  connections           Connection[]
+  requestLogs           RequestLog[]
+  referenceData         ReferenceData[]
+  referenceSyncJobs     ReferenceSyncJob[]
+  driftReports          DriftReport[]
+  maintenanceProposals  MaintenanceProposal[]
 
   // Indexes
   @@unique([tenantId, slug], name: "integrations_tenant_slug_idx")
@@ -450,6 +456,7 @@ model Action {
   referenceDataSyncedBy    ReferenceData[]
   compositeToolOperations  CompositeToolOperation[]
   driftReports             DriftReport[]
+  maintenanceProposals     MaintenanceProposal[]
 
   // Indexes
   @@unique([integrationId, slug], name: "actions_integration_slug_idx")
@@ -572,11 +579,12 @@ model ScrapeJob {
   @@map("scrape_jobs")
 }
 
-/// Tracks validation failures for schema drift detection
+/// Tracks validation failures for schema drift detection (input + output)
 model ValidationFailure {
   id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   actionId         String    @map("action_id") @db.Uuid
   tenantId         String    @map("tenant_id") @db.Uuid
+  direction        String    @default("output") @map("direction") @db.VarChar(10)
   issueCode        String    @map("issue_code") @db.VarChar(50)
   fieldPath        String    @map("field_path") @db.VarChar(255)
   expectedType     String?   @map("expected_type") @db.VarChar(50)
@@ -592,10 +600,11 @@ model ValidationFailure {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   // Indexes
-  @@unique([actionId, issueCode, fieldPath], name: "validation_failures_unique_idx")
+  @@unique([actionId, direction, issueCode, fieldPath], name: "validation_failures_unique_idx")
   @@index([actionId], name: "validation_failures_action_idx")
   @@index([tenantId], name: "validation_failures_tenant_idx")
   @@index([lastSeenAt], name: "validation_failures_last_seen_idx")
+  @@index([actionId, direction, issueCode, fieldPath], name: "validation_failures_direction_idx")
   @@map("validation_failures")
 }
 
@@ -1123,4 +1132,63 @@ model DriftReport {
   @@index([tenantId, status], name: "drift_reports_tenant_status_idx")
   @@index([actionId], name: "drift_reports_action_idx")
   @@map("drift_reports")
+}
+
+// =============================================================================
+// AUTO-MAINTENANCE MODELS
+// =============================================================================
+
+/// Proposed schema updates generated from drift reports, with approval workflow and revert support
+model MaintenanceProposal {
+  id              String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  integrationId   String  @map("integration_id") @db.Uuid
+  tenantId        String  @map("tenant_id") @db.Uuid
+  actionId        String  @map("action_id") @db.Uuid
+
+  // Status lifecycle: pending → approved/rejected/expired/reverted
+  status   String @default("pending") @db.VarChar(20) // pending, approved, rejected, expired, reverted
+  severity String @db.VarChar(20) // breaking, warning, info — highest severity of included drift reports
+
+  // Schema snapshots for revert support
+  currentInputSchema  Json @map("current_input_schema")  // Snapshot of action's inputSchema at proposal time
+  currentOutputSchema Json @map("current_output_schema") // Snapshot of action's outputSchema at proposal time
+
+  // Proposed schema updates (null if no changes for that direction)
+  proposedInputSchema  Json? @map("proposed_input_schema")
+  proposedOutputSchema Json? @map("proposed_output_schema")
+
+  // Change details
+  changes   Json   // Array of { direction, fieldPath, changeType, description, driftReportId, beforeValue?, afterValue? }
+  reasoning String @db.Text // Human-readable explanation of why these changes are proposed
+  source    String @db.VarChar(20) // "inference" | "rescrape" — how the proposal was generated
+
+  // Related drift reports
+  driftReportIds String[] @map("drift_report_ids") // IDs of drift reports this proposal addresses
+
+  // Affected tools snapshot (for UI display)
+  affectedTools Json? @map("affected_tools") // Array of { toolType, toolId, toolName }
+
+  // Description update suggestions (populated on approval)
+  descriptionSuggestions Json? @map("description_suggestions") // Array of { toolType, toolId, toolName, currentDescription, suggestedDescription, status }
+
+  // Lifecycle timestamps
+  approvedAt DateTime? @map("approved_at")
+  rejectedAt DateTime? @map("rejected_at")
+  expiredAt  DateTime? @map("expired_at")
+  revertedAt DateTime? @map("reverted_at")
+  appliedAt  DateTime? @map("applied_at") // When schema was actually updated
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  integration Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  action      Action      @relation(fields: [actionId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([integrationId, status], name: "maintenance_proposals_integration_status_idx")
+  @@index([tenantId, status], name: "maintenance_proposals_tenant_status_idx")
+  @@index([actionId, status], name: "maintenance_proposals_action_status_idx")
+  @@map("maintenance_proposals")
 }

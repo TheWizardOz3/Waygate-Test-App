@@ -131,7 +131,7 @@ describe('generateBatchVariant', () => {
   it('should handle malformed batchConfig gracefully', () => {
     const result = generateBatchVariant(baseTool, {
       batchEnabled: true,
-      batchConfig: 'not-an-object' as unknown,
+      batchConfig: 'not-an-object',
     });
 
     // Should fall back to defaults without crashing

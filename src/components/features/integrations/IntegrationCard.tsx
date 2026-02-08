@@ -26,6 +26,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { IntegrationHealthBadge } from './IntegrationStatusBadge';
 import { DriftBadge } from '@/components/features/schema-drift/DriftBadge';
+import { MaintenanceBadge } from '@/components/features/auto-maintenance/MaintenanceBadge';
 import { TagList } from '@/components/ui/tag-badge';
 import { cn } from '@/lib/utils';
 import type { IntegrationSummary } from '@/lib/modules/integrations/integration.schemas';
@@ -108,6 +109,7 @@ export function IntegrationCard({
           )}
           <div className="flex shrink-0 items-center gap-1.5">
             <DriftBadge integrationId={id} />
+            <MaintenanceBadge integrationId={id} />
             {aiToolCount !== undefined && aiToolCount > 0 && (
               <Tooltip>
                 <TooltipTrigger asChild>
