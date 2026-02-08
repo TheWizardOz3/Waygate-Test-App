@@ -238,6 +238,21 @@ enum StepExecutionStatus {
   skipped
 }
 
+/// Severity level of a drift report
+enum DriftSeverity {
+  info
+  warning
+  breaking
+}
+
+/// Status lifecycle of a drift report
+enum DriftReportStatus {
+  detected
+  acknowledged
+  resolved
+  dismissed
+}
+
 // =============================================================================
 // MODELS
 // =============================================================================
@@ -270,6 +285,7 @@ model Tenant {
   pipelines              Pipeline[]
   pipelineExecutions     PipelineExecution[]
   asyncJobs              AsyncJob[]
+  driftReports           DriftReport[]
 
   @@map("tenants")
 }
@@ -294,6 +310,10 @@ model Integration {
   // { enabled: boolean, credentialCheckMinutes: number, connectivityCheckHours: number, fullScanEnabled: boolean, testActionId: string? }
   healthCheckConfig Json @default("{\"enabled\": true, \"credentialCheckMinutes\": 15, \"connectivityCheckHours\": 12, \"fullScanEnabled\": false}") @map("health_check_config")
 
+  // Schema drift detection configuration
+  // { enabled: boolean, sensitivity: "low" | "medium" | "high", ignoreFieldPaths: string[] }
+  driftConfig Json? @map("drift_config")
+
   // Relations
   tenant            Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   actions           Action[]
@@ -302,6 +322,7 @@ model Integration {
   requestLogs       RequestLog[]
   referenceData     ReferenceData[]
   referenceSyncJobs ReferenceSyncJob[]
+  driftReports      DriftReport[]
 
   // Indexes
   @@unique([tenantId, slug], name: "integrations_tenant_slug_idx")
@@ -428,6 +449,7 @@ model Action {
   healthChecksAsTestAction HealthCheck[]            @relation("HealthCheckTestAction")
   referenceDataSyncedBy    ReferenceData[]
   compositeToolOperations  CompositeToolOperation[]
+  driftReports             DriftReport[]
 
   // Indexes
   @@unique([integrationId, slug], name: "actions_integration_slug_idx")
@@ -1061,4 +1083,44 @@ model AsyncJobItem {
   // Indexes
   @@index([jobId, status], map: "async_job_items_job_status_idx")
   @@map("async_job_items")
+}
+
+// =============================================================================
+// SCHEMA DRIFT DETECTION MODELS
+// =============================================================================
+
+/// Structured drift reports created from aggregated ValidationFailure patterns
+model DriftReport {
+  id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  integrationId  String            @map("integration_id") @db.Uuid
+  tenantId       String            @map("tenant_id") @db.Uuid
+  actionId       String            @map("action_id") @db.Uuid
+  fingerprint    String            @db.VarChar(255) // Dedup key: hash of actionId + issueCode + fieldPath
+  issueCode      String            @map("issue_code") @db.VarChar(50) // From ValidationFailure
+  severity       DriftSeverity     // info, warning, breaking
+  status         DriftReportStatus @default(detected) // detected, acknowledged, resolved, dismissed
+  fieldPath      String            @map("field_path") @db.VarChar(255) // JSON path to affected field
+  expectedType   String?           @map("expected_type") @db.VarChar(50) // What the schema says
+  currentType    String?           @map("current_type") @db.VarChar(50) // What the API actually returns
+  description    String            @db.Text // Human-readable: "Field 'user.email' type changed from string to null"
+  failureCount   Int               @map("failure_count") // Total failures observed for this pattern
+  scanCount      Int               @default(1) @map("scan_count") // How many analysis runs have seen this
+  firstDetectedAt DateTime         @default(now()) @map("first_detected_at")
+  lastDetectedAt  DateTime         @default(now()) @map("last_detected_at")
+  acknowledgedAt  DateTime?        @map("acknowledged_at")
+  resolvedAt      DateTime?        @map("resolved_at")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  integration Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  action      Action      @relation(fields: [actionId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@unique([integrationId, fingerprint], name: "drift_reports_integration_fingerprint_idx")
+  @@index([integrationId, severity, status], name: "drift_reports_integration_severity_status_idx")
+  @@index([tenantId, status], name: "drift_reports_tenant_status_idx")
+  @@index([actionId], name: "drift_reports_action_idx")
+  @@map("drift_reports")
 }

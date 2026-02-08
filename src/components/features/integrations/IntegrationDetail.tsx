@@ -13,6 +13,7 @@ import {
   GitBranch,
   Database,
   Sparkles,
+  ShieldAlert,
 } from 'lucide-react';
 import { useIntegration, useConnections } from '@/hooks';
 import { IntegrationHeader } from './IntegrationHeader';
@@ -23,6 +24,8 @@ import { IntegrationFieldMappingsTab } from './IntegrationFieldMappingsTab';
 import { IntegrationReferenceDataTab } from './IntegrationReferenceDataTab';
 import { IntegrationAIToolsTab } from './IntegrationAIToolsTab';
 import { ConnectionList, ConnectionSelector } from '@/components/features/connections';
+import { DriftReportsList } from '@/components/features/schema-drift/DriftReportsList';
+import { DriftBadge } from '@/components/features/schema-drift/DriftBadge';
 
 interface IntegrationDetailProps {
   integrationId: string;
@@ -143,6 +146,14 @@ export function IntegrationDetail({ integrationId }: IntegrationDetailProps) {
             Reference Data
           </TabsTrigger>
           <TabsTrigger
+            value="schema-drift"
+            className="relative gap-2 rounded-none border-b-2 border-transparent px-4 pb-3 pt-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+          >
+            <ShieldAlert className="h-4 w-4" />
+            Schema Drift
+            <DriftBadge integrationId={integrationId} className="ml-1" />
+          </TabsTrigger>
+          <TabsTrigger
             value="connections"
             className="relative gap-2 rounded-none border-b-2 border-transparent px-4 pb-3 pt-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
           >
@@ -184,6 +195,10 @@ export function IntegrationDetail({ integrationId }: IntegrationDetailProps) {
             integrationId={integrationId}
             connectionId={selectedConnectionId}
           />
+        </TabsContent>
+
+        <TabsContent value="schema-drift" className="mt-6 space-y-4">
+          <DriftReportsList integrationId={integrationId} />
         </TabsContent>
 
         <TabsContent value="connections" className="mt-6 space-y-4">

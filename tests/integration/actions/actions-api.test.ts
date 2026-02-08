@@ -81,6 +81,7 @@ const mockIntegration = {
   tags: [],
   metadata: { baseUrl: 'https://api.slack.com' },
   healthCheckConfig: {},
+  driftConfig: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 };

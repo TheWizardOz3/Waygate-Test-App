@@ -161,3 +161,13 @@ export {
   batchKeys,
   type SubmitBatchInput,
 } from './useBatchOperations';
+
+// Schema drift hooks
+export {
+  useDriftSummary,
+  useDriftReports,
+  useDriftReport,
+  useUpdateDriftReportStatus,
+  schemaDriftKeys,
+  type DriftReportsFilters,
+} from './useSchemaDrift';

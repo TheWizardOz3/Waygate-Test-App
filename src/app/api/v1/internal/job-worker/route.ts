@@ -14,8 +14,9 @@ import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api/response';
 import { runWorkerCycle } from '@/lib/modules/jobs';
 
-// Side-effect import: registers batch_operation handler
+// Side-effect imports: register job handlers
 import '@/lib/modules/batch-operations';
+import '@/lib/modules/schema-drift';
 
 // =============================================================================
 // CONFIGURATION

@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { IntegrationHealthBadge } from './IntegrationStatusBadge';
+import { DriftBadge } from '@/components/features/schema-drift/DriftBadge';
 import { TagList } from '@/components/ui/tag-badge';
 import { cn } from '@/lib/utils';
 import type { IntegrationSummary } from '@/lib/modules/integrations/integration.schemas';
@@ -105,24 +106,27 @@ export function IntegrationCard({
           {integration.tags.length > 0 && (
             <TagList tags={integration.tags} size="sm" maxVisible={3} />
           )}
-          {aiToolCount !== undefined && aiToolCount > 0 && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Badge
-                  variant="secondary"
-                  className="shrink-0 gap-1 bg-violet-500/10 text-violet-600 hover:bg-violet-500/20 dark:text-violet-400"
-                >
-                  <Wand2 className="h-3 w-3" />
-                  {aiToolCount}
-                </Badge>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>
-                  Used in {aiToolCount} composite tool{aiToolCount > 1 ? 's' : ''}
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          )}
+          <div className="flex shrink-0 items-center gap-1.5">
+            <DriftBadge integrationId={id} />
+            {aiToolCount !== undefined && aiToolCount > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    variant="secondary"
+                    className="shrink-0 gap-1 bg-violet-500/10 text-violet-600 hover:bg-violet-500/20 dark:text-violet-400"
+                  >
+                    <Wand2 className="h-3 w-3" />
+                    {aiToolCount}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>
+                    Used in {aiToolCount} composite tool{aiToolCount > 1 ? 's' : ''}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
         </div>
 
         {/* More Menu - absolute positioned */}

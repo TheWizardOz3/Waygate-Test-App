@@ -48,6 +48,7 @@ import { TagFilter } from './TagFilter';
 import { TagList } from '@/components/ui/tag-badge';
 import { useIntegrations, useDeleteIntegration, useTags } from '@/hooks';
 import { useCompositeToolCounts } from '@/hooks/useCompositeTools';
+import { DriftBadge } from '@/components/features/schema-drift/DriftBadge';
 import { cn } from '@/lib/utils';
 import type {
   IntegrationStatus,
@@ -299,6 +300,7 @@ function IntegrationTable({ integrations, onDelete, aiToolCounts = {} }: Integra
             <TableHead>Slug</TableHead>
             <TableHead>Tags</TableHead>
             <TableHead>AI Tools</TableHead>
+            <TableHead>Drift</TableHead>
             <TableHead>Health</TableHead>
             <TableHead className="w-[40px]"></TableHead>
           </TableRow>
@@ -342,6 +344,9 @@ function IntegrationTable({ integrations, onDelete, aiToolCounts = {} }: Integra
                 ) : (
                   <span className="text-sm text-muted-foreground">-</span>
                 )}
+              </TableCell>
+              <TableCell>
+                <DriftBadge integrationId={integration.id} />
               </TableCell>
               <TableCell>
                 <IntegrationHealthBadge
@@ -407,6 +412,7 @@ function IntegrationTableSkeleton() {
             <TableHead>Slug</TableHead>
             <TableHead>Tags</TableHead>
             <TableHead>AI Tools</TableHead>
+            <TableHead>Drift</TableHead>
             <TableHead>Health</TableHead>
             <TableHead className="w-[40px]"></TableHead>
           </TableRow>
@@ -431,6 +437,9 @@ function IntegrationTableSkeleton() {
               </TableCell>
               <TableCell>
                 <Skeleton className="h-5 w-10 rounded-md" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-5 w-12 rounded-full" />
               </TableCell>
               <TableCell>
                 <Skeleton className="h-5 w-16 rounded-full" />

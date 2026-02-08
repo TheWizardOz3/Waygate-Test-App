@@ -18,6 +18,10 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/v1/internal/drift-analyzer",
+      "schedule": "0 */6 * * *"
+    },
+    {
       "path": "/api/v1/internal/job-worker",
       "schedule": "* * * * *"
     }
