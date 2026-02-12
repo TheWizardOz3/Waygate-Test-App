@@ -19,12 +19,14 @@
 
 ### Improved
 
+- **Unified Filter Dropdowns**: Standardized all list page filter dropdowns across Integrations and AI Tools pages. Multi-select filters (auth type, tags, tool type, integration) now use a consistent Popover + Command pattern with embedded search and checkboxes. Single-select filters (status) use consistent Select styling. Added "Clear" button to reset all active filters at once. Default view is now "show all" with no pre-selected filters.
 - **Agentic Intelligence Tab UX**: Reorganized layout with LLM Configuration moved inside System Prompt card for better visual grouping. Removed confusing `{{user_input}}` system variable since users should define their own input arguments. Toast notifications now provide clear feedback when loading sub-tool parameters.
 - **Agentic Tools (Parameter Interpreter Mode)**: Create AI tools with embedded LLMs that translate natural language into precise API parameters. Configure Claude or Gemini models with custom system prompts, inject integration schemas and reference data as context, and set safety limits (cost, timeout, tool calls). Tools execute single LLM calls to generate validated parameters, then invoke target actions. Includes wizard UI, comprehensive test suite (187 tests), and full CRUD API.
 - **Composite Tools Test Suite**: Comprehensive unit test coverage for composite tools feature (146 tests). Tests cover routing rule evaluation, schema merging, parameter mapping, and Zod schema validation. All tests pass successfully.
 
 ### Fixed
 
+- **Orphaned AI Tool References After Integration Deletion**: Agentic tools that reference actions from a deleted integration now show a warning banner ("Invalid action references") on the tool detail page and a destructive badge in the AI tools list. The unified tools API validates action references and returns `hasInvalidActions` so the UI can flag broken tools. Integration deletion also invalidates the unified-tools cache so the list refreshes immediately.
 - **Tool Export Parameter Schemas**: Fixed empty parameter schemas in tool exports. Composite tools now build `unifiedInputSchema` from sub-tool parameters and LLM-generated descriptions. Simple tools with empty `inputSchema` are enriched with path parameters extracted from endpoint templates and parameters parsed from `toolDescription`.
 - **AI Description Generation**: Fixed "Generate with AI" button for composite tools not updating UI. Description now persists correctly using `toolDescription` field and syncs on page refresh.
 - **API Scraper Parameter Extraction**: Enhanced AI documentation scraper to extract `pathParameters`, `queryParameters`, and `requestBody` from API docs. Previously only extracted 5 flat fields (name, slug, method, path, description), resulting in non-functional tools. New integrations will now have complete parameter schemas.

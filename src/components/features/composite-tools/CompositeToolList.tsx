@@ -16,12 +16,20 @@ import {
   Bot,
   Zap,
   Workflow,
-  ChevronDown,
+  AlertTriangle,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -32,7 +40,6 @@ import {
 } from '@/components/ui/table';
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -41,6 +48,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent } from '@/components/ui/card';
+import { MultiSelectFilter } from '@/components/ui/multi-select-filter';
 import { useUnifiedTools } from '@/hooks/useUnifiedTools';
 import { useDeleteCompositeTool } from '@/hooks/useCompositeTools';
 import { useDeletePipeline } from '@/hooks/usePipelines';
@@ -80,15 +88,6 @@ const STATUS_OPTIONS = [
   { value: 'disabled', label: 'Disabled' },
   { value: 'draft', label: 'Draft' },
 ] as const;
-
-// Default type filters (composite and agentic, not simple)
-const DEFAULT_TYPE_FILTERS: ToolTypeFilterValue[] = [
-  'agentic:autonomous_agent',
-  'agentic:parameter_interpreter',
-  'composite:agent_driven',
-  'composite:rule_based',
-  'pipeline',
-];
 
 // =============================================================================
 // Helpers
@@ -203,20 +202,6 @@ function getApiTypesFromFilters(filters: ToolTypeFilterValue[]): ToolType[] | un
   return types.size > 0 ? Array.from(types) : undefined;
 }
 
-function getFilterSummary(
-  selected: string[],
-  options: readonly { value: string; label: string }[],
-  allLabel: string
-): string {
-  if (selected.length === 0 || selected.length === options.length) {
-    return allLabel;
-  }
-  if (selected.length === 1) {
-    return options.find((o) => o.value === selected[0])?.label ?? selected[0];
-  }
-  return `${selected.length} selected`;
-}
-
 // =============================================================================
 // Component
 // =============================================================================
@@ -224,8 +209,8 @@ function getFilterSummary(
 export function CompositeToolList({ className }: CompositeToolListProps) {
   // State
   const [search, setSearch] = React.useState('');
-  const [typeFilters, setTypeFilters] = React.useState<ToolTypeFilterValue[]>(DEFAULT_TYPE_FILTERS);
-  const [statusFilters, setStatusFilters] = React.useState<ToolStatus[]>([]);
+  const [typeFilters, setTypeFilters] = React.useState<ToolTypeFilterValue[]>([]);
+  const [statusFilter, setStatusFilter] = React.useState<ToolStatus | 'all'>('all');
   const [integrationFilters, setIntegrationFilters] = React.useState<string[]>([]);
   const [viewMode, setViewMode] = React.useState<ViewMode>('list');
 
@@ -243,10 +228,15 @@ export function CompositeToolList({ className }: CompositeToolListProps) {
     return [...list].sort((a, b) => a.name.localeCompare(b.name));
   }, [integrationsData?.integrations]);
 
+  const integrationOptions = React.useMemo(
+    () => integrations.map((i) => ({ value: i.id, label: i.name })),
+    [integrations]
+  );
+
   // Query unified tools
   const { data, isLoading, error } = useUnifiedTools({
     search: debouncedSearch || undefined,
-    status: statusFilters.length > 0 ? statusFilters : undefined,
+    status: statusFilter !== 'all' ? [statusFilter] : undefined,
     types: getApiTypesFromFilters(typeFilters),
     integrationId: integrationFilters.length === 1 ? integrationFilters[0] : undefined,
   });
@@ -272,36 +262,16 @@ export function CompositeToolList({ className }: CompositeToolListProps) {
     [deleteCompositeTool, deletePipeline]
   );
 
-  // Toggle helpers for multi-select
-  const toggleTypeFilter = (value: ToolTypeFilterValue) => {
-    setTypeFilters((prev) =>
-      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
-    );
-  };
-
-  const toggleStatusFilter = (value: ToolStatus) => {
-    setStatusFilters((prev) =>
-      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
-    );
-  };
-
-  const toggleIntegrationFilter = (id: string) => {
-    setIntegrationFilters((prev) =>
-      prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id]
-    );
-  };
-
   // Filter tools client-side for execution mode and integration
   const filteredTools = React.useMemo(() => {
     let tools = data?.tools ?? [];
 
     // Filter by type + execution mode
-    if (typeFilters.length > 0 && typeFilters.length < TOOL_TYPE_OPTIONS.length) {
+    if (typeFilters.length > 0) {
       tools = tools.filter((t) => {
         if (t.type === 'simple') return typeFilters.includes('simple');
         if (t.type === 'pipeline') return typeFilters.includes('pipeline');
         if (t.type === 'composite') {
-          // For now, include composite if any composite filter is selected
           return typeFilters.some((f) => f.startsWith('composite:'));
         }
         if (t.type === 'agentic') {
@@ -329,10 +299,17 @@ export function CompositeToolList({ className }: CompositeToolListProps) {
   const hasTools = filteredTools.length > 0;
   const hasFilters =
     debouncedSearch ||
-    typeFilters.length !== DEFAULT_TYPE_FILTERS.length ||
-    statusFilters.length > 0 ||
+    typeFilters.length > 0 ||
+    statusFilter !== 'all' ||
     integrationFilters.length > 0;
   const isEmpty = !isLoading && filteredTools.length === 0;
+
+  const clearAllFilters = () => {
+    setSearch('');
+    setTypeFilters([]);
+    setStatusFilter('all');
+    setIntegrationFilters([]);
+  };
 
   return (
     <div className={cn('space-y-6', className)}>
@@ -366,94 +343,61 @@ export function CompositeToolList({ className }: CompositeToolListProps) {
           />
         </div>
 
-        {/* Type Filter (Multi-select) */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="w-[200px] justify-between">
-              <span className="truncate">
-                {getFilterSummary(typeFilters, TOOL_TYPE_OPTIONS, 'All Types')}
-              </span>
-              <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-[220px]" align="start">
-            {TOOL_TYPE_OPTIONS.map((option) => (
-              <DropdownMenuCheckboxItem
-                key={option.value}
-                checked={typeFilters.includes(option.value)}
-                onCheckedChange={() => toggleTypeFilter(option.value)}
-                onSelect={(e) => e.preventDefault()}
-              >
-                {option.label}
-              </DropdownMenuCheckboxItem>
-            ))}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setTypeFilters([])}>Clear All</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {/* Type Filter (multi-select with search) */}
+        <MultiSelectFilter
+          options={TOOL_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+          selected={typeFilters}
+          onSelectionChange={(v) => setTypeFilters(v as ToolTypeFilterValue[])}
+          placeholder="All Types"
+          searchPlaceholder="Search types..."
+          emptyMessage="No types found."
+          className="w-[200px]"
+          contentClassName="w-[260px]"
+        />
 
-        {/* Status Filter (Multi-select) */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="w-[140px] justify-between">
-              <span className="truncate">
-                {getFilterSummary(statusFilters, STATUS_OPTIONS, 'All Status')}
-              </span>
-              <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-[160px]" align="start">
+        {/* Status Filter (single-select, small fixed set) */}
+        <Select
+          value={statusFilter}
+          onValueChange={(v) => setStatusFilter(v as ToolStatus | 'all')}
+        >
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="All Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
             {STATUS_OPTIONS.map((option) => (
-              <DropdownMenuCheckboxItem
-                key={option.value}
-                checked={statusFilters.includes(option.value as ToolStatus)}
-                onCheckedChange={() => toggleStatusFilter(option.value as ToolStatus)}
-                onSelect={(e) => e.preventDefault()}
-              >
+              <SelectItem key={option.value} value={option.value}>
                 {option.label}
-              </DropdownMenuCheckboxItem>
+              </SelectItem>
             ))}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setStatusFilters([])}>Clear All</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+          </SelectContent>
+        </Select>
 
-        {/* Integration Filter (Multi-select) */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="w-[180px] justify-between">
-              <span className="truncate">
-                {integrationFilters.length === 0
-                  ? 'All Integrations'
-                  : integrationFilters.length === 1
-                    ? (integrations.find((i) => i.id === integrationFilters[0])?.name ??
-                      '1 selected')
-                    : `${integrationFilters.length} selected`}
-              </span>
-              <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="max-h-[300px] w-[220px] overflow-y-auto" align="start">
-            {integrations.map((integration) => (
-              <DropdownMenuCheckboxItem
-                key={integration.id}
-                checked={integrationFilters.includes(integration.id)}
-                onCheckedChange={() => toggleIntegrationFilter(integration.id)}
-                onSelect={(e) => e.preventDefault()}
-              >
-                {integration.name}
-              </DropdownMenuCheckboxItem>
-            ))}
-            {integrations.length > 0 && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setIntegrationFilters([])}>
-                  Clear All
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {/* Integration Filter (multi-select with search) */}
+        {integrationOptions.length > 0 && (
+          <MultiSelectFilter
+            options={integrationOptions}
+            selected={integrationFilters}
+            onSelectionChange={setIntegrationFilters}
+            placeholder="All Integrations"
+            searchPlaceholder="Search integrations..."
+            emptyMessage="No integrations found."
+            className="w-[180px]"
+          />
+        )}
+
+        {/* Clear Filters */}
+        {hasFilters && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearAllFilters}
+            className="h-9 gap-1 text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+            Clear
+          </Button>
+        )}
 
         {/* View Toggle */}
         <div className="flex rounded-md border">
@@ -609,6 +553,12 @@ function UnifiedToolCard({ tool, onDelete }: UnifiedToolCardProps) {
               {tool.integrationName}
             </Badge>
           )}
+          {tool.hasInvalidActions && (
+            <Badge variant="destructive" className="gap-1">
+              <AlertTriangle className="h-3 w-3" />
+              Invalid actions
+            </Badge>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -705,7 +655,14 @@ function UnifiedToolTable({ tools, onDelete }: UnifiedToolTableProps) {
                   )}
                 </TableCell>
                 <TableCell>
-                  <Badge variant={getStatusBadgeVariant(tool.status)}>{tool.status}</Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={getStatusBadgeVariant(tool.status)}>{tool.status}</Badge>
+                    {tool.hasInvalidActions && (
+                      <span title="One or more actions no longer exist">
+                        <AlertTriangle className="h-4 w-4 text-destructive" />
+                      </span>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <DropdownMenu>

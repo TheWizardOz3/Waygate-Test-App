@@ -3,7 +3,6 @@
 import * as React from 'react';
 import {
   Search,
-  Filter,
   Plus,
   LayoutGrid,
   List,
@@ -12,6 +11,7 @@ import {
   ExternalLink,
   Sparkles,
   Wand2,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -41,10 +41,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
+import { MultiSelectFilter } from '@/components/ui/multi-select-filter';
 import { IntegrationCard, IntegrationCardSkeleton } from './IntegrationCard';
 import { IntegrationHealthBadge } from './IntegrationStatusBadge';
 import { IntegrationEmptyState, IntegrationNoResults } from './IntegrationEmptyState';
-import { TagFilter } from './TagFilter';
 import { TagList } from '@/components/ui/tag-badge';
 import { useIntegrations, useDeleteIntegration, useTags } from '@/hooks';
 import { useCompositeToolCounts } from '@/hooks/useCompositeTools';
@@ -66,6 +66,14 @@ interface IntegrationListProps {
 
 type ViewMode = 'grid' | 'list';
 
+const AUTH_TYPE_OPTIONS = [
+  { value: 'oauth2', label: 'OAuth 2.0' },
+  { value: 'api_key', label: 'API Key' },
+  { value: 'basic', label: 'Basic Auth' },
+  { value: 'bearer', label: 'Bearer Token' },
+  { value: 'custom_header', label: 'Custom Header' },
+];
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -77,8 +85,8 @@ export function IntegrationList({ className }: IntegrationListProps) {
   // State
   const [search, setSearch] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState<IntegrationStatus | 'all'>('all');
-  const [authTypeFilter, setAuthTypeFilter] = React.useState<AuthType | 'all'>('all');
-  const [tagFilter, setTagFilter] = React.useState<string[]>([]);
+  const [authTypeFilters, setAuthTypeFilters] = React.useState<string[]>([]);
+  const [tagFilters, setTagFilters] = React.useState<string[]>([]);
   const [viewMode, setViewMode] = React.useState<ViewMode>('grid');
 
   // Debounced search
@@ -90,14 +98,17 @@ export function IntegrationList({ className }: IntegrationListProps) {
 
   // Fetch available tags for filter
   const { data: tagsData } = useTags('integrations');
-  const availableTags = tagsData?.tags ?? [];
+  const tagOptions = React.useMemo(
+    () => (tagsData?.tags ?? []).map((tag) => ({ value: tag, label: tag })),
+    [tagsData?.tags]
+  );
 
-  // Query
+  // Query - pass single authType to API when exactly 1 selected, otherwise fetch all
   const { data, isLoading, error } = useIntegrations({
     search: debouncedSearch || undefined,
     status: statusFilter === 'all' ? undefined : statusFilter,
-    authType: authTypeFilter === 'all' ? undefined : authTypeFilter,
-    tags: tagFilter.length > 0 ? tagFilter : undefined,
+    authType: authTypeFilters.length === 1 ? (authTypeFilters[0] as AuthType) : undefined,
+    tags: tagFilters.length > 0 ? tagFilters : undefined,
   });
 
   // Mutations
@@ -116,12 +127,30 @@ export function IntegrationList({ className }: IntegrationListProps) {
     [deleteIntegration]
   );
 
+  // Client-side filtering for multi-select auth type
+  const filteredIntegrations = React.useMemo(() => {
+    let results = data?.integrations ?? [];
+    if (authTypeFilters.length > 1) {
+      results = results.filter((i) => authTypeFilters.includes(i.authType));
+    }
+    return results;
+  }, [data?.integrations, authTypeFilters]);
+
   // Computed
-  const integrations = data?.integrations ?? [];
-  const hasIntegrations = integrations.length > 0;
+  const hasIntegrations = filteredIntegrations.length > 0;
   const hasFilters =
-    debouncedSearch || statusFilter !== 'all' || authTypeFilter !== 'all' || tagFilter.length > 0;
-  const isEmpty = !isLoading && integrations.length === 0;
+    debouncedSearch ||
+    statusFilter !== 'all' ||
+    authTypeFilters.length > 0 ||
+    tagFilters.length > 0;
+  const isEmpty = !isLoading && filteredIntegrations.length === 0;
+
+  const clearAllFilters = () => {
+    setSearch('');
+    setStatusFilter('all');
+    setAuthTypeFilters([]);
+    setTagFilters([]);
+  };
 
   return (
     <div className={cn('space-y-6', className)}>
@@ -153,14 +182,13 @@ export function IntegrationList({ className }: IntegrationListProps) {
           />
         </div>
 
-        {/* Status Filter */}
+        {/* Status Filter (single-select, small fixed set) */}
         <Select
           value={statusFilter}
           onValueChange={(v) => setStatusFilter(v as IntegrationStatus | 'all')}
         >
           <SelectTrigger className="w-[140px]">
-            <Filter className="mr-2 h-4 w-4" />
-            <SelectValue placeholder="Status" />
+            <SelectValue placeholder="All Status" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
@@ -171,31 +199,41 @@ export function IntegrationList({ className }: IntegrationListProps) {
           </SelectContent>
         </Select>
 
-        {/* Auth Type Filter */}
-        <Select
-          value={authTypeFilter}
-          onValueChange={(v) => setAuthTypeFilter(v as AuthType | 'all')}
-        >
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Auth Type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            <SelectItem value="oauth2">OAuth 2.0</SelectItem>
-            <SelectItem value="api_key">API Key</SelectItem>
-            <SelectItem value="basic">Basic Auth</SelectItem>
-            <SelectItem value="bearer">Bearer Token</SelectItem>
-            <SelectItem value="custom_header">Custom Header</SelectItem>
-          </SelectContent>
-        </Select>
+        {/* Auth Type Filter (multi-select with search) */}
+        <MultiSelectFilter
+          options={AUTH_TYPE_OPTIONS}
+          selected={authTypeFilters}
+          onSelectionChange={setAuthTypeFilters}
+          placeholder="All Types"
+          searchPlaceholder="Search types..."
+          emptyMessage="No types found."
+          className="w-[160px]"
+        />
 
-        {/* Tag Filter */}
-        {availableTags.length > 0 && (
-          <TagFilter
-            selectedTags={tagFilter}
-            onSelectionChange={setTagFilter}
-            availableTags={availableTags}
+        {/* Tag Filter (multi-select with search) */}
+        {tagOptions.length > 0 && (
+          <MultiSelectFilter
+            options={tagOptions}
+            selected={tagFilters}
+            onSelectionChange={setTagFilters}
+            placeholder="All Tags"
+            searchPlaceholder="Search tags..."
+            emptyMessage="No tags found."
+            className="w-[160px]"
           />
+        )}
+
+        {/* Clear Filters */}
+        {hasFilters && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearAllFilters}
+            className="h-9 gap-1 text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+            Clear
+          </Button>
         )}
 
         {/* View Toggle */}
@@ -224,8 +262,8 @@ export function IntegrationList({ className }: IntegrationListProps) {
       {/* Results Count */}
       {!isLoading && hasIntegrations && (
         <p className="text-sm text-muted-foreground">
-          {data?.pagination.totalCount ?? integrations.length} integration
-          {integrations.length !== 1 ? 's' : ''}
+          {filteredIntegrations.length} integration
+          {filteredIntegrations.length !== 1 ? 's' : ''}
           {hasFilters && ' found'}
         </p>
       )}
@@ -259,7 +297,7 @@ export function IntegrationList({ className }: IntegrationListProps) {
       ) : viewMode === 'grid' ? (
         // Grid View
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {integrations.map((integration) => (
+          {filteredIntegrations.map((integration) => (
             <IntegrationCard
               key={integration.id}
               integration={integration}
@@ -271,7 +309,7 @@ export function IntegrationList({ className }: IntegrationListProps) {
       ) : (
         // Table/List View
         <IntegrationTable
-          integrations={integrations}
+          integrations={filteredIntegrations}
           onDelete={handleDelete}
           aiToolCounts={aiToolCounts}
         />
