@@ -44,6 +44,19 @@ export function useActions(integrationId: string | undefined, params?: Partial<L
 }
 
 /**
+ * Hook to fetch lightweight action summaries (id, name, slug only).
+ * Much faster than useActions for dropdowns/selectors since it skips heavy JSON columns.
+ */
+export function useActionSummaries(integrationId: string | undefined) {
+  return useQuery({
+    queryKey: [...actionKeys.list(integrationId!), 'summaries'] as const,
+    queryFn: () => client.actions.listSummaries(integrationId!, { limit: 100 }),
+    enabled: !!integrationId,
+    staleTime: 60 * 1000, // 1 minute
+  });
+}
+
+/**
  * Hook to fetch a single action by ID
  * @param actionId - The ID of the action to fetch
  * @param integrationId - The ID of the integration the action belongs to
@@ -192,8 +205,15 @@ export function useDiscoverActions() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ integrationId, wishlist }: { integrationId: string; wishlist: string[] }) =>
-      client.integrations.discoverActions(integrationId, wishlist),
+    mutationFn: ({
+      integrationId,
+      wishlist,
+      specificUrls,
+    }: {
+      integrationId: string;
+      wishlist: string[];
+      specificUrls?: string[];
+    }) => client.integrations.discoverActions(integrationId, wishlist, { specificUrls }),
     onSuccess: (data, { integrationId }) => {
       // Invalidate cached actions when discovery completes
       queryClient.invalidateQueries({ queryKey: actionKeys.cached(integrationId) });

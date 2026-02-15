@@ -15,6 +15,10 @@ import {
   ChevronLeft,
   Plus,
   X,
+  FileText,
+  ChevronDown,
+  ChevronUp,
+  Link2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,6 +33,7 @@ import {
   useCreateAction,
   useIntegration,
   useDiscoverActions,
+  useScrapedPages,
   actionKeys,
 } from '@/hooks';
 import { useScrapeJobStatus } from '@/hooks/useScrapeJob';
@@ -67,12 +72,18 @@ export function AddActionWizard({ integrationId }: AddActionWizardProps) {
   const [wishlistItems, setWishlistItems] = useState<string[]>([]);
   const [discoveryJobId, setDiscoveryJobId] = useState<string | null>(null);
 
+  // Specific URLs state
+  const [specificUrlInput, setSpecificUrlInput] = useState('');
+  const [specificUrls, setSpecificUrls] = useState<string[]>([]);
+  const [showScrapedPages, setShowScrapedPages] = useState(false);
+
   const { data: integration } = useIntegration(integrationId);
   const {
     data: cachedData,
     isLoading: isCachedLoading,
     refetch: refetchCached,
   } = useCachedActions(integrationId);
+  const { data: scrapedPagesData } = useScrapedPages(integrationId);
   const createAction = useCreateAction();
   const discoverActions = useDiscoverActions();
 
@@ -128,6 +139,24 @@ export function AddActionWizard({ integrationId }: AddActionWizardProps) {
     setWishlistItems((prev) => prev.filter((i) => i !== item));
   };
 
+  const addSpecificUrl = useCallback(() => {
+    const trimmed = specificUrlInput.trim();
+    if (!trimmed) return;
+    try {
+      new URL(trimmed); // Validate it's a URL
+      if (!specificUrls.includes(trimmed)) {
+        setSpecificUrls((prev) => [...prev, trimmed]);
+        setSpecificUrlInput('');
+      }
+    } catch {
+      // Invalid URL - do nothing (input stays for user to fix)
+    }
+  }, [specificUrlInput, specificUrls]);
+
+  const removeSpecificUrl = (url: string) => {
+    setSpecificUrls((prev) => prev.filter((u) => u !== url));
+  };
+
   const handleStartDiscovery = async () => {
     if (wishlistItems.length === 0) return;
 
@@ -135,6 +164,7 @@ export function AddActionWizard({ integrationId }: AddActionWizardProps) {
       const result = await discoverActions.mutateAsync({
         integrationId,
         wishlist: wishlistItems,
+        specificUrls: specificUrls.length > 0 ? specificUrls : undefined,
       });
       setDiscoveryJobId(result.jobId);
       setStep('discovering');
@@ -356,7 +386,8 @@ export function AddActionWizard({ integrationId }: AddActionWizardProps) {
             <CardDescription>
               Enter the actions or capabilities you&apos;re looking for. AI will search the API
               documentation and extract matching endpoints. This adds to existing discovered
-              actions.
+              actions. Each run analyzes up to 20 of the most relevant pages — for large APIs, you
+              can run discovery multiple times or provide specific documentation URLs below.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -420,6 +451,101 @@ export function AddActionWizard({ integrationId }: AddActionWizardProps) {
                   )
                 )}
               </div>
+            </div>
+
+            {/* Previously Scraped Pages - collapsible */}
+            {scrapedPagesData && scrapedPagesData.pages.length > 0 && (
+              <div className="rounded-lg border border-border/50">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between p-3 text-sm font-medium text-muted-foreground hover:text-foreground"
+                  onClick={() => setShowScrapedPages(!showScrapedPages)}
+                >
+                  <span className="flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Previously Scraped Pages ({scrapedPagesData.pages.length})
+                  </span>
+                  {showScrapedPages ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </button>
+                {showScrapedPages && (
+                  <div className="border-t border-border/50 px-3 pb-3">
+                    <p className="mb-2 pt-2 text-xs text-muted-foreground">
+                      These pages have been analyzed previously. To search new areas, add specific
+                      URLs below.
+                    </p>
+                    <div className="max-h-48 space-y-1 overflow-y-auto">
+                      {scrapedPagesData.pages.map((page) => (
+                        <a
+                          key={page.url}
+                          href={page.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block truncate text-xs text-primary hover:underline"
+                        >
+                          {page.url}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Specific Documentation URLs (optional) */}
+            <div className="rounded-lg border border-border/50 p-3">
+              <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <Link2 className="h-3.5 w-3.5" />
+                Specific Documentation URLs (optional)
+              </p>
+              <p className="mb-2 text-xs text-muted-foreground">
+                If you know which documentation pages contain the actions you need, paste them here.
+                This scrapes those pages directly instead of searching the whole site.
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  value={specificUrlInput}
+                  onChange={(e) => setSpecificUrlInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addSpecificUrl();
+                    }
+                  }}
+                  placeholder="https://api.slack.com/methods/emoji.list"
+                  className="flex-1 text-xs"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={addSpecificUrl}
+                  disabled={!specificUrlInput.trim()}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+              {specificUrls.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {specificUrls.map((url) => (
+                    <div
+                      key={url}
+                      className="flex items-center gap-1 rounded bg-muted/50 px-2 py-1"
+                    >
+                      <span className="flex-1 truncate font-mono text-xs">{url}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeSpecificUrl(url)}
+                        className="rounded-full p-0.5 hover:bg-destructive/20"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Existing cached count info */}
@@ -826,6 +952,12 @@ export function AddActionWizard({ integrationId }: AddActionWizardProps) {
             )}
           </div>
         </ScrollArea>
+
+        {/* Discovery hint */}
+        <p className="text-center text-xs text-muted-foreground">
+          Don&apos;t see what you need? Click &quot;Discover More&quot; to search additional pages
+          with a new wishlist, or provide specific documentation URLs for targeted discovery.
+        </p>
 
         {/* Footer */}
         <div className="flex items-center justify-between">

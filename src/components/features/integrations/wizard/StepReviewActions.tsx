@@ -277,6 +277,12 @@ export function StepReviewActions() {
         </div>
       </ScrollArea>
 
+      {/* Discovery note */}
+      <p className="text-center text-xs text-muted-foreground">
+        These are the actions found from the top documentation pages. For APIs with many endpoints,
+        you can discover more actions later from the integration&apos;s Actions tab.
+      </p>
+
       {/* Confidence legend */}
       <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
         <span className="flex items-center gap-1">

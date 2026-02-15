@@ -19,6 +19,7 @@ import type {
 } from '@/lib/modules/integrations/integration.schemas';
 import type {
   ActionResponse,
+  ActionSummary,
   CreateActionInput,
   UpdateActionInput,
   ListActionsQuery,
@@ -165,12 +166,20 @@ export const client = {
      * Discover new actions for an integration using AI with a wishlist
      * Returns a job ID to poll for results
      */
-    discoverActions(id: string, wishlist: string[], forceRescrape?: boolean) {
+    discoverActions(
+      id: string,
+      wishlist: string[],
+      options?: { forceRescrape?: boolean; specificUrls?: string[] }
+    ) {
       return apiClient.post<{
         jobId: string;
         message: string;
         existingEndpointCount: number;
-      }>(`/integrations/${id}/discover-actions`, { wishlist, forceRescrape });
+      }>(`/integrations/${id}/discover-actions`, {
+        wishlist,
+        forceRescrape: options?.forceRescrape,
+        specificUrls: options?.specificUrls,
+      });
     },
   },
 
@@ -233,6 +242,16 @@ export const client = {
       );
     },
 
+    listSummaries(integrationId: string, params?: Partial<ListActionsQuery>) {
+      return apiClient.get<{
+        actions: ActionSummary[];
+        pagination: { cursor: string | null; hasMore: boolean; totalCount: number };
+      }>(`/integrations/${integrationId}/actions`, { ...params, fields: 'summary' } as Record<
+        string,
+        string | number | boolean | undefined
+      >);
+    },
+
     get(id: string, integrationId?: string) {
       // If integrationId is provided, use nested route; otherwise fetch action to get integrationId first
       if (integrationId) {
@@ -291,6 +310,18 @@ export const client = {
         documentationUrl: string | null;
         canRescrape: boolean;
       }>(`/integrations/${integrationId}/cached-actions`);
+    },
+
+    /**
+     * Get scraped documentation pages for an integration
+     * Returns URLs and last-scraped dates aggregated across all scrape jobs
+     */
+    getScrapedPages(integrationId: string) {
+      return apiClient.get<{
+        pages: Array<{ url: string; lastScrapedAt: string }>;
+        documentationUrl: string | null;
+        totalJobs: number;
+      }>(`/integrations/${integrationId}/scraped-pages`);
     },
 
     /**

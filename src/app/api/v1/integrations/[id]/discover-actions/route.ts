@@ -16,6 +16,10 @@ import type { ApiEndpoint } from '@/lib/modules/ai/scrape-job.schemas';
 const DiscoverActionsInputSchema = z.object({
   wishlist: z.array(z.string()).min(1, 'At least one wishlist item is required'),
   forceRescrape: z.boolean().optional().default(false),
+  specificUrls: z
+    .array(z.string().url('Invalid URL in specificUrls'))
+    .max(20, 'Maximum 20 specific URLs')
+    .optional(),
 });
 
 export const POST = withApiAuth(async (request: NextRequest, { tenant }) => {
@@ -57,7 +61,7 @@ export const POST = withApiAuth(async (request: NextRequest, { tenant }) => {
       );
     }
 
-    const { wishlist, forceRescrape } = validationResult.data;
+    const { wishlist, forceRescrape, specificUrls } = validationResult.data;
 
     // Get the integration
     const integration = await getIntegrationById(tenant.id, integrationId);
@@ -83,13 +87,15 @@ export const POST = withApiAuth(async (request: NextRequest, { tenant }) => {
 
     // Create a new scrape job with the wishlist
     // The createScrapeJob function handles merging with existing results
+    // When specificUrls are provided, force a fresh scrape (user explicitly wants those pages)
     const createResult = await createScrapeJob(
       tenant.id,
       {
         documentationUrl: integration.documentationUrl,
+        specificUrls,
         wishlist,
       },
-      { force: forceRescrape }
+      { force: forceRescrape || !!specificUrls?.length }
     );
 
     // If job already completed (cache hit but with new wishlist), return immediately

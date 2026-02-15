@@ -22,6 +22,8 @@ Instead of blindly crawling pages breadth-first, the system now:
 2. **Pre-filters URLs** using regex patterns to exclude non-documentation pages
 3. **LLM triages remaining URLs** - assigns priority scores and categories
 4. **Selects the best pages** ensuring coverage of auth docs, wishlist matches, and API endpoints
+5. **Wishlist URL boosting** (v0.1.8+) - keyword-matches wishlist items against all mapped URLs and guarantees matching pages are included, even if the LLM triage missed them
+6. **Specific URL override** (v0.1.8+) - users can provide exact documentation URLs to scrape directly, bypassing triage entirely
 
 ---
 
@@ -161,31 +163,32 @@ enum ScrapeJobStatus {
 
 ### Key Files
 
-| File                                          | Purpose                                                                |
-| --------------------------------------------- | ---------------------------------------------------------------------- |
-| `src/lib/modules/ai/index.ts`                 | Module exports                                                         |
-| `src/lib/modules/ai/ai.service.ts`            | Main orchestrator for documentation processing to integration creation |
-| `src/lib/modules/ai/intelligent-crawler.ts`   | **LLM-guided page selection: Map → Triage → Scrape (default mode)**    |
-| `src/lib/modules/ai/doc-scraper.ts`           | Firecrawl integration for URL scraping and basic BFS crawling          |
-| `src/lib/modules/ai/openapi-parser.ts`        | Direct OpenAPI/Swagger specification parsing                           |
-| `src/lib/modules/ai/document-parser.ts`       | AI-powered content extraction with single-shot parsing (800K char cap) |
-| `src/lib/modules/ai/action-generator.ts`      | Transforms ParsedApiDoc into ActionDefinitions with JSON Schema        |
-| `src/lib/modules/ai/scrape-job.service.ts`    | Job lifecycle, async processing, and status management                 |
-| `src/lib/modules/ai/scrape-job.repository.ts` | Database CRUD operations for ScrapeJob                                 |
-| `src/lib/modules/ai/scrape-job.schemas.ts`    | Zod schemas for API validation and ParsedApiDoc structure              |
-| `src/lib/modules/ai/prompts/extract-api.ts`   | Simplified flat-schema prompts for reliable Gemini endpoint extraction |
-| `src/lib/modules/ai/storage.ts`               | Supabase Storage integration with gzip compression                     |
-| `src/lib/modules/ai/llm/client.ts`            | Centralized LLM model management and provider factory                  |
-| `src/lib/modules/ai/llm/providers/gemini.ts`  | Gemini 3 client with low-thinking mode and maxLength schema support    |
-| `src/lib/modules/ai/llm/types.ts`             | LLM provider interface for future extensibility                        |
-| `src/app/api/v1/scrape/route.ts`              | POST /scrape (create job) + GET /scrape (list jobs)                    |
-| `src/app/api/v1/scrape/[jobId]/route.ts`      | GET /scrape/:jobId (job status)                                        |
-| `src/lib/modules/ai/templates/index.ts`       | **Template registry and exports (v0.1.7)**                             |
-| `src/lib/modules/ai/templates/types.ts`       | **TypeScript types for templates (v0.1.7)**                            |
-| `src/lib/modules/ai/templates/postgrest.ts`   | **PostgREST/Supabase template with 7 actions (v0.1.7)**                |
-| `src/lib/modules/ai/templates/rest-crud.ts`   | **Generic REST CRUD template with 6 actions (v0.1.7)**                 |
-| `src/lib/modules/ai/templates/detector.ts`    | **Auto-detection of template patterns from scraped content (v0.1.7)**  |
-| `src/lib/modules/ai/templates/generator.ts`   | **Converts templates to ParsedApiDoc format (v0.1.7)**                 |
+| File                                          | Purpose                                                                  |
+| --------------------------------------------- | ------------------------------------------------------------------------ |
+| `src/lib/modules/ai/index.ts`                 | Module exports                                                           |
+| `src/lib/modules/ai/ai.service.ts`            | Main orchestrator for documentation processing to integration creation   |
+| `src/lib/modules/ai/intelligent-crawler.ts`   | **LLM-guided page selection: Map → Triage → Scrape (default mode)**      |
+| `src/lib/modules/ai/triage.ts`                | **URL triage: LLM prioritization, wishlist URL boosting, normalization** |
+| `src/lib/modules/ai/doc-scraper.ts`           | Firecrawl integration for URL scraping and basic BFS crawling            |
+| `src/lib/modules/ai/openapi-parser.ts`        | Direct OpenAPI/Swagger specification parsing                             |
+| `src/lib/modules/ai/document-parser.ts`       | AI-powered content extraction with single-shot parsing (800K char cap)   |
+| `src/lib/modules/ai/action-generator.ts`      | Transforms ParsedApiDoc into ActionDefinitions with JSON Schema          |
+| `src/lib/modules/ai/scrape-job.service.ts`    | Job lifecycle, async processing, and status management                   |
+| `src/lib/modules/ai/scrape-job.repository.ts` | Database CRUD operations for ScrapeJob                                   |
+| `src/lib/modules/ai/scrape-job.schemas.ts`    | Zod schemas for API validation and ParsedApiDoc structure                |
+| `src/lib/modules/ai/prompts/extract-api.ts`   | Simplified flat-schema prompts for reliable Gemini endpoint extraction   |
+| `src/lib/modules/ai/storage.ts`               | Supabase Storage integration with gzip compression                       |
+| `src/lib/modules/ai/llm/client.ts`            | Centralized LLM model management and provider factory                    |
+| `src/lib/modules/ai/llm/providers/gemini.ts`  | Gemini 3 client with low-thinking mode and maxLength schema support      |
+| `src/lib/modules/ai/llm/types.ts`             | LLM provider interface for future extensibility                          |
+| `src/app/api/v1/scrape/route.ts`              | POST /scrape (create job) + GET /scrape (list jobs)                      |
+| `src/app/api/v1/scrape/[jobId]/route.ts`      | GET /scrape/:jobId (job status)                                          |
+| `src/lib/modules/ai/templates/index.ts`       | **Template registry and exports (v0.1.7)**                               |
+| `src/lib/modules/ai/templates/types.ts`       | **TypeScript types for templates (v0.1.7)**                              |
+| `src/lib/modules/ai/templates/postgrest.ts`   | **PostgREST/Supabase template with 7 actions (v0.1.7)**                  |
+| `src/lib/modules/ai/templates/rest-crud.ts`   | **Generic REST CRUD template with 6 actions (v0.1.7)**                   |
+| `src/lib/modules/ai/templates/detector.ts`    | **Auto-detection of template patterns from scraped content (v0.1.7)**    |
+| `src/lib/modules/ai/templates/generator.ts`   | **Converts templates to ParsedApiDoc format (v0.1.7)**                   |
 
 ### API Endpoints
 
@@ -403,6 +406,29 @@ interface ParsedApiDoc {
 - **Organized Output**: Content aggregated by category (Auth → Overview → Endpoints) for better AI parsing
 - **ProcessJobOptions**: Added `intelligentCrawl` option (defaults to `true`)
 
+### Task 6c: Wishlist URL Boosting & Specific URL Support (v0.1.8) ✅
+
+**Files:** `src/lib/modules/ai/triage.ts`, `src/app/api/v1/integrations/[id]/discover-actions/route.ts`, `src/lib/api/client.ts`, `src/hooks/useActions.ts`, `src/components/features/actions/AddActionWizard.tsx`
+
+**Problem:** For APIs with hundreds of pages (e.g., Slack with 200+ method URLs), the LLM triage picks only 20 pages and may miss the specific ones matching the user's wishlist. Additionally, LLM-returned URLs were silently dropped if they didn't exactly match the normalized URL format.
+
+**Solution (3 parts):**
+
+1. **Wishlist URL boosting in triage** (`triage.ts`):
+   - `findWishlistMatchingUrls()` scans all mapped URLs for keyword matches against wishlist items (tokenized, case-insensitive)
+   - After LLM triage validation, wishlist-matching URLs are injected as guaranteed slots, replacing lowest-priority non-wishlist pages if at capacity
+   - LLM-returned URLs are now normalized before validation to prevent silent drops from format differences (e.g., trailing slashes)
+
+2. **Specific URL support in discover-actions API** (`discover-actions/route.ts`):
+   - Accepts optional `specificUrls` array (max 20 URLs) in POST body
+   - When provided, automatically sets `force: true` to skip cache
+   - Passes through to `createScrapeJob()` which already supports `specificUrls` mode (bypasses map/triage, scrapes pages directly)
+
+3. **Enhanced discovery UI** (`AddActionWizard.tsx`):
+   - Shows collapsible "Previously Scraped Pages" section using existing `useScrapedPages` hook
+   - Adds "Specific Documentation URLs" input for users to provide exact page URLs
+   - Passes `specificUrls` through the mutation chain to the API
+
 ### Task 7: AI Extraction Prompts (~45 min)
 
 **Files:** `src/lib/modules/ai/prompts/extract-api.ts`
@@ -489,17 +515,17 @@ interface ParsedApiDoc {
 
 ## Edge Cases
 
-| Scenario                   | Handling                                                             |
-| -------------------------- | -------------------------------------------------------------------- |
-| Docs behind authentication | Return error with message to use OpenAPI spec upload instead         |
-| Incomplete documentation   | Extract what's available, add warnings to metadata                   |
-| Multiple API versions      | Detect and include version info, let user select (future)            |
-| Very large documentation   | **Intelligent crawl maps all URLs, LLM selects best 30 pages**       |
-| Non-English documentation  | Attempt extraction, may have lower accuracy                          |
-| Rate limited during scrape | Retry with backoff, respect Retry-After                              |
-| Timeout during scrape      | Partial results with error, allow retry                              |
-| Missing auth documentation | **Intelligent crawl prioritizes auth pages (score 95+)**             |
-| Wishlist items not found   | **LLM searches for related pages, returns other valuable endpoints** |
+| Scenario                   | Handling                                                                                                  |
+| -------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Docs behind authentication | Return error with message to use OpenAPI spec upload instead                                              |
+| Incomplete documentation   | Extract what's available, add warnings to metadata                                                        |
+| Multiple API versions      | Detect and include version info, let user select (future)                                                 |
+| Very large documentation   | **Intelligent crawl maps all URLs, LLM selects best 30 pages**                                            |
+| Non-English documentation  | Attempt extraction, may have lower accuracy                                                               |
+| Rate limited during scrape | Retry with backoff, respect Retry-After                                                                   |
+| Timeout during scrape      | Partial results with error, allow retry                                                                   |
+| Missing auth documentation | **Intelligent crawl prioritizes auth pages (score 95+)**                                                  |
+| Wishlist items not found   | **Wishlist URL boosting scans all mapped URLs for keyword matches; users can also provide specific URLs** |
 
 ---
 
@@ -515,6 +541,8 @@ interface ParsedApiDoc {
   - LLM triage correctly prioritizes API endpoint pages
   - Authentication documentation is always included
   - Wishlist items are found when present in documentation
+  - Wishlist URL boosting guarantees relevant pages are included (v0.1.8+)
+  - Specific URL override allows direct scraping of known pages (v0.1.8+)
 
 ---
 

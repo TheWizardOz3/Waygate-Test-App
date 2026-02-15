@@ -362,9 +362,49 @@ export async function triageDocumentation(
   const isLargeApi = normalizedUrls.length > LARGE_API_THRESHOLD;
 
   // Validate and clean prioritized pages
+  // Normalize LLM-returned URLs before matching to avoid silent drops from format differences
   const validPrioritizedPages = (triageData.prioritizedPages || [])
+    .map((p) => ({ ...p, url: normalizeUrl(p.url) }))
     .filter((p) => p.url && normalizedUrls.includes(p.url))
     .slice(0, maxPages);
+
+  // Boost wishlist-matching URLs that the LLM may have missed
+  // For large APIs (e.g., Slack with 200+ methods), the LLM picks ~20 pages from hundreds
+  // of similar URLs and may not select the specific one matching the user's wishlist.
+  if (wishlist.length > 0) {
+    const wishlistMatches = findWishlistMatchingUrls(normalizedUrls, wishlist);
+    const addedUrls = new Set(validPrioritizedPages.map((p) => p.url));
+
+    const matchEntries = Array.from(wishlistMatches.entries());
+    for (const [url, matchedItems] of matchEntries) {
+      if (addedUrls.has(url)) continue;
+      if (validPrioritizedPages.length >= maxPages) {
+        // Replace the lowest-priority non-wishlist page to make room
+        const reversed = validPrioritizedPages.slice().reverse();
+        const nonWishlistIdx = reversed.findIndex((p) => !p.reason.includes('wishlist'));
+        if (nonWishlistIdx >= 0) {
+          const actualIdx = validPrioritizedPages.length - 1 - nonWishlistIdx;
+          validPrioritizedPages.splice(actualIdx, 1);
+        } else {
+          break; // All slots are wishlist pages already
+        }
+      }
+      validPrioritizedPages.push({
+        url,
+        reason: `Wishlist match: ${matchedItems.join(', ')} (URL pattern boost)`,
+        priority: validPrioritizedPages.length + 1,
+        category: 'endpoint',
+      });
+      addedUrls.add(url);
+    }
+
+    if (wishlistMatches.size > 0) {
+      console.log(
+        `[Triage] Boosted ${wishlistMatches.size} URLs matching wishlist items: ` +
+          `${Array.from(wishlistMatches.keys()).join(', ')}`
+      );
+    }
+  }
 
   // If LLM didn't return enough pages, fall back to pattern-based selection
   if (validPrioritizedPages.length < Math.min(3, normalizedUrls.length)) {
@@ -422,6 +462,44 @@ export async function triageDocumentation(
 // =============================================================================
 
 export { mapWebsite, preFilterUrls };
+
+/**
+ * Scan URLs for wishlist keyword matches and return matching URLs.
+ * Used to guarantee wishlist-relevant pages are included even if the LLM didn't select them.
+ */
+function findWishlistMatchingUrls(urls: string[], wishlist: string[]): Map<string, string[]> {
+  const matches = new Map<string, string[]>();
+  if (!wishlist.length) return matches;
+
+  // Normalize wishlist items into keyword tokens
+  const wishlistTokens = wishlist.map((item) => ({
+    original: item,
+    tokens: item
+      .toLowerCase()
+      .split(/[\s.]+/)
+      .filter((t) => t.length > 2),
+  }));
+
+  for (const url of urls) {
+    const urlLower = url.toLowerCase();
+    const matchedItems: string[] = [];
+
+    for (const { original, tokens } of wishlistTokens) {
+      // A URL matches if ALL significant tokens from the wishlist item appear in the URL
+      // e.g., "list emoji" matches /methods/emoji.list, "emoji" matches /methods/emoji.list
+      const allTokensMatch = tokens.length > 0 && tokens.every((token) => urlLower.includes(token));
+      if (allTokensMatch) {
+        matchedItems.push(original);
+      }
+    }
+
+    if (matchedItems.length > 0) {
+      matches.set(url, matchedItems);
+    }
+  }
+
+  return matches;
+}
 
 // Helper to normalize URLs (re-export for use in parallel scraper)
 function normalizeAndDedupeUrls(urls: string[]): string[] {

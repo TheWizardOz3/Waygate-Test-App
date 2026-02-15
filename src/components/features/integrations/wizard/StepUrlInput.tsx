@@ -366,7 +366,8 @@ export function StepUrlInput() {
                   </Button>
                 </div>
                 <FormDescription>
-                  Tell us what actions you want and AI will prioritize finding them.
+                  Tell us what actions you want and AI will prioritize finding them. Discovery
+                  analyzes up to 20 of the most relevant documentation pages per run.
                 </FormDescription>
               </FormItem>
             )}
