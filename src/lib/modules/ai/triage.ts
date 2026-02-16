@@ -264,15 +264,26 @@ export async function triageDocumentation(
   // =========================================================================
   onProgress?.('Filtering relevant documentation pages...');
 
-  const { included: filteredUrls } = preFilterUrls(allUrls, url);
+  const { included: filteredUrls, excluded: excludedUrls } = preFilterUrls(allUrls, url);
   const normalizedUrls = normalizeAndDedupeUrls(filteredUrls);
+
+  console.log(
+    `[Triage] Pre-filter: ${allUrls.length} mapped → ${filteredUrls.length} included, ${excludedUrls.length} excluded`
+  );
+  if (excludedUrls.length > 0 && excludedUrls.length <= 20) {
+    console.log(`[Triage] Excluded URLs: ${excludedUrls.join(', ')}`);
+  } else if (excludedUrls.length > 20) {
+    console.log(`[Triage] Excluded URLs (first 20): ${excludedUrls.slice(0, 20).join(', ')}`);
+  }
 
   // Always include the root URL
   if (!normalizedUrls.includes(url)) {
     normalizedUrls.unshift(url);
   }
 
-  onProgress?.(`${normalizedUrls.length} relevant pages identified`);
+  onProgress?.(
+    `${normalizedUrls.length} relevant pages identified (${excludedUrls.length} filtered out)`
+  );
 
   // =========================================================================
   // Step 3: Scrape ONLY the landing page
@@ -363,10 +374,23 @@ export async function triageDocumentation(
 
   // Validate and clean prioritized pages
   // Normalize LLM-returned URLs before matching to avoid silent drops from format differences
-  const validPrioritizedPages = (triageData.prioritizedPages || [])
-    .map((p) => ({ ...p, url: normalizeUrl(p.url) }))
+  const llmPages = (triageData.prioritizedPages || []).map((p) => ({
+    ...p,
+    url: normalizeUrl(p.url),
+  }));
+  const droppedPages = llmPages.filter((p) => !p.url || !normalizedUrls.includes(p.url));
+  if (droppedPages.length > 0) {
+    console.warn(
+      `[Triage] Dropped ${droppedPages.length} LLM-selected pages not in normalized URL list:`,
+      droppedPages.map((p) => p.url)
+    );
+  }
+  const validPrioritizedPages = llmPages
     .filter((p) => p.url && normalizedUrls.includes(p.url))
     .slice(0, maxPages);
+  console.log(
+    `[Triage] LLM returned ${llmPages.length} pages, ${validPrioritizedPages.length} validated against URL list`
+  );
 
   // Boost wishlist-matching URLs that the LLM may have missed
   // For large APIs (e.g., Slack with 200+ methods), the LLM picks ~20 pages from hundreds

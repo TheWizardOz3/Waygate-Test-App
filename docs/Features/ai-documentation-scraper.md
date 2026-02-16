@@ -19,7 +19,7 @@ This feature enables the core value proposition: **"Drop in documentation, get p
 Instead of blindly crawling pages breadth-first, the system now:
 
 1. **Maps the entire site** using Firecrawl's `/map` endpoint (discovers up to 5000 URLs in seconds)
-2. **Pre-filters URLs** using regex patterns to exclude non-documentation pages
+2. **Pre-filters URLs** using parent-path prefix matching (includes sibling paths) and regex patterns to exclude non-documentation pages
 3. **LLM triages remaining URLs** - assigns priority scores and categories
 4. **Selects the best pages** ensuring coverage of auth docs, wishlist matches, and API endpoints
 5. **Wishlist URL boosting** (v0.1.8+) - keyword-matches wishlist items against all mapped URLs and guarantees matching pages are included, even if the LLM triage missed them

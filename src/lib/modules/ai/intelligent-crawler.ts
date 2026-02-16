@@ -465,7 +465,9 @@ export function detectUrlCategory(url: string): {
  *
  * Key filtering:
  * 1. Must be same host as root URL
- * 2. Must be under the same path prefix (e.g., /methods/* if root is /methods)
+ * 2. Must be under the parent path prefix of the root URL
+ *    e.g., root "/docs/rest-api/reference" uses prefix "/docs/rest-api/"
+ *    so sibling paths like "/docs/rest-api/endpoints/" are included
  * 3. Must not match exclude patterns (blog, pricing, etc.)
  */
 export function preFilterUrls(
@@ -476,22 +478,28 @@ export function preFilterUrls(
   const excluded: string[] = [];
 
   let rootHost: string;
-  let rootPath: string;
+  let pathPrefix: string;
   try {
     const rootParsed = new URL(rootUrl);
     rootHost = rootParsed.hostname;
-    // Get the path prefix (e.g., "/methods" from "/methods" or "/methods/chat.postMessage")
-    // Remove trailing slash and get the directory path
-    rootPath = rootParsed.pathname.replace(/\/$/, '');
-    // If path has multiple segments, use the first meaningful segment as prefix
-    // e.g., "/methods/chat.postMessage" -> "/methods"
-    // e.g., "/api/v1/users" -> "/api/v1" or "/api"
-    // For now, use the full path as prefix (user-specified path is intentional)
+    // Use the PARENT directory as the path prefix so sibling paths are included.
+    // e.g., "/docs/rest-api/reference" -> prefix "/docs/rest-api/"
+    // e.g., "/methods/chat.postMessage" -> prefix "/methods/"
+    // e.g., "/api/v1" -> prefix "/api/"
+    // This ensures that when a user provides a "reference" or "overview" page,
+    // sibling sections like "endpoints", "authentication", etc. are also included.
+    const cleanPath = rootParsed.pathname.replace(/\/$/, '');
+    const lastSlashIdx = cleanPath.lastIndexOf('/');
+    if (lastSlashIdx > 0) {
+      pathPrefix = cleanPath.substring(0, lastSlashIdx + 1); // include trailing slash
+    } else {
+      pathPrefix = '/'; // root-level path, include everything on this host
+    }
   } catch {
     return { included: urls, excluded: [] };
   }
 
-  console.log(`[Pre-filter] Root host: ${rootHost}, Root path prefix: ${rootPath || '/'}`);
+  console.log(`[Pre-filter] Root host: ${rootHost}, Path prefix: ${pathPrefix}`);
 
   for (const url of urls) {
     try {
@@ -503,11 +511,12 @@ export function preFilterUrls(
         continue;
       }
 
-      // Must be under the same path prefix (if root has a path)
-      // This ensures /methods/* only includes /methods pages, not /tutorials or /basics
-      if (rootPath && rootPath !== '/' && rootPath !== '') {
+      // Must be under the parent path prefix (if root has a meaningful path)
+      // This ensures /docs/rest-api/* includes /docs/rest-api/endpoints/* and siblings
+      // but excludes completely unrelated paths like /docs/storage/...
+      if (pathPrefix && pathPrefix !== '/') {
         const urlPath = parsed.pathname;
-        if (!urlPath.startsWith(rootPath)) {
+        if (!urlPath.startsWith(pathPrefix)) {
           excluded.push(url);
           continue;
         }
@@ -523,6 +532,10 @@ export function preFilterUrls(
       excluded.push(url);
     }
   }
+
+  console.log(
+    `[Pre-filter] Result: ${included.length} included, ${excluded.length} excluded (prefix: ${pathPrefix})`
+  );
 
   return { included, excluded };
 }

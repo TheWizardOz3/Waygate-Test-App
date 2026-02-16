@@ -205,6 +205,52 @@ describe('preFilterUrls', () => {
     expect(result.excluded).toContain('https://api.example.com/downloads/sdk.zip');
     expect(result.excluded).toContain('https://api.example.com/pdfs/guide.pdf');
   });
+
+  it('should include sibling paths when root URL is a deep page (e.g., Vercel docs)', () => {
+    // User provides /docs/rest-api/reference, but endpoint docs are at /docs/rest-api/endpoints/...
+    const urls = [
+      'https://docs.vercel.com/docs/rest-api/reference',
+      'https://docs.vercel.com/docs/rest-api/endpoints/deployments/get-deployment-events',
+      'https://docs.vercel.com/docs/rest-api/endpoints/projects/create-a-project',
+      'https://docs.vercel.com/docs/rest-api/authentication',
+      'https://docs.vercel.com/docs/rest-api/sdk',
+      'https://docs.vercel.com/docs/storage/overview',
+      'https://docs.vercel.com/docs/getting-started',
+    ];
+
+    const result = preFilterUrls(urls, 'https://docs.vercel.com/docs/rest-api/reference');
+
+    // Sibling paths under /docs/rest-api/ should be included
+    expect(result.included).toContain('https://docs.vercel.com/docs/rest-api/reference');
+    expect(result.included).toContain(
+      'https://docs.vercel.com/docs/rest-api/endpoints/deployments/get-deployment-events'
+    );
+    expect(result.included).toContain(
+      'https://docs.vercel.com/docs/rest-api/endpoints/projects/create-a-project'
+    );
+    expect(result.included).toContain('https://docs.vercel.com/docs/rest-api/authentication');
+    expect(result.included).toContain('https://docs.vercel.com/docs/rest-api/sdk');
+    // Unrelated paths should be excluded
+    expect(result.excluded).toContain('https://docs.vercel.com/docs/storage/overview');
+    expect(result.excluded).toContain('https://docs.vercel.com/docs/getting-started');
+  });
+
+  it('should use parent path prefix for multi-segment root paths', () => {
+    // Root: /methods/chat.postMessage -> prefix should be /methods/
+    const urls = [
+      'https://api.slack.com/methods/chat.postMessage',
+      'https://api.slack.com/methods/channels.list',
+      'https://api.slack.com/methods/users.info',
+      'https://api.slack.com/tutorials/getting-started',
+    ];
+
+    const result = preFilterUrls(urls, 'https://api.slack.com/methods/chat.postMessage');
+
+    expect(result.included).toContain('https://api.slack.com/methods/chat.postMessage');
+    expect(result.included).toContain('https://api.slack.com/methods/channels.list');
+    expect(result.included).toContain('https://api.slack.com/methods/users.info');
+    expect(result.excluded).toContain('https://api.slack.com/tutorials/getting-started');
+  });
 });
 
 // =============================================================================
