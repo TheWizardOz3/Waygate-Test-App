@@ -16,6 +16,7 @@ import {
   findActionByIntegrationAndActionSlug,
   findActionsByIntegration,
   findActionsByIntegrationPaginated,
+  findActionSummariesByIntegration,
   findExistingSlugs,
   updateAction as repoUpdateAction,
   deleteAction as repoDeleteAction,
@@ -37,6 +38,7 @@ import {
   type UpdateActionInput,
   type ListActionsQuery,
   type ActionResponse,
+  type ActionSummary,
   type ListActionsResponse,
   type ActionSchemaResponse,
   type BatchCreateActionsResponse,
@@ -322,7 +324,9 @@ export async function listActions(
   tenantId: string,
   integrationId: string,
   query: Partial<ListActionsQuery> = {}
-): Promise<ListActionsResponse> {
+): Promise<
+  ListActionsResponse | { actions: ActionSummary[]; pagination: ListActionsResponse['pagination'] }
+> {
   // Validate query - schema has defaults so partial input is ok
   const parsed = ListActionsQuerySchema.safeParse(query);
   if (!parsed.success) {
@@ -332,7 +336,7 @@ export async function listActions(
     );
   }
 
-  const { cursor, limit, search, tags, httpMethod, cacheable } = parsed.data;
+  const { cursor, limit, search, tags, httpMethod, cacheable, fields } = parsed.data;
 
   // Verify integration belongs to tenant
   const integration = await prisma.integration.findFirst({
@@ -357,7 +361,24 @@ export async function listActions(
   const paginationOptions: PaginationOptions = { limit };
   if (cursor) paginationOptions.cursor = cursor;
 
-  // Query
+  // Use lightweight query when only summary fields are needed
+  if (fields === 'summary') {
+    const result = await findActionSummariesByIntegration(
+      integrationId,
+      paginationOptions,
+      filters
+    );
+    return {
+      actions: result.actions,
+      pagination: {
+        cursor: result.nextCursor,
+        hasMore: result.nextCursor !== null,
+        totalCount: result.totalCount,
+      },
+    };
+  }
+
+  // Full query
   const result = await findActionsByIntegrationPaginated(integrationId, paginationOptions, filters);
 
   return {

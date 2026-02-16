@@ -360,7 +360,10 @@ async function fetchAgenticTools(
     take: 200,
   });
 
-  return tools.map(agenticToolToUnifiedTool);
+  // Validate action references in tool allocations
+  const invalidActionToolIds = await findToolsWithInvalidActions(tools);
+
+  return tools.map((tool) => agenticToolToUnifiedTool(tool, invalidActionToolIds));
 }
 
 async function getAgenticToolById(tenantId: string, toolId: string): Promise<UnifiedTool | null> {
@@ -372,10 +375,14 @@ async function getAgenticToolById(tenantId: string, toolId: string): Promise<Uni
   });
 
   if (!tool) return null;
-  return agenticToolToUnifiedTool(tool);
+  const invalidActionToolIds = await findToolsWithInvalidActions([tool]);
+  return agenticToolToUnifiedTool(tool, invalidActionToolIds);
 }
 
-function agenticToolToUnifiedTool(tool: AgenticTool): UnifiedTool {
+function agenticToolToUnifiedTool(
+  tool: AgenticTool,
+  invalidActionToolIds?: Set<string>
+): UnifiedTool {
   return {
     id: tool.id,
     type: 'agentic',
@@ -385,9 +392,63 @@ function agenticToolToUnifiedTool(tool: AgenticTool): UnifiedTool {
     inputSchema: (tool.inputSchema as Record<string, unknown>) ?? {},
     executionMode: tool.executionMode as 'parameter_interpreter' | 'autonomous_agent',
     status: tool.status as 'active' | 'draft' | 'disabled',
+    hasInvalidActions: invalidActionToolIds?.has(tool.id) ?? false,
     createdAt: tool.createdAt.toISOString(),
     updatedAt: tool.updatedAt.toISOString(),
   };
+}
+
+/**
+ * Checks which agentic tools have action references that no longer exist in the DB.
+ * Returns a Set of agentic tool IDs that have at least one invalid action reference.
+ */
+async function findToolsWithInvalidActions(tools: AgenticTool[]): Promise<Set<string>> {
+  // Collect all referenced action IDs from tool allocations
+  const actionIdToToolIds = new Map<string, string[]>();
+
+  for (const tool of tools) {
+    const allocation = tool.toolAllocation as {
+      mode?: string;
+      targetActions?: { actionId: string }[];
+      availableTools?: { actionId: string }[];
+    } | null;
+
+    if (!allocation) continue;
+
+    const actionIds =
+      allocation.targetActions?.map((a) => a.actionId) ??
+      allocation.availableTools?.map((a) => a.actionId) ??
+      [];
+
+    for (const actionId of actionIds) {
+      const existing = actionIdToToolIds.get(actionId);
+      if (existing) {
+        existing.push(tool.id);
+      } else {
+        actionIdToToolIds.set(actionId, [tool.id]);
+      }
+    }
+  }
+
+  if (actionIdToToolIds.size === 0) return new Set();
+
+  // Query which action IDs still exist
+  const allActionIds = Array.from(actionIdToToolIds.keys());
+  const existingActions = await prisma.action.findMany({
+    where: { id: { in: allActionIds } },
+    select: { id: true },
+  });
+  const existingIds = new Set(existingActions.map((a) => a.id));
+
+  // Find tool IDs that reference missing actions
+  const invalidToolIds = new Set<string>();
+  Array.from(actionIdToToolIds.entries()).forEach(([actionId, toolIds]) => {
+    if (!existingIds.has(actionId)) {
+      toolIds.forEach((toolId) => invalidToolIds.add(toolId));
+    }
+  });
+
+  return invalidToolIds;
 }
 
 // =============================================================================

@@ -195,8 +195,24 @@ export function AIToolDashboard({ toolId }: AIToolDashboardProps) {
     );
   }
 
+  // Check for invalid actions (agentic tools with deleted action references)
+  const hasInvalidActions = toolType === 'agentic' && agenticTool?.hasInvalidActions === true;
+
   return (
     <div className="space-y-6">
+      {/* Invalid actions warning */}
+      {hasInvalidActions && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Tool has invalid action references</AlertTitle>
+          <AlertDescription>
+            One or more actions used by this tool no longer exist (the integration may have been
+            deleted). This tool will not function correctly until its action configuration is
+            updated.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-4">

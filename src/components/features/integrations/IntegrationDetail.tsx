@@ -8,26 +8,22 @@ import {
   AlertCircle,
   LayoutDashboard,
   Zap,
-  ScrollText,
   Plug,
   GitBranch,
   Database,
   Sparkles,
-  ShieldAlert,
   Wrench,
 } from 'lucide-react';
 import { useIntegration, useConnections } from '@/hooks';
 import { IntegrationHeader } from './IntegrationHeader';
 import { IntegrationOverview } from './IntegrationOverview';
 import { IntegrationActionsTab } from './IntegrationActionsTab';
-import { IntegrationLogsTab } from './IntegrationLogsTab';
 import { IntegrationFieldMappingsTab } from './IntegrationFieldMappingsTab';
 import { IntegrationReferenceDataTab } from './IntegrationReferenceDataTab';
 import { IntegrationAIToolsTab } from './IntegrationAIToolsTab';
 import { ConnectionList, ConnectionSelector } from '@/components/features/connections';
-import { DriftReportsList } from '@/components/features/schema-drift/DriftReportsList';
-import { DriftBadge } from '@/components/features/schema-drift/DriftBadge';
 import { MaintenanceTab } from '@/components/features/auto-maintenance/MaintenanceTab';
+import { DriftBadge } from '@/components/features/schema-drift/DriftBadge';
 import { MaintenanceBadge } from '@/components/features/auto-maintenance/MaintenanceBadge';
 
 interface IntegrationDetailProps {
@@ -35,7 +31,7 @@ interface IntegrationDetailProps {
 }
 
 export function IntegrationDetail({ integrationId }: IntegrationDetailProps) {
-  const [activeTab, setActiveTab] = useState('actions');
+  const [activeTab, setActiveTab] = useState('overview');
   const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
 
   const { data: integration, isLoading, isError, error } = useIntegration(integrationId);
@@ -107,13 +103,6 @@ export function IntegrationDetail({ integrationId }: IntegrationDetailProps) {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="h-auto w-full justify-start rounded-none border-b bg-transparent p-0">
           <TabsTrigger
-            value="actions"
-            className="relative gap-2 rounded-none border-b-2 border-transparent px-4 pb-3 pt-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-          >
-            <Zap className="h-4 w-4" />
-            Actions
-          </TabsTrigger>
-          <TabsTrigger
             value="overview"
             className="relative gap-2 rounded-none border-b-2 border-transparent px-4 pb-3 pt-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
           >
@@ -121,18 +110,18 @@ export function IntegrationDetail({ integrationId }: IntegrationDetailProps) {
             Overview
           </TabsTrigger>
           <TabsTrigger
-            value="logs"
+            value="connections"
             className="relative gap-2 rounded-none border-b-2 border-transparent px-4 pb-3 pt-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
           >
-            <ScrollText className="h-4 w-4" />
-            Logs
+            <Plug className="h-4 w-4" />
+            Connections
           </TabsTrigger>
           <TabsTrigger
-            value="mappings"
+            value="actions"
             className="relative gap-2 rounded-none border-b-2 border-transparent px-4 pb-3 pt-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
           >
-            <GitBranch className="h-4 w-4" />
-            Field Mappings
+            <Zap className="h-4 w-4" />
+            Actions
           </TabsTrigger>
           <TabsTrigger
             value="ai-tools"
@@ -142,6 +131,13 @@ export function IntegrationDetail({ integrationId }: IntegrationDetailProps) {
             AI Tools
           </TabsTrigger>
           <TabsTrigger
+            value="mappings"
+            className="relative gap-2 rounded-none border-b-2 border-transparent px-4 pb-3 pt-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+          >
+            <GitBranch className="h-4 w-4" />
+            Field Mappings
+          </TabsTrigger>
+          <TabsTrigger
             value="reference-data"
             className="relative gap-2 rounded-none border-b-2 border-transparent px-4 pb-3 pt-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
           >
@@ -149,47 +145,30 @@ export function IntegrationDetail({ integrationId }: IntegrationDetailProps) {
             Reference Data
           </TabsTrigger>
           <TabsTrigger
-            value="schema-drift"
-            className="relative gap-2 rounded-none border-b-2 border-transparent px-4 pb-3 pt-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-          >
-            <ShieldAlert className="h-4 w-4" />
-            Schema Drift
-            <DriftBadge integrationId={integrationId} className="ml-1" />
-          </TabsTrigger>
-          <TabsTrigger
             value="maintenance"
             className="relative gap-2 rounded-none border-b-2 border-transparent px-4 pb-3 pt-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
           >
             <Wrench className="h-4 w-4" />
             Maintenance
+            <DriftBadge integrationId={integrationId} className="ml-1" />
             <MaintenanceBadge integrationId={integrationId} className="ml-1" />
           </TabsTrigger>
-          <TabsTrigger
-            value="connections"
-            className="relative gap-2 rounded-none border-b-2 border-transparent px-4 pb-3 pt-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-          >
-            <Plug className="h-4 w-4" />
-            Connections
-          </TabsTrigger>
         </TabsList>
-
-        <TabsContent value="actions" className="mt-6 space-y-4">
-          <IntegrationActionsTab integrationId={integrationId} integration={integration} />
-        </TabsContent>
 
         <TabsContent value="overview" className="mt-6 space-y-4">
           <IntegrationOverview integration={integration} selectedConnection={selectedConnection} />
         </TabsContent>
 
-        <TabsContent value="logs" className="mt-6 space-y-4">
-          <IntegrationLogsTab integrationId={integrationId} connectionId={selectedConnectionId} />
+        <TabsContent value="connections" className="mt-6 space-y-4">
+          <ConnectionList
+            integrationId={integrationId}
+            integration={integration}
+            onConnectionSelect={setSelectedConnectionId}
+          />
         </TabsContent>
 
-        <TabsContent value="mappings" className="mt-6 space-y-4">
-          <IntegrationFieldMappingsTab
-            integrationId={integrationId}
-            connectionId={selectedConnectionId}
-          />
+        <TabsContent value="actions" className="mt-6 space-y-4">
+          <IntegrationActionsTab integrationId={integrationId} integration={integration} />
         </TabsContent>
 
         <TabsContent value="ai-tools" className="mt-6 space-y-4">
@@ -201,6 +180,13 @@ export function IntegrationDetail({ integrationId }: IntegrationDetailProps) {
           />
         </TabsContent>
 
+        <TabsContent value="mappings" className="mt-6 space-y-4">
+          <IntegrationFieldMappingsTab
+            integrationId={integrationId}
+            connectionId={selectedConnectionId}
+          />
+        </TabsContent>
+
         <TabsContent value="reference-data" className="mt-6 space-y-4">
           <IntegrationReferenceDataTab
             integrationId={integrationId}
@@ -208,20 +194,8 @@ export function IntegrationDetail({ integrationId }: IntegrationDetailProps) {
           />
         </TabsContent>
 
-        <TabsContent value="schema-drift" className="mt-6 space-y-4">
-          <DriftReportsList integrationId={integrationId} />
-        </TabsContent>
-
         <TabsContent value="maintenance" className="mt-6 space-y-4">
           <MaintenanceTab integrationId={integrationId} />
-        </TabsContent>
-
-        <TabsContent value="connections" className="mt-6 space-y-4">
-          <ConnectionList
-            integrationId={integrationId}
-            integration={integration}
-            onConnectionSelect={setSelectedConnectionId}
-          />
         </TabsContent>
       </Tabs>
     </div>

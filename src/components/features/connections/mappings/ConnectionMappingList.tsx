@@ -16,7 +16,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
   Select,
@@ -50,12 +50,13 @@ import {
   useCopyDefaultsToConnection,
   useDeleteConnectionOverride,
   useCreateConnectionOverride,
+  useAction,
 } from '@/hooks';
 import type { ResolvedMapping, SchemaFieldInfo } from '@/lib/modules/execution/mapping';
 import { getSchemaFieldPaths } from '@/lib/modules/execution/mapping';
 import type { JsonSchema } from '@/lib/modules/actions/action.schemas';
 
-interface ActionWithSchema {
+interface ActionItem {
   id: string;
   name: string;
   slug: string;
@@ -65,13 +66,18 @@ interface ActionWithSchema {
 
 interface ConnectionMappingListProps {
   connectionId: string;
-  actions: ActionWithSchema[];
+  integrationId?: string;
+  actions: ActionItem[];
 }
 
 /**
  * List of connection-specific mappings for a selected action
  */
-export function ConnectionMappingList({ connectionId, actions }: ConnectionMappingListProps) {
+export function ConnectionMappingList({
+  connectionId,
+  integrationId,
+  actions,
+}: ConnectionMappingListProps) {
   const [selectedActionId, setSelectedActionId] = useState<string | undefined>(
     actions.length > 0 ? actions[0].id : undefined
   );
@@ -85,6 +91,9 @@ export function ConnectionMappingList({ connectionId, actions }: ConnectionMappi
     refetch,
   } = useConnectionMappings(connectionId, selectedActionId);
 
+  // Lazy-load full action details (with schemas) only for the selected action
+  const { data: fullAction } = useAction(selectedActionId, integrationId);
+
   const { mutateAsync: copyDefaults, isPending: copyPending } =
     useCopyDefaultsToConnection(connectionId);
 
@@ -94,30 +103,32 @@ export function ConnectionMappingList({ connectionId, actions }: ConnectionMappi
   // Memoize mappings to avoid unstable references
   const mappings = useMemo(() => mappingsData?.mappings ?? [], [mappingsData?.mappings]);
 
-  // Get the selected action's schema
-  const selectedAction = useMemo(
+  // Get the selected action's schema - prefer lazy-loaded full action, fall back to passed-in data
+  const selectedActionFromList = useMemo(
     () => actions.find((a) => a.id === selectedActionId),
     [actions, selectedActionId]
   );
 
+  const selectedInputSchema = (fullAction?.inputSchema ?? selectedActionFromList?.inputSchema) as
+    | JsonSchema
+    | undefined;
+  const selectedOutputSchema = (fullAction?.outputSchema ??
+    selectedActionFromList?.outputSchema) as JsonSchema | undefined;
+
   // Determine if schemas are array types at root
-  const isOutputArray = selectedAction?.outputSchema?.type === 'array';
-  const isInputArray = selectedAction?.inputSchema?.type === 'array';
+  const isOutputArray = selectedOutputSchema?.type === 'array';
+  const isInputArray = selectedInputSchema?.type === 'array';
 
   // Extract schema fields as potential source paths
   const outputSchemaFields = useMemo(() => {
-    if (!selectedAction?.outputSchema) return [];
-    return getSchemaFieldPaths(
-      selectedAction.outputSchema as Parameters<typeof getSchemaFieldPaths>[0]
-    );
-  }, [selectedAction?.outputSchema]);
+    if (!selectedOutputSchema) return [];
+    return getSchemaFieldPaths(selectedOutputSchema as Parameters<typeof getSchemaFieldPaths>[0]);
+  }, [selectedOutputSchema]);
 
   const inputSchemaFields = useMemo(() => {
-    if (!selectedAction?.inputSchema) return [];
-    return getSchemaFieldPaths(
-      selectedAction.inputSchema as Parameters<typeof getSchemaFieldPaths>[0]
-    );
-  }, [selectedAction?.inputSchema]);
+    if (!selectedInputSchema) return [];
+    return getSchemaFieldPaths(selectedInputSchema as Parameters<typeof getSchemaFieldPaths>[0]);
+  }, [selectedInputSchema]);
 
   // Find which schema fields already have mappings configured
   const configuredOutputPaths = useMemo(() => {
@@ -172,206 +183,208 @@ export function ConnectionMappingList({ connectionId, actions }: ConnectionMappi
   }
 
   return (
-    <Card>
-      <CardHeader className="pb-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-1">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Layers className="h-4 w-4" />
-              Field Mappings
-            </CardTitle>
-            <CardDescription>Customize how data is transformed for this connection</CardDescription>
-          </div>
-
-          {/* Action Selector */}
-          <Select value={selectedActionId} onValueChange={setSelectedActionId}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Select action" />
-            </SelectTrigger>
-            <SelectContent>
-              {actions.map((action) => (
-                <SelectItem key={action.id} value={action.id}>
-                  {action.name || action.slug}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Field Mappings</h2>
+          <p className="text-sm text-muted-foreground">
+            Customize how data is transformed for this connection
+          </p>
         </div>
 
-        {/* Stats Bar */}
-        {stats && selectedActionId && (
-          <div className="mt-4 flex items-center gap-4 rounded-lg border bg-muted/30 px-4 py-2.5">
-            <div className="flex items-center gap-2">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center gap-1.5 text-sm">
-                    <GitBranch className="h-3.5 w-3.5 text-slate-500" />
-                    <span className="font-medium">{stats.defaultsCount}</span>
-                    <span className="text-muted-foreground">inherited</span>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="text-xs">Mappings inherited from action defaults</p>
-                </TooltipContent>
-              </Tooltip>
-            </div>
+        {/* Action Selector */}
+        <Select value={selectedActionId} onValueChange={setSelectedActionId}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Select action" />
+          </SelectTrigger>
+          <SelectContent>
+            {actions.map((action) => (
+              <SelectItem key={action.id} value={action.id}>
+                {action.name || action.slug}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
-            <div className="h-4 w-px bg-border" />
-
-            <div className="flex items-center gap-2">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center gap-1.5 text-sm">
-                    <Pencil className="h-3.5 w-3.5 text-violet-500" />
-                    <span className="font-medium">{stats.overridesCount}</span>
-                    <span className="text-muted-foreground">
-                      override{stats.overridesCount !== 1 ? 's' : ''}
-                    </span>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="text-xs">Custom mappings for this connection</p>
-                </TooltipContent>
-              </Tooltip>
-            </div>
-
-            <div className="flex-1" />
-
-            {/* Actions Menu */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-1">
-                  Actions
-                  <ChevronDown className="h-3.5 w-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setAddDialogOpen(true)}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Override
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleCopyDefaults} disabled={copyPending}>
-                  {copyPending ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Copy className="mr-2 h-4 w-4" />
-                  )}
-                  Copy Defaults to Overrides
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => setResetDialogOpen(true)}
-                  disabled={stats.overridesCount === 0}
-                  className="text-destructive focus:text-destructive"
-                >
-                  <RotateCcw className="mr-2 h-4 w-4" />
-                  Reset to Defaults
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+      {/* Stats Bar */}
+      {stats && selectedActionId && (
+        <div className="flex items-center gap-4 rounded-lg border bg-muted/30 px-4 py-2.5">
+          <div className="flex items-center gap-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-1.5 text-sm">
+                  <GitBranch className="h-3.5 w-3.5 text-slate-500" />
+                  <span className="font-medium">{stats.defaultsCount}</span>
+                  <span className="text-muted-foreground">inherited</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="text-xs">Mappings inherited from action defaults</p>
+              </TooltipContent>
+            </Tooltip>
           </div>
-        )}
-      </CardHeader>
 
-      <CardContent className="space-y-6">
-        {/* Mapping Config Info - always visible when disabled */}
-        {config && !config.enabled && !isLoading && selectedActionId && (
-          <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
-            <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-            <div className="text-sm">
-              <p className="font-medium text-amber-600 dark:text-amber-400">
-                Mapping is disabled for this action
-              </p>
-              <p className="text-muted-foreground">
-                Enable mapping in the action settings for these mappings to take effect.
-              </p>
-            </div>
-          </div>
-        )}
+          <div className="h-4 w-px bg-border" />
 
-        {/* Content area */}
-        {!selectedActionId ? (
-          <div className="py-12 text-center">
-            <p className="text-sm text-muted-foreground">Select an action to view its mappings</p>
+          <div className="flex items-center gap-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-1.5 text-sm">
+                  <Pencil className="h-3.5 w-3.5 text-violet-500" />
+                  <span className="font-medium">{stats.overridesCount}</span>
+                  <span className="text-muted-foreground">
+                    override{stats.overridesCount !== 1 ? 's' : ''}
+                  </span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="text-xs">Custom mappings for this connection</p>
+              </TooltipContent>
+            </Tooltip>
           </div>
-        ) : isLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : mappings.length === 0 &&
-          unconfiguredOutputFields.length === 0 &&
-          unconfiguredInputFields.length === 0 ? (
-          <div className="py-12 text-center">
-            <Layers className="mx-auto mb-3 h-8 w-8 text-muted-foreground/50" />
-            <p className="text-sm text-muted-foreground">No mappings configured for this action</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Mappings transform data between your app and the external API
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-4"
-              onClick={() => setAddDialogOpen(true)}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add First Override
-            </Button>
-          </div>
-        ) : (
-          <>
-            {/* Mappings Table - always show if there are mappings */}
-            {mappings.length > 0 && (
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="hover:bg-transparent">
-                      <TableHead className="w-20">Type</TableHead>
-                      <TableHead>Source Path</TableHead>
-                      <TableHead className="w-8"></TableHead>
-                      <TableHead>Target Path</TableHead>
-                      <TableHead className="w-24">Transform</TableHead>
-                      <TableHead className="w-24">Source</TableHead>
-                      <TableHead className="w-16"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {mappings.map((rm, idx) => (
-                      <MappingTableRow
-                        key={rm.mapping.id ?? `mapping-${idx}`}
-                        resolvedMapping={rm}
-                        connectionId={connectionId}
-                        actionId={selectedActionId}
-                        onDeleted={() => refetch()}
-                      />
-                    ))}
-                  </TableBody>
-                </Table>
+
+          <div className="flex-1" />
+
+          {/* Actions Menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-1">
+                Actions
+                <ChevronDown className="h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setAddDialogOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Override
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleCopyDefaults} disabled={copyPending}>
+                {copyPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Copy className="mr-2 h-4 w-4" />
+                )}
+                Copy Defaults to Overrides
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => setResetDialogOpen(true)}
+                disabled={stats.overridesCount === 0}
+                className="text-destructive focus:text-destructive"
+              >
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Reset to Defaults
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
+
+      <Card>
+        <CardContent className="space-y-6 pt-6">
+          {/* Mapping Config Info - always visible when disabled */}
+          {config && !config.enabled && !isLoading && selectedActionId && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+              <div className="text-sm">
+                <p className="font-medium text-amber-600 dark:text-amber-400">
+                  Mapping is disabled for this action
+                </p>
+                <p className="text-muted-foreground">
+                  Enable mapping in the action settings for these mappings to take effect.
+                </p>
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Schema Fields Section - show when there are unconfigured fields */}
-            {(unconfiguredOutputFields.length > 0 ||
-              unconfiguredInputFields.length > 0 ||
-              (isOutputArray && !hasRootOutputMapping) ||
-              (isInputArray && !hasRootInputMapping)) &&
-              (showSchemaFields || mappings.length === 0) && (
-                <SchemaFieldsSection
-                  connectionId={connectionId}
-                  actionId={selectedActionId}
-                  outputFields={unconfiguredOutputFields}
-                  inputFields={unconfiguredInputFields}
-                  isOutputArray={isOutputArray}
-                  isInputArray={isInputArray}
-                  hasRootOutputMapping={hasRootOutputMapping}
-                  hasRootInputMapping={hasRootInputMapping}
-                  onMappingCreated={() => refetch()}
-                  collapsible={mappings.length > 0}
-                  onDismiss={mappings.length > 0 ? () => setShowSchemaFields(false) : undefined}
-                />
+          {/* Content area */}
+          {!selectedActionId ? (
+            <div className="py-12 text-center">
+              <p className="text-sm text-muted-foreground">Select an action to view its mappings</p>
+            </div>
+          ) : isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : mappings.length === 0 &&
+            unconfiguredOutputFields.length === 0 &&
+            unconfiguredInputFields.length === 0 ? (
+            <div className="py-12 text-center">
+              <Layers className="mx-auto mb-3 h-8 w-8 text-muted-foreground/50" />
+              <p className="text-sm text-muted-foreground">
+                No mappings configured for this action
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Mappings transform data between your app and the external API
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-4"
+                onClick={() => setAddDialogOpen(true)}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add First Override
+              </Button>
+            </div>
+          ) : (
+            <>
+              {/* Mappings Table - always show if there are mappings */}
+              {mappings.length > 0 && (
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="w-20">Type</TableHead>
+                        <TableHead>Source Path</TableHead>
+                        <TableHead className="w-8"></TableHead>
+                        <TableHead>Target Path</TableHead>
+                        <TableHead className="w-24">Transform</TableHead>
+                        <TableHead className="w-24">Source</TableHead>
+                        <TableHead className="w-16"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {mappings.map((rm, idx) => (
+                        <MappingTableRow
+                          key={rm.mapping.id ?? `mapping-${idx}`}
+                          resolvedMapping={rm}
+                          connectionId={connectionId}
+                          actionId={selectedActionId}
+                          onDeleted={() => refetch()}
+                        />
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               )}
-          </>
-        )}
-      </CardContent>
+
+              {/* Schema Fields Section - show when there are unconfigured fields */}
+              {(unconfiguredOutputFields.length > 0 ||
+                unconfiguredInputFields.length > 0 ||
+                (isOutputArray && !hasRootOutputMapping) ||
+                (isInputArray && !hasRootInputMapping)) &&
+                (showSchemaFields || mappings.length === 0) && (
+                  <SchemaFieldsSection
+                    connectionId={connectionId}
+                    actionId={selectedActionId}
+                    outputFields={unconfiguredOutputFields}
+                    inputFields={unconfiguredInputFields}
+                    isOutputArray={isOutputArray}
+                    isInputArray={isInputArray}
+                    hasRootOutputMapping={hasRootOutputMapping}
+                    hasRootInputMapping={hasRootInputMapping}
+                    onMappingCreated={() => refetch()}
+                    collapsible={mappings.length > 0}
+                    onDismiss={mappings.length > 0 ? () => setShowSchemaFields(false) : undefined}
+                  />
+                )}
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Dialogs */}
       {selectedActionId && (
@@ -393,7 +406,7 @@ export function ConnectionMappingList({ connectionId, actions }: ConnectionMappi
           />
         </>
       )}
-    </Card>
+    </div>
   );
 }
 

@@ -86,6 +86,22 @@ export interface PaginatedActions {
   totalCount: number;
 }
 
+/**
+ * Lightweight action summary (id, integrationId, name, slug only)
+ */
+export interface ActionSummaryRow {
+  id: string;
+  integrationId: string;
+  name: string;
+  slug: string;
+}
+
+export interface PaginatedActionSummaries {
+  actions: ActionSummaryRow[];
+  nextCursor: string | null;
+  totalCount: number;
+}
+
 // =============================================================================
 // Create Operations
 // =============================================================================
@@ -361,6 +377,57 @@ export async function findActionsByIntegrationPaginated(
     nextCursor,
     totalCount,
   };
+}
+
+/**
+ * Finds action summaries (id, name, slug) for an integration with pagination.
+ * Uses Prisma select to avoid fetching heavy JSON columns (schemas, configs).
+ */
+export async function findActionSummariesByIntegration(
+  integrationId: string,
+  options: PaginationOptions = {},
+  filters: Omit<ActionFilters, 'integrationId'> = {}
+): Promise<PaginatedActionSummaries> {
+  const limit = Math.min(options.limit ?? 50, 100);
+
+  const where: Prisma.ActionWhereInput = { integrationId };
+
+  if (filters.search) {
+    where.OR = [
+      { name: { contains: filters.search, mode: 'insensitive' } },
+      { slug: { contains: filters.search, mode: 'insensitive' } },
+    ];
+  }
+
+  const totalCount = await prisma.action.count({ where });
+
+  const queryOptions: Parameters<typeof prisma.action.findMany>[0] = {
+    where,
+    take: limit + 1,
+    orderBy: { name: 'asc' as const },
+    select: {
+      id: true,
+      integrationId: true,
+      name: true,
+      slug: true,
+    },
+  };
+
+  if (options.cursor) {
+    queryOptions.cursor = { id: options.cursor };
+    queryOptions.skip = 1;
+  }
+
+  const actions = await prisma.action.findMany(queryOptions);
+
+  const hasMore = actions.length > limit;
+  if (hasMore) {
+    actions.pop();
+  }
+
+  const nextCursor = hasMore && actions.length > 0 ? actions[actions.length - 1].id : null;
+
+  return { actions, nextCursor, totalCount };
 }
 
 /**

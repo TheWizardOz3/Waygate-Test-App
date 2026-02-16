@@ -17,8 +17,8 @@
 | 3     | Batch Operations          | Done        | Async Job System       |
 | 4     | Schema Drift Detection    | Done        | Async Job System       |
 | 5     | Auto-Maintenance System   | Done        | Schema Drift Detection |
-| 6     | Vercel Deployment & CI/CD | In Progress | All features complete  |
-| 7     | Multi-App Support         | Not Started | Vercel Deployment      |
+| 6     | End-User Auth Delegation  | In Progress | Auto-Maintenance       |
+| 7     | Vercel Deployment & CI/CD | Not Started | All features complete  |
 
 **Feature Summaries:**
 
@@ -28,7 +28,7 @@
 - **Batch Operations:** Queue and batch high-volume write operations to avoid rate limits, with progress tracking
 - **Schema Drift Detection:** Periodic re-scraping of API docs, compare against stored schemas, alert on discrepancies
 - **Auto-Maintenance System:** Detect API changes, auto-propose integration config updates with approval workflow
-- **Multi-App Support:** App entity with per-app API keys, per-app OAuth credentials, app-scoped connections, and dual-key auth resolution
+- **End-User Auth Delegation:** App entity with per-app API keys, per-app OAuth credentials, app-scoped connections, and dual-key auth resolution
 
 ### Definition of Done
 

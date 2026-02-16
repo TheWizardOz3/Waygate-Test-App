@@ -237,6 +237,7 @@ export const AgenticToolResponseSchema = z.object({
   safetyLimits: z.record(z.string(), z.unknown()),
   status: AgenticToolStatusSchema,
   metadata: z.record(z.string(), z.unknown()),
+  hasInvalidActions: z.boolean().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

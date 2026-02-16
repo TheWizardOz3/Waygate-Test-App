@@ -317,9 +317,21 @@ export const ListActionsQuerySchema = z.object({
     .string()
     .transform((v) => v === 'true')
     .optional(),
+  /** Return only summary fields (id, name, slug) to reduce payload size */
+  fields: z.enum(['summary', 'full']).optional(),
 });
 
 export type ListActionsQuery = z.infer<typeof ListActionsQuerySchema>;
+
+/**
+ * Lightweight action summary for dropdowns and selectors
+ */
+export interface ActionSummary {
+  id: string;
+  integrationId: string;
+  name: string;
+  slug: string;
+}
 
 // =============================================================================
 // API Response Schemas

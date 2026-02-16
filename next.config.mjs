@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {};
+const nextConfig = {
+  distDir: '/tmp/waygate-next-build',
+};
 
 export default nextConfig;

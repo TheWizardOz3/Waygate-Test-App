@@ -8,6 +8,7 @@
  */
 
 import { AgenticToolExecutionMode, AgenticToolStatus, Prisma } from '@prisma/client';
+import { prisma } from '@/lib/db/client';
 import {
   createAgenticTool as repoCreateAgenticTool,
   findAgenticToolByIdAndTenant,
@@ -146,7 +147,15 @@ export async function getAgenticToolById(
     );
   }
 
-  return toAgenticToolResponse(agenticTool);
+  const response = toAgenticToolResponse(agenticTool);
+
+  // Check for invalid action references
+  const hasInvalidActions = await checkForInvalidActions(agenticTool.toolAllocation);
+  if (hasInvalidActions) {
+    response.hasInvalidActions = true;
+  }
+
+  return response;
 }
 
 /**
@@ -442,4 +451,31 @@ export function validateAgenticToolActive(tool: AgenticTool): void {
       403
     );
   }
+}
+
+/**
+ * Checks whether a tool allocation references any actions that no longer exist.
+ */
+async function checkForInvalidActions(toolAllocation: unknown): Promise<boolean> {
+  const allocation = toolAllocation as {
+    mode?: string;
+    targetActions?: { actionId: string }[];
+    availableTools?: { actionId: string }[];
+  } | null;
+
+  if (!allocation) return false;
+
+  const actionIds =
+    allocation.targetActions?.map((a) => a.actionId) ??
+    allocation.availableTools?.map((a) => a.actionId) ??
+    [];
+
+  if (actionIds.length === 0) return false;
+
+  const existingActions = await prisma.action.findMany({
+    where: { id: { in: actionIds } },
+    select: { id: true },
+  });
+
+  return existingActions.length < actionIds.length;
 }

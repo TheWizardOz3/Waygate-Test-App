@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -245,103 +245,104 @@ export function DriftReportsList({ integrationId }: DriftReportsListProps) {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between">
-          <div>
-            <CardTitle>Schema Drift Reports</CardTitle>
-            <CardDescription>
-              Detected changes in API response schemas from runtime validation failures
-            </CardDescription>
-          </div>
-          {pagination && (
-            <span className="text-sm text-muted-foreground">
-              {pagination.totalCount} report{pagination.totalCount !== 1 ? 's' : ''}
-            </span>
-          )}
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Schema Drift Reports</h2>
+          <p className="text-sm text-muted-foreground">
+            Detected changes in API response schemas from runtime validation failures
+          </p>
         </div>
-
-        {/* Filters */}
-        <div className="flex items-center gap-3 pt-2">
-          <Select value={severityFilter} onValueChange={handleSeverityChange}>
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="Severity" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Severities</SelectItem>
-              <SelectItem value="breaking">Breaking</SelectItem>
-              <SelectItem value="warning">Warning</SelectItem>
-              <SelectItem value="info">Info</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select value={statusFilter} onValueChange={handleStatusChange}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="detected">Detected</SelectItem>
-              <SelectItem value="acknowledged">Acknowledged</SelectItem>
-              <SelectItem value="resolved">Resolved</SelectItem>
-              <SelectItem value="dismissed">Dismissed</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </CardHeader>
-
-      <CardContent>
-        {isLoading ? (
-          <DriftReportsListSkeleton />
-        ) : isError ? (
-          <div className="py-12 text-center">
-            <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-muted-foreground/50" />
-            <p className="text-sm text-muted-foreground">Failed to load drift reports</p>
-          </div>
-        ) : reports.length === 0 ? (
-          <div className="py-12 text-center">
-            <ShieldAlert className="mx-auto mb-3 h-8 w-8 text-muted-foreground/50" />
-            <p className="font-medium">No drift reports</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {severityFilter !== 'all' || statusFilter !== 'all'
-                ? 'No reports match the selected filters'
-                : 'No schema drift has been detected for this integration'}
-            </p>
-          </div>
-        ) : (
-          <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Field Path</TableHead>
-                  <TableHead>Change Type</TableHead>
-                  <TableHead>Severity</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Failures</TableHead>
-                  <TableHead>First Detected</TableHead>
-                  <TableHead>Last Detected</TableHead>
-                  <TableHead className="w-10"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {reports.map((report) => (
-                  <DriftReportRow key={report.id} report={report} integrationId={integrationId} />
-                ))}
-              </TableBody>
-            </Table>
-
-            {/* Load More */}
-            {pagination?.hasMore && (
-              <div className="flex justify-center pt-4">
-                <Button variant="outline" size="sm" onClick={handleLoadMore}>
-                  Load More
-                </Button>
-              </div>
-            )}
-          </>
+        {pagination && (
+          <span className="text-sm text-muted-foreground">
+            {pagination.totalCount} report{pagination.totalCount !== 1 ? 's' : ''}
+          </span>
         )}
-      </CardContent>
-    </Card>
+      </div>
+
+      {/* Filters */}
+      <div className="flex items-center gap-3">
+        <Select value={severityFilter} onValueChange={handleSeverityChange}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Severity" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Severities</SelectItem>
+            <SelectItem value="breaking">Breaking</SelectItem>
+            <SelectItem value="warning">Warning</SelectItem>
+            <SelectItem value="info">Info</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={statusFilter} onValueChange={handleStatusChange}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            <SelectItem value="detected">Detected</SelectItem>
+            <SelectItem value="acknowledged">Acknowledged</SelectItem>
+            <SelectItem value="resolved">Resolved</SelectItem>
+            <SelectItem value="dismissed">Dismissed</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <Card>
+        <CardContent className="pt-6">
+          {isLoading ? (
+            <DriftReportsListSkeleton />
+          ) : isError ? (
+            <div className="py-12 text-center">
+              <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-muted-foreground/50" />
+              <p className="text-sm text-muted-foreground">Failed to load drift reports</p>
+            </div>
+          ) : reports.length === 0 ? (
+            <div className="py-12 text-center">
+              <ShieldAlert className="mx-auto mb-3 h-8 w-8 text-muted-foreground/50" />
+              <p className="font-medium">No drift reports</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {severityFilter !== 'all' || statusFilter !== 'all'
+                  ? 'No reports match the selected filters'
+                  : 'No schema drift has been detected for this integration'}
+              </p>
+            </div>
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Field Path</TableHead>
+                    <TableHead>Change Type</TableHead>
+                    <TableHead>Severity</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Failures</TableHead>
+                    <TableHead>First Detected</TableHead>
+                    <TableHead>Last Detected</TableHead>
+                    <TableHead className="w-10"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {reports.map((report) => (
+                    <DriftReportRow key={report.id} report={report} integrationId={integrationId} />
+                  ))}
+                </TableBody>
+              </Table>
+
+              {/* Load More */}
+              {pagination?.hasMore && (
+                <div className="flex justify-center pt-4">
+                  <Button variant="outline" size="sm" onClick={handleLoadMore}>
+                    Load More
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 

@@ -224,6 +224,8 @@ export function useDeleteIntegration() {
       queryClient.removeQueries({ queryKey: integrationKeys.detail(id) });
       // Invalidate list
       queryClient.invalidateQueries({ queryKey: integrationKeys.lists() });
+      // Invalidate unified tools — actions were cascade-deleted and AI tools may now have invalid references
+      queryClient.invalidateQueries({ queryKey: ['unified-tools'] });
     },
   });
 }

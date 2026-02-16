@@ -85,6 +85,7 @@ export const UnifiedToolResponseSchema = z.object({
   executionMode: z.enum(['parameter_interpreter', 'autonomous_agent']).optional(),
   stepCount: z.number().int().optional(),
   status: ToolStatusSchema,
+  hasInvalidActions: z.boolean().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

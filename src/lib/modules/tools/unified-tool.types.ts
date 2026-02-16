@@ -78,6 +78,9 @@ export interface UnifiedTool {
   /** Tool status */
   status: 'active' | 'draft' | 'disabled';
 
+  /** Whether any referenced actions no longer exist (e.g. integration was deleted) */
+  hasInvalidActions?: boolean;
+
   /** Creation timestamp */
   createdAt: string;
 

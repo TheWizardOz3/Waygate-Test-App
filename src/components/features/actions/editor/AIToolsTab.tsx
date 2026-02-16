@@ -20,8 +20,6 @@ import {
 } from '@/components/ui/select';
 import { Sparkles, Database, Info, Loader2, Star } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { UsedInAIToolsSection } from '@/components/features/composite-tools/UsedInAIToolsSection';
-import { useCompositeToolsByAction } from '@/hooks/useCompositeTools';
 import type { JsonSchema } from '@/lib/modules/actions/action.schemas';
 
 interface AIToolsTabProps {
@@ -167,13 +165,8 @@ function AIToolsTabInner({
   // integrationName is available for future use
   outputSchema,
   onRegenerateToolDescriptions,
-  actionId,
 }: AIToolsTabProps) {
   const [isGenerating, setIsGenerating] = useState(false);
-
-  // Fetch composite tools that use this action
-  const { data: compositeToolsData, isLoading: isLoadingCompositeTools } =
-    useCompositeToolsByAction(actionId);
 
   // Use useWatch for optimized re-renders - only re-render when these specific values change
   const toolDescription = useWatch({ control: form.control, name: 'toolDescription' });
@@ -956,17 +949,6 @@ function AIToolsTabInner({
             </div>
           )}
         </section>
-
-        {/* Used in Composite Tools Section */}
-        {actionId && (
-          <UsedInAIToolsSection
-            compositeTools={compositeToolsData?.compositeTools}
-            isLoading={isLoadingCompositeTools}
-            title="Used in Composite Tools"
-            description="This action is included in the following composite tools"
-            emptyMessage="This action is not used in any composite tools yet."
-          />
-        )}
       </div>
     </div>
   );

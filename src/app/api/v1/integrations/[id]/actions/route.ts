@@ -50,6 +50,7 @@ export const GET = withApiAuth(async (request: NextRequest, { tenant }) => {
       cacheable: searchParams.has('cacheable')
         ? searchParams.get('cacheable') === 'true'
         : undefined,
+      fields: (searchParams.get('fields') as 'summary' | 'full') || undefined,
     };
 
     // List actions

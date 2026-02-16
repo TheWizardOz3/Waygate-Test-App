@@ -73,7 +73,7 @@ export function SettingsTab({ form }: SettingsTabProps) {
       <div>
         <h2 className="text-lg font-semibold">Action Settings</h2>
         <p className="text-sm text-muted-foreground">
-          Configure validation, caching, and retry behavior
+          Control how responses are checked, cached, and retried when things go wrong
         </p>
       </div>
 
@@ -88,7 +88,9 @@ export function SettingsTab({ form }: SettingsTabProps) {
               </div>
               <div>
                 <p className="font-medium">Response Validation</p>
-                <p className="text-xs text-muted-foreground">Validate against output schema</p>
+                <p className="text-xs text-muted-foreground">
+                  Check that API responses match the expected format
+                </p>
               </div>
             </div>
             <Switch
@@ -116,7 +118,9 @@ export function SettingsTab({ form }: SettingsTabProps) {
                       <Badge variant="outline" className="bg-amber-500/10 text-amber-600">
                         Warn
                       </Badge>
-                      <span className="text-xs text-muted-foreground">Log issues, pass data</span>
+                      <span className="text-xs text-muted-foreground">
+                        Log issues but still return data
+                      </span>
                     </div>
                   </SelectItem>
                   <SelectItem value="strict">
@@ -124,7 +128,9 @@ export function SettingsTab({ form }: SettingsTabProps) {
                       <Badge variant="outline" className="bg-red-500/10 text-red-600">
                         Strict
                       </Badge>
-                      <span className="text-xs text-muted-foreground">Fail on mismatch</span>
+                      <span className="text-xs text-muted-foreground">
+                        Reject responses that don&apos;t match
+                      </span>
                     </div>
                   </SelectItem>
                   <SelectItem value="lenient">
@@ -132,7 +138,9 @@ export function SettingsTab({ form }: SettingsTabProps) {
                       <Badge variant="outline" className="bg-blue-500/10 text-blue-600">
                         Lenient
                       </Badge>
-                      <span className="text-xs text-muted-foreground">Auto-coerce types</span>
+                      <span className="text-xs text-muted-foreground">
+                        Automatically fix minor format differences
+                      </span>
                     </div>
                   </SelectItem>
                 </SelectContent>
@@ -151,8 +159,8 @@ export function SettingsTab({ form }: SettingsTabProps) {
                       <Info className="h-3.5 w-3.5 text-muted-foreground" />
                     </TooltipTrigger>
                     <TooltipContent className="max-w-xs">
-                      Monitors validation failures over time to detect when the external API changes
-                      its response format
+                      Watches for repeated validation failures that may indicate the external API
+                      has changed its response format — so you can fix it before it causes problems
                     </TooltipContent>
                   </Tooltip>
                 </div>
@@ -171,7 +179,7 @@ export function SettingsTab({ form }: SettingsTabProps) {
               </div>
               <div className={`space-y-3 ${!driftEnabled ? 'pointer-events-none opacity-50' : ''}`}>
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Time Window</Label>
+                  <Label className="text-xs text-muted-foreground">Detection Window</Label>
                   <div className="flex items-center gap-2">
                     <Input
                       type="number"
@@ -191,9 +199,12 @@ export function SettingsTab({ form }: SettingsTabProps) {
                     />
                     <span className="text-xs text-muted-foreground">minutes</span>
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    How far back to look when counting failures
+                  </p>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Alert after</Label>
+                  <Label className="text-xs text-muted-foreground">Alert threshold</Label>
                   <div className="flex items-center gap-2">
                     <Input
                       type="number"
@@ -213,6 +224,9 @@ export function SettingsTab({ form }: SettingsTabProps) {
                     />
                     <span className="text-xs text-muted-foreground">failures</span>
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Number of failures before you get notified
+                  </p>
                 </div>
               </div>
             </div>
@@ -228,7 +242,9 @@ export function SettingsTab({ form }: SettingsTabProps) {
               </div>
               <div>
                 <p className="font-medium">Response Caching</p>
-                <p className="text-xs text-muted-foreground">Cache to reduce API calls</p>
+                <p className="text-xs text-muted-foreground">
+                  Store responses temporarily to avoid redundant requests
+                </p>
               </div>
             </div>
             <FormField
@@ -271,7 +287,8 @@ export function SettingsTab({ form }: SettingsTabProps) {
                       <span className="text-sm text-muted-foreground">seconds</span>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      How long to cache responses (0 = no cache)
+                      How long to reuse a stored response before fetching fresh data (0 = always
+                      fetch)
                     </p>
                   </div>
                   <FormMessage />
@@ -290,7 +307,9 @@ export function SettingsTab({ form }: SettingsTabProps) {
               </div>
               <div>
                 <p className="font-medium">Automatic Retries</p>
-                <p className="text-xs text-muted-foreground">Retry on specific error codes</p>
+                <p className="text-xs text-muted-foreground">
+                  Automatically retry when the API is temporarily unavailable
+                </p>
               </div>
             </div>
             <FormField
@@ -335,7 +354,9 @@ export function SettingsTab({ form }: SettingsTabProps) {
                         className="w-24"
                       />
                     </FormControl>
-                    <p className="text-xs text-muted-foreground">Times to retry before failing</p>
+                    <p className="text-xs text-muted-foreground">
+                      How many times to retry before giving up
+                    </p>
                   </div>
                   <FormMessage />
                 </FormItem>
@@ -364,7 +385,8 @@ export function SettingsTab({ form }: SettingsTabProps) {
                       />
                     </FormControl>
                     <p className="text-xs text-muted-foreground">
-                      429 (rate limit), 500-504 (server errors)
+                      Which error types to retry — 429 means &quot;too many requests&quot;, 500+
+                      means the server had a problem
                     </p>
                   </div>
                   <FormMessage />

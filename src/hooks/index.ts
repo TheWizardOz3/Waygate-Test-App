@@ -17,9 +17,18 @@ export {
 // Scrape job hooks
 export { useScrapeJob, useScrapeJobStatus } from './useScrapeJob';
 
+// Scraped pages hooks
+export {
+  useScrapedPages,
+  scrapedPageKeys,
+  type ScrapedPage,
+  type ScrapedPagesData,
+} from './useScrapedPages';
+
 // Action hooks
 export {
   useActions,
+  useActionSummaries,
   useAction,
   useCreateAction,
   useUpdateAction,

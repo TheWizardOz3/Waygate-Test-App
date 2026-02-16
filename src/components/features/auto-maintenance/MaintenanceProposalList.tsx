@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -253,131 +253,132 @@ export function MaintenanceProposalList({
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between">
-          <div>
-            <CardTitle>Maintenance Proposals</CardTitle>
-            <CardDescription>
-              Schema update proposals generated from detected API drift
-            </CardDescription>
-          </div>
-          <div className="flex items-center gap-2">
-            {pendingInfoCount > 1 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleBatchApprove}
-                disabled={isBatchApproving}
-              >
-                {isBatchApproving ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="mr-2 h-4 w-4" />
-                )}
-                Batch Approve Info
-              </Button>
-            )}
-            <Button variant="outline" size="sm" onClick={handleTrigger} disabled={isTriggering}>
-              {isTriggering ? (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Maintenance Proposals</h2>
+          <p className="text-sm text-muted-foreground">
+            Schema update proposals generated from detected API drift
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {pendingInfoCount > 1 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleBatchApprove}
+              disabled={isBatchApproving}
+            >
+              {isBatchApproving ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
-                <Sparkles className="mr-2 h-4 w-4" />
+                <CheckCircle2 className="mr-2 h-4 w-4" />
               )}
-              Generate Proposals
+              Batch Approve Info
             </Button>
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div className="flex items-center gap-3 pt-2">
-          <Select value={statusFilter} onValueChange={handleStatusChange}>
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="approved">Approved</SelectItem>
-              <SelectItem value="rejected">Rejected</SelectItem>
-              <SelectItem value="expired">Expired</SelectItem>
-              <SelectItem value="reverted">Reverted</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select value={severityFilter} onValueChange={handleSeverityChange}>
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="Severity" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Severities</SelectItem>
-              <SelectItem value="breaking">Breaking</SelectItem>
-              <SelectItem value="warning">Warning</SelectItem>
-              <SelectItem value="info">Info</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {pagination && (
-            <span className="ml-auto text-sm text-muted-foreground">
-              {pagination.totalCount} proposal{pagination.totalCount !== 1 ? 's' : ''}
-            </span>
           )}
-        </div>
-      </CardHeader>
-
-      <CardContent>
-        {isLoading ? (
-          <ProposalListSkeleton />
-        ) : isError ? (
-          <div className="py-12 text-center">
-            <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-muted-foreground/50" />
-            <p className="text-sm text-muted-foreground">Failed to load proposals</p>
-          </div>
-        ) : proposals.length === 0 ? (
-          <div className="py-12 text-center">
-            <Wrench className="mx-auto mb-3 h-8 w-8 text-muted-foreground/50" />
-            <p className="font-medium">No maintenance proposals</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {statusFilter !== 'all' || severityFilter !== 'all'
-                ? 'No proposals match the selected filters'
-                : 'No schema updates have been proposed for this integration'}
-            </p>
-          </div>
-        ) : (
-          <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Change Summary</TableHead>
-                  <TableHead>Direction</TableHead>
-                  <TableHead>Severity</TableHead>
-                  <TableHead>Source</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Created</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {proposals.map((proposal) => (
-                  <ProposalRow
-                    key={proposal.id}
-                    proposal={proposal}
-                    onClick={() => onSelectProposal?.(proposal)}
-                  />
-                ))}
-              </TableBody>
-            </Table>
-
-            {pagination?.hasMore && (
-              <div className="flex justify-center pt-4">
-                <Button variant="outline" size="sm" onClick={handleLoadMore}>
-                  Load More
-                </Button>
-              </div>
+          <Button variant="outline" size="sm" onClick={handleTrigger} disabled={isTriggering}>
+            {isTriggering ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="mr-2 h-4 w-4" />
             )}
-          </>
+            Generate Proposals
+          </Button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="flex items-center gap-3">
+        <Select value={statusFilter} onValueChange={handleStatusChange}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="approved">Approved</SelectItem>
+            <SelectItem value="rejected">Rejected</SelectItem>
+            <SelectItem value="expired">Expired</SelectItem>
+            <SelectItem value="reverted">Reverted</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={severityFilter} onValueChange={handleSeverityChange}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Severity" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Severities</SelectItem>
+            <SelectItem value="breaking">Breaking</SelectItem>
+            <SelectItem value="warning">Warning</SelectItem>
+            <SelectItem value="info">Info</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {pagination && (
+          <span className="ml-auto text-sm text-muted-foreground">
+            {pagination.totalCount} proposal{pagination.totalCount !== 1 ? 's' : ''}
+          </span>
         )}
-      </CardContent>
-    </Card>
+      </div>
+
+      <Card>
+        <CardContent className="pt-6">
+          {isLoading ? (
+            <ProposalListSkeleton />
+          ) : isError ? (
+            <div className="py-12 text-center">
+              <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-muted-foreground/50" />
+              <p className="text-sm text-muted-foreground">Failed to load proposals</p>
+            </div>
+          ) : proposals.length === 0 ? (
+            <div className="py-12 text-center">
+              <Wrench className="mx-auto mb-3 h-8 w-8 text-muted-foreground/50" />
+              <p className="font-medium">No maintenance proposals</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {statusFilter !== 'all' || severityFilter !== 'all'
+                  ? 'No proposals match the selected filters'
+                  : 'No schema updates have been proposed for this integration'}
+              </p>
+            </div>
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Change Summary</TableHead>
+                    <TableHead>Direction</TableHead>
+                    <TableHead>Severity</TableHead>
+                    <TableHead>Source</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Created</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {proposals.map((proposal) => (
+                    <ProposalRow
+                      key={proposal.id}
+                      proposal={proposal}
+                      onClick={() => onSelectProposal?.(proposal)}
+                    />
+                  ))}
+                </TableBody>
+              </Table>
+
+              {pagination?.hasMore && (
+                <div className="flex justify-center pt-4">
+                  <Button variant="outline" size="sm" onClick={handleLoadMore}>
+                    Load More
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
