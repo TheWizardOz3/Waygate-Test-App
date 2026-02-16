@@ -170,15 +170,20 @@ Single Next.js application with clearly separated internal modules. This enables
 
 ### 2.3 Service Boundaries & Responsibilities
 
-| Module                 | Responsibility                                             | Exposes        | Consumes                        |
-| ---------------------- | ---------------------------------------------------------- | -------------- | ------------------------------- |
-| **Gateway API**        | Request routing, tenant auth, rate limiting                | REST endpoints | All modules                     |
-| **Integration Engine** | Integration CRUD, action schema management                 | Internal API   | Database                        |
-| **Execution Engine**   | HTTP requests, retry, circuit breaker, response validation | Internal API   | Credential Vault, External APIs |
-| **AI Service**         | Doc scraping, schema generation, action mapping            | Internal API   | Firecrawl, Gemini               |
-| **Credential Vault**   | Encrypt/decrypt credentials, token storage                 | Internal API   | Database                        |
-| **Auth Service**       | OAuth flows, token refresh, API key validation             | Internal API   | Supabase Auth, Database         |
-| **Logging Service**    | Request logging, audit trail, metrics collection           | Internal API   | Database                        |
+| Module                   | Responsibility                                             | Exposes        | Consumes                        |
+| ------------------------ | ---------------------------------------------------------- | -------------- | ------------------------------- |
+| **Gateway API**          | Request routing, tenant auth, rate limiting                | REST endpoints | All modules                     |
+| **Integration Engine**   | Integration CRUD, action schema management                 | Internal API   | Database                        |
+| **Execution Engine**     | HTTP requests, retry, circuit breaker, response validation | Internal API   | Credential Vault, External APIs |
+| **AI Service**           | Doc scraping, schema generation, action mapping            | Internal API   | Firecrawl, Gemini               |
+| **Credential Vault**     | Encrypt/decrypt credentials, token storage                 | Internal API   | Database                        |
+| **Auth Service**         | OAuth flows, token refresh, API key validation             | Internal API   | Supabase Auth, Database         |
+| **Logging Service**      | Request logging, audit trail, metrics collection           | Internal API   | Database                        |
+| **Apps**                 | App CRUD, per-app API keys, integration config             | Internal API   | Auth Service, Database          |
+| **App Users**            | End-user identity resolution, lazy creation                | Internal API   | Apps, Database                  |
+| **App User Credentials** | Per-user OAuth credential storage, encryption              | Internal API   | Credential Vault, Database      |
+| **Connect Sessions**     | Embeddable OAuth flow session management                   | Internal API   | Apps, Auth Service, Database    |
+| **Rate Limiter**         | Per-user fair-share rate limiting within connections       | Internal API   | In-memory state                 |
 
 ### 2.4 Data Flow Patterns
 
@@ -186,20 +191,35 @@ Single Next.js application with clearly separated internal modules. This enables
 
 ```
 1. Consuming app sends POST /api/v1/actions/{integration}/{action}
-2. Edge middleware validates Waygate API key → extracts tenant context
-3. Gateway validates request body against action's input schema (Zod)
-4. Gateway retrieves integration config and decrypted credentials
-5. Execution Engine builds external API request:
+2. Auth middleware validates API key → extracts tenant context
+   - wg_live_ keys → tenant-scoped invocation
+   - wg_app_ keys → app-scoped invocation (extracts appId)
+3. Gateway resolves connection:
+   - With appId → resolveAppConnection (app-scoped connection)
+   - With connectionId → resolveConnection (explicit)
+   - Otherwise → resolveConnection (tenant default)
+4. Gateway resolves end-user identity (if externalUserId + appId provided):
+   - Lazily creates AppUser record on first reference
+5. Gateway validates request body against action's input schema (Zod)
+6. Gateway resolves credentials (user-aware):
+   a. If appUserId present → try AppUserCredential first
+   b. If user credential active → adapt to DecryptedCredential, use it
+   c. If user credential missing/inactive/error → fall back to shared IntegrationCredential
+   d. If authType is 'none' → skip credential resolution entirely
+7. Per-user rate limiting (if configured on connection):
+   - Fair-share enforcement across active users
+   - Reject with RATE_LIMITED if budget exceeded
+8. Execution Engine builds external API request:
    a. Apply field mappings (input transformation)
-   b. Inject auth headers/tokens
+   b. Inject auth headers/tokens from resolved credential
    c. Set timeout and retry configuration
-6. Execution Engine sends request to external API:
+9. Execution Engine sends request to external API:
    a. On transient failure → retry with exponential backoff
    b. On rate limit → respect Retry-After, queue request
    c. On circuit open → fail fast with clear error
-7. Execution Engine validates response against output schema
-8. Response transformed (field mapping) and returned to consuming app
-9. Request logged (sanitized) for debugging/audit
+10. Execution Engine validates response against output schema
+11. Response transformed (field mapping) and returned to consuming app
+12. Request logged (sanitized, with appId + appUserId) for debugging/audit
 ```
 
 #### Integration Creation Flow
@@ -507,11 +527,19 @@ erDiagram
     TENANT ||--o{ INTEGRATION : owns
     TENANT ||--o{ INTEGRATION_CREDENTIAL : owns
     TENANT ||--o{ REQUEST_LOG : generates
+    TENANT ||--o{ APP : owns
     INTEGRATION ||--o{ ACTION : contains
     INTEGRATION ||--o{ INTEGRATION_CREDENTIAL : requires
     INTEGRATION ||--o{ REQUEST_LOG : logs
     ACTION ||--o{ FIELD_MAPPING : has
     ACTION ||--o{ REQUEST_LOG : logs
+    APP ||--o{ APP_USER : has
+    APP ||--o{ APP_INTEGRATION_CONFIG : configures
+    APP ||--o{ CONNECT_SESSION : initiates
+    APP ||--o{ CONNECTION : scopes
+    APP_USER ||--o{ APP_USER_CREDENTIAL : owns
+    APP_USER ||--o{ CONNECT_SESSION : authenticates
+    CONNECTION ||--o{ APP_USER_CREDENTIAL : stores
 
     TENANT {
         uuid id PK
@@ -521,6 +549,73 @@ erDiagram
         jsonb settings
         timestamp created_at
         timestamp updated_at
+    }
+
+    APP {
+        uuid id PK
+        uuid tenant_id FK
+        string name
+        string slug UK
+        text description
+        string api_key_hash UK
+        string api_key_index UK
+        enum status
+        jsonb metadata
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    APP_USER {
+        uuid id PK
+        uuid app_id FK
+        string external_id
+        string display_name
+        string email
+        jsonb metadata
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    APP_USER_CREDENTIAL {
+        uuid id PK
+        uuid connection_id FK
+        uuid app_user_id FK
+        enum credential_type
+        bytea encrypted_data
+        timestamp expires_at
+        bytea encrypted_refresh_token
+        string[] scopes
+        enum status
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    APP_INTEGRATION_CONFIG {
+        uuid id PK
+        uuid app_id FK
+        uuid integration_id FK
+        bytea encrypted_client_id
+        bytea encrypted_client_secret
+        string[] scopes
+        jsonb metadata
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    CONNECT_SESSION {
+        uuid id PK
+        uuid app_id FK
+        uuid app_user_id FK
+        uuid integration_id FK
+        uuid connection_id FK
+        string token UK
+        text redirect_url
+        enum status
+        timestamp expires_at
+        timestamp completed_at
+        text error_message
+        jsonb metadata
+        timestamp created_at
     }
 
     INTEGRATION {
@@ -588,6 +683,8 @@ erDiagram
         uuid tenant_id FK
         uuid integration_id FK
         uuid action_id FK
+        uuid app_id FK "nullable"
+        uuid app_user_id FK "nullable"
         jsonb request_summary
         jsonb response_summary
         integer status_code
@@ -750,6 +847,8 @@ erDiagram
 | tenant_id        | uuid        | NO       | —                 | FK → tenants      | Requesting tenant                       |
 | integration_id   | uuid        | NO       | —                 | FK → integrations | Target integration                      |
 | action_id        | uuid        | NO       | —                 | FK → actions      | Invoked action                          |
+| app_id           | uuid        | YES      | —                 | —                 | App that made the request (if app key)  |
+| app_user_id      | uuid        | YES      | —                 | —                 | End-user identity (if provided)         |
 | request_summary  | jsonb       | NO       | —                 | —                 | Sanitized request (no secrets)          |
 | response_summary | jsonb       | YES      | —                 | —                 | Sanitized response (truncated if large) |
 | status_code      | integer     | YES      | —                 | —                 | HTTP status code                        |
@@ -765,6 +864,134 @@ erDiagram
 - `logs_action_created_idx` on (`action_id`, `created_at` DESC)
 
 **Retention:** Logs older than 30 days are automatically archived/deleted via scheduled job (V1+).
+
+---
+
+#### Table: `apps`
+
+**Purpose:** Consuming applications with dedicated API keys and per-app OAuth registrations.
+
+| Column        | Type         | Nullable | Default           | Constraints  | Description                       |
+| ------------- | ------------ | -------- | ----------------- | ------------ | --------------------------------- |
+| id            | uuid         | NO       | gen_random_uuid() | PK           | Unique app identifier             |
+| tenant_id     | uuid         | NO       | —                 | FK → tenants | Owning tenant                     |
+| name          | varchar(255) | NO       | —                 | —            | Human-readable app name           |
+| slug          | varchar(100) | NO       | —                 | UK (tenant)  | URL-safe identifier               |
+| description   | text         | YES      | —                 | —            | App description                   |
+| api_key_hash  | varchar(255) | NO       | —                 | UK           | Bcrypt hash of wg*app* API key    |
+| api_key_index | varchar(64)  | NO       | —                 | UK           | First 8 chars for fast key lookup |
+| status        | enum         | NO       | 'active'          | —            | active, disabled                  |
+| metadata      | jsonb        | NO       | '{}'              | —            | Branding, config, etc.            |
+| created_at    | timestamptz  | NO       | now()             | —            | Creation timestamp                |
+| updated_at    | timestamptz  | NO       | now()             | —            | Last update timestamp             |
+
+**Indexes:**
+
+- `apps_tenant_slug_idx` UNIQUE on (`tenant_id`, `slug`)
+- `apps_tenant_id_idx` on (`tenant_id`)
+
+---
+
+#### Table: `app_integration_configs`
+
+**Purpose:** Per-app OAuth app registration for each integration (client_id/client_secret).
+
+| Column                  | Type        | Nullable | Default           | Constraints       | Description                   |
+| ----------------------- | ----------- | -------- | ----------------- | ----------------- | ----------------------------- |
+| id                      | uuid        | NO       | gen_random_uuid() | PK                | Unique config identifier      |
+| app_id                  | uuid        | NO       | —                 | FK → apps         | Owning app                    |
+| integration_id          | uuid        | NO       | —                 | FK → integrations | Target integration            |
+| encrypted_client_id     | bytea       | YES      | —                 | —                 | Encrypted OAuth client ID     |
+| encrypted_client_secret | bytea       | YES      | —                 | —                 | Encrypted OAuth client secret |
+| scopes                  | text[]      | NO       | '{}'              | —                 | OAuth scopes for this app     |
+| metadata                | jsonb       | NO       | '{}'              | —                 | Additional config             |
+| created_at              | timestamptz | NO       | now()             | —                 | Creation timestamp            |
+| updated_at              | timestamptz | NO       | now()             | —                 | Last update timestamp         |
+
+**Indexes:**
+
+- `app_integration_configs_app_integration_idx` UNIQUE on (`app_id`, `integration_id`)
+- `app_integration_configs_app_id_idx` on (`app_id`)
+
+---
+
+#### Table: `app_users`
+
+**Purpose:** End-user identity within a consuming app. Lazy-created on first gateway invocation with `externalUserId`.
+
+| Column       | Type         | Nullable | Default           | Constraints | Description                |
+| ------------ | ------------ | -------- | ----------------- | ----------- | -------------------------- |
+| id           | uuid         | NO       | gen_random_uuid() | PK          | Unique app user identifier |
+| app_id       | uuid         | NO       | —                 | FK → apps   | Parent app                 |
+| external_id  | varchar(255) | NO       | —                 | —           | External user ID from app  |
+| display_name | varchar(255) | YES      | —                 | —           | User display name          |
+| email        | varchar(255) | YES      | —                 | —           | User email                 |
+| metadata     | jsonb        | NO       | '{}'              | —           | Custom user attributes     |
+| created_at   | timestamptz  | NO       | now()             | —           | Creation timestamp         |
+| updated_at   | timestamptz  | NO       | now()             | —           | Last update timestamp      |
+
+**Indexes:**
+
+- `app_users_app_external_idx` UNIQUE on (`app_id`, `external_id`)
+- `app_users_app_id_idx` on (`app_id`)
+
+---
+
+#### Table: `app_user_credentials`
+
+**Purpose:** Per-user OAuth tokens stored under a Connection. Encrypted like IntegrationCredentials.
+
+| Column                  | Type        | Nullable | Default           | Constraints      | Description                            |
+| ----------------------- | ----------- | -------- | ----------------- | ---------------- | -------------------------------------- |
+| id                      | uuid        | NO       | gen_random_uuid() | PK               | Unique credential identifier           |
+| connection_id           | uuid        | NO       | —                 | FK → connections | Parent connection                      |
+| app_user_id             | uuid        | NO       | —                 | FK → app_users   | Owning end-user                        |
+| credential_type         | enum        | NO       | —                 | —                | oauth2_tokens, api_key, basic, bearer  |
+| encrypted_data          | bytea       | NO       | —                 | —                | Encrypted credential payload           |
+| expires_at              | timestamptz | YES      | —                 | —                | Token expiration                       |
+| encrypted_refresh_token | bytea       | YES      | —                 | —                | Encrypted refresh token                |
+| scopes                  | text[]      | NO       | '{}'              | —                | Granted OAuth scopes                   |
+| status                  | enum        | NO       | 'active'          | —                | active, expired, revoked, needs_reauth |
+| created_at              | timestamptz | NO       | now()             | —                | Creation timestamp                     |
+| updated_at              | timestamptz | NO       | now()             | —                | Last update timestamp                  |
+
+**Indexes:**
+
+- `app_user_credentials_conn_user_idx` UNIQUE on (`connection_id`, `app_user_id`)
+- `app_user_credentials_connection_id_idx` on (`connection_id`)
+- `app_user_credentials_app_user_id_idx` on (`app_user_id`)
+- `app_user_credentials_expires_at_idx` on (`expires_at`)
+- `app_user_credentials_status_idx` on (`status`)
+
+**Security Note:** Encrypted identically to `integration_credentials` — AES-256-GCM with the same encryption key.
+
+---
+
+#### Table: `connect_sessions`
+
+**Purpose:** Short-lived sessions for the embeddable end-user OAuth connect flow.
+
+| Column         | Type         | Nullable | Default           | Constraints       | Description                          |
+| -------------- | ------------ | -------- | ----------------- | ----------------- | ------------------------------------ |
+| id             | uuid         | NO       | gen_random_uuid() | PK                | Unique session identifier            |
+| app_id         | uuid         | NO       | —                 | FK → apps         | Initiating app                       |
+| app_user_id    | uuid         | NO       | —                 | FK → app_users    | End-user connecting                  |
+| integration_id | uuid         | NO       | —                 | FK → integrations | Target integration                   |
+| connection_id  | uuid         | YES      | —                 | FK → connections  | Resolved connection (after complete) |
+| token          | varchar(255) | NO       | —                 | UK                | Session token for connect page       |
+| redirect_url   | text         | YES      | —                 | —                 | Post-connect redirect URL            |
+| status         | enum         | NO       | 'pending'         | —                 | pending, completed, expired, failed  |
+| expires_at     | timestamptz  | NO       | —                 | —                 | Session expiration                   |
+| completed_at   | timestamptz  | YES      | —                 | —                 | When connection completed            |
+| error_message  | text         | YES      | —                 | —                 | Error details (if failed)            |
+| metadata       | jsonb        | NO       | '{}'              | —                 | Additional session data              |
+| created_at     | timestamptz  | NO       | now()             | —                 | Creation timestamp                   |
+
+**Indexes:**
+
+- `connect_sessions_token_idx` on (`token`)
+- `connect_sessions_app_id_idx` on (`app_id`)
+- `connect_sessions_expires_at_idx` on (`expires_at`)
 
 ---
 
@@ -815,11 +1042,29 @@ pnpm prisma migrate reset
 
 #### Authentication Methods
 
-**Gateway API (Consuming Apps):**
+**Gateway API — Tenant Key (Platform Management):**
 
 - Type: API Key (Bearer token)
+- Prefix: `wg_live_`
 - Header: `Authorization: Bearer wg_live_xxx...`
 - Validation: Bcrypt compare against stored hash
+- Scope: Full tenant access — manage integrations, connections, apps, and configuration
+
+**Gateway API — App Key (End-User Context):**
+
+- Type: API Key (Bearer token)
+- Prefix: `wg_app_`
+- Header: `Authorization: Bearer wg_app_xxx...`
+- Validation: Bcrypt compare against stored hash
+- Scope: App-scoped access — invoke actions with end-user credentials, manage connect sessions and user connections
+
+**Connect Session Token (End-User OAuth):**
+
+- Type: Short-lived session token
+- Header: `x-connect-token: cst_xxx...`
+- Validation: Token lookup, expiry check, one-time use
+- Scope: Single OAuth authorization flow for an end-user
+- Lifetime: 30 minutes, consumed on use
 
 **Dashboard (Users):**
 
@@ -827,13 +1072,15 @@ pnpm prisma migrate reset
 - Flow: OAuth only (Google, GitHub)
 - Session: HTTP-only cookies
 
-#### Authorization Model (MVP)
+#### Authorization Model
 
-**Type:** Simple tenant isolation
+**Type:** Tenant isolation with app-scoped delegation
 
-- All resources are scoped to tenant
+- All resources are scoped to tenant via Supabase RLS
 - Single owner role with full access
-- RLS enforces isolation at database level
+- App keys inherit tenant scope but add app context (`appId`, `appUserId`)
+- Credential resolution: user-specific credentials prioritized over shared connection credentials
+- Per-user fair-share rate limiting distributes connection budgets across active app users
 
 ### 5.3 Endpoint Groups
 
@@ -864,6 +1111,38 @@ pnpm prisma migrate reset
 | ------ | ---------------- | --------------------- | ------- | ------------- | --------------- |
 | POST   | `/scrape`        | Initiate doc scraping | Session | ScrapeRequest | ScrapeJob       |
 | GET    | `/scrape/:jobId` | Get scrape job status | Session | —             | ScrapeJobStatus |
+
+#### Group: Apps — `/api/v1/apps`
+
+| Method | Endpoint                                       | Purpose                               | Auth       | Request Body      | Response             |
+| ------ | ---------------------------------------------- | ------------------------------------- | ---------- | ----------------- | -------------------- |
+| GET    | `/apps`                                        | List consuming apps                   | Tenant Key | —                 | AppList              |
+| POST   | `/apps`                                        | Create consuming app                  | Tenant Key | CreateApp         | App (with API key)   |
+| GET    | `/apps/:id`                                    | Get app details                       | Tenant Key | —                 | App                  |
+| PATCH  | `/apps/:id`                                    | Update app                            | Tenant Key | UpdateApp         | App                  |
+| DELETE | `/apps/:id`                                    | Delete app                            | Tenant Key | —                 | —                    |
+| POST   | `/apps/:id/api-key/regenerate`                 | Regenerate app API key                | Tenant Key | —                 | App (with new key)   |
+| GET    | `/apps/:id/credential-stats`                   | Get end-user credential stats for app | Tenant Key | —                 | CredentialStats      |
+| GET    | `/apps/:id/integrations/:integrationId/config` | Get per-app OAuth config              | Tenant Key | —                 | AppIntegrationConfig |
+| PUT    | `/apps/:id/integrations/:integrationId/config` | Set per-app OAuth config              | Tenant Key | OAuthClientConfig | AppIntegrationConfig |
+| DELETE | `/apps/:id/integrations/:integrationId/config` | Remove per-app OAuth config           | Tenant Key | —                 | —                    |
+
+#### Group: Connect — `/api/v1/connect`
+
+| Method | Endpoint                                                             | Purpose                          | Auth          | Request Body         | Response           |
+| ------ | -------------------------------------------------------------------- | -------------------------------- | ------------- | -------------------- | ------------------ |
+| POST   | `/connect/sessions`                                                  | Create connect session for OAuth | App Key       | CreateConnectSession | ConnectSession     |
+| GET    | `/connect/sessions/:id`                                              | Check session status             | App Key       | —                    | ConnectSession     |
+| POST   | `/connect/authorize`                                                 | Initiate OAuth flow              | Session Token | —                    | RedirectURL        |
+| GET    | `/connect/users/:externalUserId/connections`                         | List end-user's connections      | App Key       | —                    | UserConnectionList |
+| DELETE | `/connect/users/:externalUserId/connections/:connectionId`           | Revoke end-user credential       | App Key       | —                    | —                  |
+| POST   | `/connect/users/:externalUserId/connections/:connectionId/reconnect` | Create session for re-auth       | App Key       | —                    | ConnectSession     |
+
+#### Group: Connections (Extended) — `/api/v1/connections`
+
+| Method | Endpoint                                 | Purpose                                  | Auth       | Request Body | Response        |
+| ------ | ---------------------------------------- | ---------------------------------------- | ---------- | ------------ | --------------- |
+| GET    | `/connections/:id/user-credential-stats` | Get end-user credential counts by status | Tenant Key | —            | CredentialStats |
 
 #### Group: Logs — `/api/v1/logs`
 
@@ -948,6 +1227,8 @@ pnpm prisma migrate reset
 | Scraping          | 5     | 1 hour   | Per Tenant  |
 
 **Implementation:** In-memory rate limiting for MVP (Vercel Edge), Redis-backed for V1.
+
+**Per-User Fair-Share Rate Limiting:** When actions are invoked with app keys (`wg_app_`), the connection's rate budget is distributed fairly across active end-users. Each user gets `floor(connectionLimit / activeUsers)` with a minimum guarantee of 1 request per window. Inactive user slots are reclaimed after a configurable inactivity period.
 
 ---
 
