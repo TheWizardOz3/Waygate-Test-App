@@ -138,9 +138,15 @@ export function IntegrationHeader({ integration }: IntegrationHeaderProps) {
                       ? 'OAuth 2.0'
                       : integration.authType === 'api_key'
                         ? 'API Key'
-                        : integration.authType === 'none'
-                          ? 'No Auth'
-                          : integration.authType}
+                        : integration.authType === 'bearer'
+                          ? 'Bearer Token'
+                          : integration.authType === 'basic'
+                            ? 'Basic Auth'
+                            : integration.authType === 'custom_header'
+                              ? 'Custom Header'
+                              : integration.authType === 'none'
+                                ? 'No Auth'
+                                : integration.authType}
                   </Badge>
                 )}
 

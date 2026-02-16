@@ -165,10 +165,14 @@ function ApiKeyForm({
   onSubmit,
   isLoading,
   apiName,
+  defaultHeaderName,
+  defaultPrefix,
 }: {
   onSubmit: (data: ApiKeyFormData) => void;
   isLoading: boolean;
   apiName?: string;
+  defaultHeaderName?: string;
+  defaultPrefix?: string;
 }) {
   const [showKey, setShowKey] = useState(false);
   const nameLower = apiName?.toLowerCase() || '';
@@ -182,8 +186,8 @@ function ApiKeyForm({
     resolver: zodResolver(apiKeySchema),
     defaultValues: {
       apiKey: '',
-      headerName: isSupabase ? 'apikey' : 'Authorization', // Supabase uses 'apikey' header
-      prefix: isSupabase ? '' : 'Bearer', // Supabase doesn't use prefix (empty string)
+      headerName: isSupabase ? 'apikey' : defaultHeaderName || 'Authorization',
+      prefix: isSupabase ? '' : defaultPrefix || 'Bearer',
       baseUrl: '',
     },
   });
@@ -363,6 +367,47 @@ function ApiKeyForm({
 }
 
 // =============================================================================
+// Helpers
+// =============================================================================
+
+/**
+ * Maps any detected auth type to the closest wizard tab.
+ * bearer, basic, custom_header → api_key tab (key-in-header pattern)
+ */
+function mapAuthTypeToTab(type: string): string {
+  switch (type) {
+    case 'bearer':
+    case 'basic':
+    case 'custom_header':
+    case 'api_key':
+      return 'api_key';
+    case 'oauth2':
+      return 'oauth2';
+    default:
+      return 'none';
+  }
+}
+
+/**
+ * Derives default header name and prefix from the detected auth type.
+ */
+function getAuthDefaults(
+  type: string,
+  detectedMethod?: { paramName?: string }
+): { headerName: string; prefix: string } {
+  switch (type) {
+    case 'bearer':
+      return { headerName: detectedMethod?.paramName || 'Authorization', prefix: 'Bearer' };
+    case 'basic':
+      return { headerName: detectedMethod?.paramName || 'Authorization', prefix: 'Basic' };
+    case 'custom_header':
+      return { headerName: detectedMethod?.paramName || 'X-API-Key', prefix: 'none' };
+    default:
+      return { headerName: 'Authorization', prefix: 'Bearer' };
+  }
+}
+
+// =============================================================================
 // Main Component
 // =============================================================================
 
@@ -373,7 +418,11 @@ export function StepConfigureAuth() {
   // Detected auth type from API docs - default to 'none' if no auth methods detected
   const detectedAuthType =
     data.detectedAuthMethods.length > 0 ? data.detectedAuthMethods[0]?.type || 'api_key' : 'none';
-  const [selectedAuthType, setSelectedAuthType] = useState<string>(detectedAuthType);
+  const detectedMethod = data.detectedAuthMethods[0];
+  // Map to the closest available tab (bearer/basic/custom_header → api_key)
+  const [selectedAuthType, setSelectedAuthType] = useState<string>(
+    mapAuthTypeToTab(detectedAuthType)
+  );
 
   const createIntegrationWithAuth = async (
     authConfig: Record<string, unknown>,
@@ -483,12 +532,20 @@ export function StepConfigureAuth() {
 
   const handleApiKeySubmit = (formData: ApiKeyFormData) => {
     const prefix = formData.prefix === 'none' ? '' : formData.prefix;
+    // Preserve the real detected auth type (bearer, basic, custom_header)
+    // instead of always using 'api_key'
+    const effectiveAuthType: AuthType =
+      detectedAuthType === 'bearer' ||
+      detectedAuthType === 'basic' ||
+      detectedAuthType === 'custom_header'
+        ? (detectedAuthType as AuthType)
+        : 'api_key';
     createIntegrationWithAuth(
       {
         headerName: formData.headerName,
         prefix: prefix,
       },
-      'api_key',
+      effectiveAuthType,
       {
         apiKey: formData.apiKey,
         headerName: formData.headerName,
@@ -510,6 +567,12 @@ export function StepConfigureAuth() {
         return 'OAuth 2.0';
       case 'api_key':
         return 'API Key';
+      case 'bearer':
+        return 'Bearer Token';
+      case 'basic':
+        return 'Basic Auth';
+      case 'custom_header':
+        return 'Custom Header';
       case 'none':
         return 'No Authentication';
       default:
@@ -586,6 +649,8 @@ export function StepConfigureAuth() {
             onSubmit={handleApiKeySubmit}
             isLoading={createIntegration.isPending}
             apiName={data.detectedApiName}
+            defaultHeaderName={getAuthDefaults(detectedAuthType, detectedMethod).headerName}
+            defaultPrefix={getAuthDefaults(detectedAuthType, detectedMethod).prefix}
           />
         </TabsContent>
 
@@ -600,7 +665,17 @@ export function StepConfigureAuth() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => createIntegrationWithAuth({}, 'none')}
+            onClick={() => {
+              // Preserve the detected auth type so the integration stays in 'draft'
+              // and correctly shows what auth is needed
+              const defaults = getAuthDefaults(detectedAuthType, detectedMethod);
+              const effectiveAuthType: AuthType =
+                detectedAuthType !== 'none' ? (detectedAuthType as AuthType) : 'api_key';
+              createIntegrationWithAuth(
+                { headerName: defaults.headerName, prefix: defaults.prefix },
+                effectiveAuthType
+              );
+            }}
             disabled={createIntegration.isPending}
             className="text-muted-foreground"
           >
