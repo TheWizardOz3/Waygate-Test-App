@@ -151,6 +151,8 @@ export const ScrapeMetadataSchema = z.object({
   scrapedAt: z.string().datetime(),
   sourceUrls: z.array(z.string().url()),
   aiConfidence: z.number().min(0).max(1),
+  /** Auth detection confidence (0-1), separate from overall AI confidence */
+  authConfidence: z.number().min(0).max(1).optional(),
   warnings: z.array(z.string()),
   /** Auto-detected template (if any) */
   detectedTemplate: DetectedTemplateSchema.optional(),

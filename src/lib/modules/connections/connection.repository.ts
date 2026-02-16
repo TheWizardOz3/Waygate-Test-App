@@ -9,7 +9,13 @@
  */
 
 import { prisma } from '@/lib/db/client';
-import { ConnectionStatus, ConnectorType, Prisma } from '@prisma/client';
+import {
+  AuthType,
+  ConnectionStatus,
+  ConnectorType,
+  HealthCheckStatus,
+  Prisma,
+} from '@prisma/client';
 
 import type { Connection } from '@prisma/client';
 import type { ConnectionFilters } from './connection.schemas';
@@ -100,7 +106,10 @@ export async function createConnection(input: CreateConnectionDbInput): Promise<
 }
 
 /**
- * Creates a default connection for an integration if none exists
+ * Creates a default connection for an integration if none exists.
+ * Sets initial healthStatus based on the integration's auth type:
+ * - authType='none': healthy (no credentials needed)
+ * - any other authType: unhealthy (credentials are missing)
  */
 export async function createDefaultConnectionIfNeeded(
   tenantId: string,
@@ -115,6 +124,18 @@ export async function createDefaultConnectionIfNeeded(
     return existing;
   }
 
+  // Look up the integration's auth type to set appropriate initial health
+  const integration = await prisma.integration.findUnique({
+    where: { id: integrationId },
+    select: { authType: true },
+  });
+
+  // If auth is required but not yet configured, connection starts as unhealthy
+  const initialHealthStatus =
+    integration?.authType === AuthType.none
+      ? HealthCheckStatus.healthy
+      : HealthCheckStatus.unhealthy;
+
   // Create default connection
   return prisma.connection.create({
     data: {
@@ -124,6 +145,7 @@ export async function createDefaultConnectionIfNeeded(
       slug: 'default',
       isPrimary: true,
       status: ConnectionStatus.active,
+      healthStatus: initialHealthStatus,
       metadata: {},
     },
   });

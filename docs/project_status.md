@@ -1,6 +1,6 @@
 # Project Status: Waygate
 
-**Last Updated:** 2026-02-07
+**Last Updated:** 2026-02-11
 
 ---
 
@@ -10,14 +10,15 @@
 
 ### Build Order
 
-| Order | Feature                   | Status  | Dependencies           |
-| ----- | ------------------------- | ------- | ---------------------- |
-| 1     | TypeScript Error Fixes    | Done    | None                   |
-| 2     | Async Job System          | Done    | TS Error Fixes         |
-| 3     | Batch Operations          | Done    | Async Job System       |
-| 4     | Schema Drift Detection    | Done    | Async Job System       |
-| 5     | Auto-Maintenance System   | Done    | Schema Drift Detection |
-| 6     | Vercel Deployment & CI/CD | Pending | All features complete  |
+| Order | Feature                   | Status      | Dependencies           |
+| ----- | ------------------------- | ----------- | ---------------------- |
+| 1     | TypeScript Error Fixes    | Done        | None                   |
+| 2     | Async Job System          | Done        | TS Error Fixes         |
+| 3     | Batch Operations          | Done        | Async Job System       |
+| 4     | Schema Drift Detection    | Done        | Async Job System       |
+| 5     | Auto-Maintenance System   | Done        | Schema Drift Detection |
+| 6     | Vercel Deployment & CI/CD | In Progress | All features complete  |
+| 7     | Multi-App Support         | Not Started | Vercel Deployment      |
 
 **Feature Summaries:**
 
@@ -27,6 +28,7 @@
 - **Batch Operations:** Queue and batch high-volume write operations to avoid rate limits, with progress tracking
 - **Schema Drift Detection:** Periodic re-scraping of API docs, compare against stored schemas, alert on discrepancies
 - **Auto-Maintenance System:** Detect API changes, auto-propose integration config updates with approval workflow
+- **Multi-App Support:** App entity with per-app API keys, per-app OAuth credentials, app-scoped connections, and dual-key auth resolution
 
 ### Definition of Done
 
@@ -35,6 +37,7 @@
 - Batch operations complete via job queue
 - Schema drift alerts trigger on detected API changes
 - Auto-maintenance proposes updates with approval workflow
+- Apps can be created with dedicated API keys, per-app OAuth credentials, and scoped connection resolution
 
 ---
 
@@ -69,7 +72,7 @@ Webhook ingestion, SDK generation.
 
 ## Known Issues
 
-_None currently tracked_
+- Existing AI-scraped integrations with incorrect `authType='none'` (e.g., Slack) need manual correction via the integration settings UI. Only new scrapes get the `authTypeUnverified` flag automatically.
 
 ---
 

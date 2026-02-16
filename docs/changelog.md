@@ -26,6 +26,7 @@
 
 ### Fixed
 
+- **Inaccurate Auth & Health Status for AI-Scraped Integrations**: When AI doc scraping failed to detect authentication methods, integrations incorrectly showed as "Active" with "No Auth Required" and "Healthy" connections. Now tracks auth detection confidence from the AI parser, keeps unverified-auth integrations in "Draft" status, starts connections as "unhealthy" when credentials are expected, and shows clear warnings in the UI for both unverified and unconfigured auth states.
 - **Orphaned AI Tool References After Integration Deletion**: Agentic tools that reference actions from a deleted integration now show a warning banner ("Invalid action references") on the tool detail page and a destructive badge in the AI tools list. The unified tools API validates action references and returns `hasInvalidActions` so the UI can flag broken tools. Integration deletion also invalidates the unified-tools cache so the list refreshes immediately.
 - **Tool Export Parameter Schemas**: Fixed empty parameter schemas in tool exports. Composite tools now build `unifiedInputSchema` from sub-tool parameters and LLM-generated descriptions. Simple tools with empty `inputSchema` are enriched with path parameters extracted from endpoint templates and parameters parsed from `toolDescription`.
 - **AI Description Generation**: Fixed "Generate with AI" button for composite tools not updating UI. Description now persists correctly using `toolDescription` field and syncs on page refresh.

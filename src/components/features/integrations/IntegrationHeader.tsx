@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import {
+  AlertTriangle,
   ArrowLeft,
   ExternalLink,
   MoreHorizontal,
@@ -123,15 +124,25 @@ export function IntegrationHeader({ integration }: IntegrationHeaderProps) {
                 )}
 
                 {/* Auth type */}
-                <Badge variant="secondary" className="h-5 text-xs font-normal">
-                  {integration.authType === 'oauth2'
-                    ? 'OAuth 2.0'
-                    : integration.authType === 'api_key'
-                      ? 'API Key'
-                      : integration.authType === 'none'
-                        ? 'No Auth'
-                        : integration.authType}
-                </Badge>
+                {integration.authType === 'none' && integration.metadata?.authTypeUnverified ? (
+                  <Badge
+                    variant="outline"
+                    className="h-5 gap-1 border-amber-500/30 bg-amber-500/10 text-xs font-normal text-amber-600"
+                  >
+                    <AlertTriangle className="h-3 w-3" />
+                    No Auth (unverified)
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary" className="h-5 text-xs font-normal">
+                    {integration.authType === 'oauth2'
+                      ? 'OAuth 2.0'
+                      : integration.authType === 'api_key'
+                        ? 'API Key'
+                        : integration.authType === 'none'
+                          ? 'No Auth'
+                          : integration.authType}
+                  </Badge>
+                )}
 
                 {/* Tags - inline with edit popover */}
                 <Popover open={showTagEditor} onOpenChange={setShowTagEditor}>

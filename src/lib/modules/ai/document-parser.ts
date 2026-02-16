@@ -48,6 +48,8 @@ export interface ParseResult {
   doc: ParsedApiDoc;
   /** Overall confidence score (0-1) */
   confidence: number;
+  /** Auth detection confidence score (0-1) */
+  authConfidence: number;
   /** Warnings encountered during parsing */
   warnings: string[];
   /** Parsing duration in milliseconds */
@@ -148,6 +150,7 @@ export async function parseApiDocumentation(
   const result = await parseSingleDocument(processContent, options);
   const doc = result.doc;
   const confidence = result.confidence;
+  const authConfidence = result.authConfidence;
   warnings.push(...result.warnings);
 
   // Add metadata
@@ -155,6 +158,7 @@ export async function parseApiDocumentation(
     scrapedAt: new Date().toISOString(),
     sourceUrls: options.sourceUrls ?? [],
     aiConfidence: confidence,
+    authConfidence,
     warnings,
   };
 
@@ -167,12 +171,14 @@ export async function parseApiDocumentation(
   console.log(`[Document Parser] Base URL: ${doc.baseUrl}`);
   console.log(`[Document Parser] Endpoints found: ${doc.endpoints?.length ?? 0}`);
   console.log(`[Document Parser] Auth methods found: ${doc.authMethods?.length ?? 0}`);
+  console.log(`[Document Parser] Auth confidence: ${(authConfidence * 100).toFixed(1)}%`);
   console.log(`[Document Parser] Overall confidence: ${(confidence * 100).toFixed(1)}%`);
   console.log(`[Document Parser] Warnings: ${warnings.length > 0 ? warnings.join('; ') : 'None'}`);
 
   return {
     doc,
     confidence,
+    authConfidence,
     warnings,
     durationMs,
   };
@@ -188,7 +194,7 @@ export async function parseApiDocumentation(
 async function parseSingleDocument(
   content: string,
   options: ParseOptions
-): Promise<{ doc: ParsedApiDoc; confidence: number; warnings: string[] }> {
+): Promise<{ doc: ParsedApiDoc; confidence: number; authConfidence: number; warnings: string[] }> {
   const warnings: string[] = [];
   const llm = getLLM(options.model ?? DEFAULT_MODEL);
 
@@ -244,7 +250,7 @@ async function parseSingleDocument(
     warnings.push('No authentication methods were detected');
   }
 
-  return { doc, confidence, warnings };
+  return { doc, confidence, authConfidence: authMethods.confidence, warnings };
 }
 
 // =============================================================================

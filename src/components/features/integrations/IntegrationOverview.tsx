@@ -39,6 +39,9 @@ interface IntegrationOverviewProps {
 }
 
 export function IntegrationOverview({ integration, selectedConnection }: IntegrationOverviewProps) {
+  // Check if auth type was unverified (AI couldn't detect it)
+  const isAuthTypeUnverified = Boolean(integration.metadata?.authTypeUnverified);
+
   // Fetch real data
   const { data: actionsData, isLoading: actionsLoading } = useActions(integration.id);
   const { data: logStats, isLoading: statsLoading } = useLogStats({
@@ -56,11 +59,21 @@ export function IntegrationOverview({ integration, selectedConnection }: Integra
 
   // Aggregate connection health
   const connections = connectionsData?.connections ?? [];
+
+  // A connection is "unchecked" if no health checks have ever been run
+  const isConnectionUnchecked = (c: (typeof connections)[0]) => {
+    const h = c.health;
+    return !h?.lastCredentialCheckAt && !h?.lastConnectivityCheckAt && !h?.lastFullScanAt;
+  };
+
   const healthSummary = {
     total: connections.length,
-    healthy: connections.filter((c) => c.healthStatus === 'healthy').length,
+    healthy: connections.filter((c) => c.healthStatus === 'healthy' && !isConnectionUnchecked(c))
+      .length,
     degraded: connections.filter((c) => c.healthStatus === 'degraded').length,
     unhealthy: connections.filter((c) => c.healthStatus === 'unhealthy').length,
+    unchecked: connections.filter((c) => isConnectionUnchecked(c) && c.healthStatus === 'healthy')
+      .length,
     unknown: connections.filter((c) => !c.healthStatus).length,
   };
 
@@ -73,7 +86,9 @@ export function IntegrationOverview({ integration, selectedConnection }: Integra
         ? 'unhealthy'
         : healthSummary.degraded > 0
           ? 'degraded'
-          : 'healthy';
+          : healthSummary.unchecked > 0 && healthSummary.healthy === 0
+            ? 'unchecked'
+            : 'healthy';
 
   return (
     <div className="space-y-6">
@@ -132,7 +147,9 @@ export function IntegrationOverview({ integration, selectedConnection }: Integra
           }
           icon={<Link2 className="h-4 w-4" />}
           variant={
-            overallHealthStatus === 'loading' || overallHealthStatus === 'no-connections'
+            overallHealthStatus === 'loading' ||
+            overallHealthStatus === 'no-connections' ||
+            overallHealthStatus === 'unchecked'
               ? 'muted'
               : overallHealthStatus === 'healthy'
                 ? 'success'
@@ -143,7 +160,7 @@ export function IntegrationOverview({ integration, selectedConnection }: Integra
           loading={connectionsLoading}
           subtitle={
             healthSummary.total > 0
-              ? `${healthSummary.healthy} healthy${healthSummary.degraded > 0 ? `, ${healthSummary.degraded} degraded` : ''}${healthSummary.unhealthy > 0 ? `, ${healthSummary.unhealthy} unhealthy` : ''}`
+              ? `${healthSummary.healthy} healthy${healthSummary.degraded > 0 ? `, ${healthSummary.degraded} degraded` : ''}${healthSummary.unhealthy > 0 ? `, ${healthSummary.unhealthy} unhealthy` : ''}${healthSummary.unchecked > 0 ? `, ${healthSummary.unchecked} not verified` : ''}`
               : undefined
           }
         />
@@ -216,8 +233,8 @@ export function IntegrationOverview({ integration, selectedConnection }: Integra
                     compact
                   />
                   <HealthStatCard
-                    label="Pending"
-                    value={healthSummary.unknown}
+                    label={healthSummary.unchecked > 0 ? 'Not Verified' : 'Pending'}
+                    value={healthSummary.unchecked + healthSummary.unknown}
                     icon={<HelpCircle className="h-3 w-3" />}
                     variant="muted"
                     compact
@@ -251,19 +268,29 @@ export function IntegrationOverview({ integration, selectedConnection }: Integra
                   Type
                 </p>
                 <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="font-normal">
-                    {integration.authType === 'oauth2'
-                      ? 'OAuth 2.0'
-                      : integration.authType === 'api_key'
-                        ? 'API Key'
-                        : integration.authType === 'basic'
-                          ? 'Basic Auth'
-                          : integration.authType === 'bearer'
-                            ? 'Bearer Token'
-                            : integration.authType === 'none'
-                              ? 'No Auth Required'
-                              : integration.authType}
-                  </Badge>
+                  {integration.authType === 'none' && isAuthTypeUnverified ? (
+                    <Badge
+                      variant="outline"
+                      className="gap-1 border-amber-500/30 bg-amber-500/10 font-normal text-amber-600"
+                    >
+                      <AlertTriangle className="h-3 w-3" />
+                      No Auth (unverified)
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="font-normal">
+                      {integration.authType === 'oauth2'
+                        ? 'OAuth 2.0'
+                        : integration.authType === 'api_key'
+                          ? 'API Key'
+                          : integration.authType === 'basic'
+                            ? 'Basic Auth'
+                            : integration.authType === 'bearer'
+                              ? 'Bearer Token'
+                              : integration.authType === 'none'
+                                ? 'No Auth Required'
+                                : integration.authType}
+                    </Badge>
+                  )}
                   {integration.authType !== 'none' && integration.status === 'draft' && (
                     <Badge
                       variant="outline"
@@ -273,6 +300,17 @@ export function IntegrationOverview({ integration, selectedConnection }: Integra
                       Setup Required
                     </Badge>
                   )}
+                  {integration.authType === 'none' &&
+                    isAuthTypeUnverified &&
+                    integration.status === 'draft' && (
+                      <Badge
+                        variant="outline"
+                        className="gap-1 border-amber-500/30 bg-amber-500/10 text-amber-600"
+                      >
+                        <AlertTriangle className="h-3 w-3" />
+                        Setup Required
+                      </Badge>
+                    )}
                   {integration.authType !== 'none' && integration.status === 'active' && (
                     <Badge
                       variant="outline"
@@ -284,6 +322,33 @@ export function IntegrationOverview({ integration, selectedConnection }: Integra
                   )}
                 </div>
               </div>
+
+              {/* Warning for unverified auth type */}
+              {isAuthTypeUnverified && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 p-3">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-600">
+                      Auth type could not be determined
+                    </p>
+                    <p className="text-xs text-amber-600/80">
+                      The authentication requirements could not be detected from the API
+                      documentation. This API may require authentication.{' '}
+                      <Link
+                        href={`/integrations/${integration.id}/settings`}
+                        className="font-medium underline hover:no-underline"
+                      >
+                        Update auth type
+                      </Link>
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Auth config details (for detected-but-unconfigured integrations) */}
+              {integration.authType !== 'none' && integration.authConfig && (
+                <AuthConfigDetails authConfig={integration.authConfig} />
+              )}
             </div>
           </div>
         )}
@@ -342,6 +407,53 @@ export function IntegrationOverview({ integration, selectedConnection }: Integra
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Displays detected auth config details (supported methods, scopes, endpoints)
+ * for integrations that have auth detected but not yet configured.
+ */
+function AuthConfigDetails({ authConfig }: { authConfig: Record<string, unknown> }) {
+  const supportedMethods = authConfig.supportedMethods as string[] | undefined;
+  const paramName = authConfig.paramName as string | undefined;
+  const location = authConfig.location as string | undefined;
+
+  // Only render if there are details to show
+  if (!supportedMethods?.length && !paramName && !location) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-2 rounded-lg bg-muted/30 p-3">
+      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        Detected Configuration
+      </p>
+      {supportedMethods && supportedMethods.length > 0 && (
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-muted-foreground">Supported methods</span>
+          <div className="flex gap-1">
+            {supportedMethods.map((method) => (
+              <Badge key={method} variant="outline" className="text-xs">
+                {method}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+      {paramName && (
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-muted-foreground">Parameter</span>
+          <span className="font-mono text-xs">{paramName}</span>
+        </div>
+      )}
+      {location && (
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-muted-foreground">Location</span>
+          <span className="text-xs">{location}</span>
+        </div>
+      )}
     </div>
   );
 }

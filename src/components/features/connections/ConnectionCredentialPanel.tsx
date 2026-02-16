@@ -210,8 +210,39 @@ export function ConnectionCredentialPanel({
     }
   };
 
-  // If integration doesn't require authentication, show a simple message
+  // If integration doesn't require authentication, show appropriate message
   if (integration.authType === 'none') {
+    // Check if the auth type was unverified (AI couldn't detect it)
+    if (integration.metadata?.authTypeUnverified) {
+      return (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-amber-600" />
+                <CardTitle className="text-lg">Authentication</CardTitle>
+              </div>
+              <Badge className="border-amber-500/20 bg-amber-500/15 text-amber-600">
+                Unverified
+              </Badge>
+            </div>
+            <CardDescription>
+              Auth type could not be determined from the API documentation. This API may require
+              authentication credentials.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" size="sm" asChild>
+              <a href={`/integrations/${integration.id}/settings`}>
+                <Key className="mr-2 h-4 w-4" />
+                Update Auth Type
+              </a>
+            </Button>
+          </CardContent>
+        </Card>
+      );
+    }
+
     return (
       <Card>
         <CardHeader>

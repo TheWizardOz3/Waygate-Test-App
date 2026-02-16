@@ -375,6 +375,23 @@ async function createIntegration(
   const authType = determineAuthType(parsedDoc.authMethods);
   const authConfig = buildAuthConfig(parsedDoc.authMethods);
 
+  // Track whether auth type detection was confident
+  const authConfidence = parsedDoc.metadata?.authConfidence as number | undefined;
+  const authTypeUnverified =
+    (!parsedDoc.authMethods || parsedDoc.authMethods.length === 0) &&
+    authType === ('none' as AuthType);
+
+  const integrationMetadata = {
+    baseUrl: parsedDoc.baseUrl,
+    version: parsedDoc.version,
+    aiGenerated: true,
+    scrapedAt: parsedDoc.metadata?.scrapedAt,
+    aiConfidence: parsedDoc.metadata?.aiConfidence,
+    authDetectionSource: 'ai' as const,
+    authDetectionConfidence: authConfidence ?? null,
+    ...(authTypeUnverified ? { authTypeUnverified: true } : {}),
+  };
+
   // Check for existing integration with same slug
   const existing = await prisma.integration.findUnique({
     where: {
@@ -396,15 +413,7 @@ async function createIntegration(
         authType,
         authConfig: JSON.parse(JSON.stringify(authConfig)),
         tags: options.tags || [],
-        metadata: JSON.parse(
-          JSON.stringify({
-            baseUrl: parsedDoc.baseUrl,
-            version: parsedDoc.version,
-            aiGenerated: true,
-            scrapedAt: parsedDoc.metadata?.scrapedAt,
-            aiConfidence: parsedDoc.metadata?.aiConfidence,
-          })
-        ),
+        metadata: JSON.parse(JSON.stringify(integrationMetadata)),
         updatedAt: new Date(),
       },
     });
@@ -422,15 +431,7 @@ async function createIntegration(
       authConfig: JSON.parse(JSON.stringify(authConfig)),
       status: 'draft' as IntegrationStatus,
       tags: options.tags || [],
-      metadata: JSON.parse(
-        JSON.stringify({
-          baseUrl: parsedDoc.baseUrl,
-          version: parsedDoc.version,
-          aiGenerated: true,
-          scrapedAt: parsedDoc.metadata?.scrapedAt,
-          aiConfidence: parsedDoc.metadata?.aiConfidence,
-        })
-      ),
+      metadata: JSON.parse(JSON.stringify(integrationMetadata)),
     },
   });
 }

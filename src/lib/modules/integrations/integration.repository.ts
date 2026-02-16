@@ -100,13 +100,16 @@ export interface IntegrationWithCountsAndHealth extends IntegrationWithCounts {
 /**
  * Creates a new integration
  *
- * Note: Integrations with authType='none' are set to 'active' status immediately
- * since they don't require credentials. Other integrations start as 'draft'.
+ * Note: Integrations with verified authType='none' are set to 'active' status
+ * immediately since they don't require credentials. Other integrations start as 'draft'.
+ * AI-scraped integrations where auth detection failed (authTypeUnverified) stay as 'draft'.
  */
 export async function createIntegration(input: CreateIntegrationDbInput): Promise<Integration> {
-  // Auth-less APIs are immediately active since no credentials are needed
-  const defaultStatus =
-    input.authType === AuthType.none ? IntegrationStatus.active : IntegrationStatus.draft;
+  // Only auto-activate if authType is 'none' AND it was confidently detected
+  // (not just a fallback from failed AI auth detection)
+  const metadata = input.metadata as Record<string, unknown> | undefined;
+  const isVerifiedNoAuth = input.authType === AuthType.none && !metadata?.authTypeUnverified;
+  const defaultStatus = isVerifiedNoAuth ? IntegrationStatus.active : IntegrationStatus.draft;
 
   return prisma.integration.create({
     data: {
