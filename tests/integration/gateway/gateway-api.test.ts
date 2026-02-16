@@ -43,6 +43,39 @@ vi.mock('@/lib/modules/execution/execution.service', () => ({
   executeWithMetrics: vi.fn(),
 }));
 
+// Mock connection resolution (gateway now resolves connections before credential lookup)
+const mockConnection = {
+  id: '00000000-0000-0000-0000-000000000010',
+  tenantId: '00000000-0000-0000-0000-000000000001',
+  integrationId: '00000000-0000-0000-0000-000000000002',
+  name: 'Default Slack Connection',
+  slug: 'default-slack',
+  status: 'active',
+  isPrimary: true,
+  appId: null,
+  metadata: {},
+  fieldMappingConfig: null,
+  variables: {},
+  healthCheckConfig: {},
+  connectorType: 'platform',
+  authType: 'oauth2',
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
+
+vi.mock('@/lib/modules/connections', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/modules/connections')>();
+  return {
+    ...actual,
+    resolveConnection: vi.fn().mockResolvedValue(mockConnection),
+    resolveAppConnection: vi.fn().mockResolvedValue(mockConnection),
+  };
+});
+
+vi.mock('@/lib/modules/app-users/app-user.service', () => ({
+  resolveAppUser: vi.fn(),
+}));
+
 import { prisma } from '@/lib/db/client';
 import { executeWithMetrics } from '@/lib/modules/execution/execution.service';
 
@@ -316,6 +349,8 @@ describe('Gateway API Integration Tests', () => {
           error: null,
           createdAt: new Date(),
           connectionId: null,
+          appUserId: null,
+          appId: null,
         },
       ];
 
@@ -461,6 +496,8 @@ describe('Gateway API Integration Tests', () => {
         retryCount: 0,
         error: null,
         createdAt: new Date(),
+        appUserId: null,
+        appId: null,
       });
 
       // This will fail due to credential decryption, but we can test the error format

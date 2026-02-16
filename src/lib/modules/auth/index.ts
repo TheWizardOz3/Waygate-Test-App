@@ -4,11 +4,18 @@
 // API Key utilities
 export {
   generateApiKey,
+  generateAppApiKey,
+  generateConnectSessionToken,
   validateApiKey,
   extractApiKey,
   isValidKeyFormat,
+  isValidConnectSessionToken,
   maskApiKey,
+  getKeyType,
+  computeKeyIndex,
 } from './api-key';
+
+export type { KeyType } from './api-key';
 
 // OAuth Providers
 export {

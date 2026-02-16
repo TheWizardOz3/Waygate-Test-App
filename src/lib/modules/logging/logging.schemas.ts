@@ -104,6 +104,8 @@ export const CreateRequestLogInputSchema = z.object({
   integrationId: z.string().uuid(),
   actionId: z.string().uuid(),
   connectionId: z.string().uuid().optional(), // For multi-app connection tracking
+  appId: z.string().uuid().optional(), // App context (from wg_app_ key)
+  appUserId: z.string().uuid().optional(), // End-user context (resolved from externalUserId)
   requestSummary: RequestSummarySchema,
   responseSummary: ResponseSummarySchema.optional(),
   statusCode: z.number().int().optional(),

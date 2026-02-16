@@ -25,6 +25,8 @@ export interface CreateRequestLogDbInput {
   integrationId: string;
   actionId: string;
   connectionId?: string; // For multi-app connection tracking
+  appId?: string; // App context (from wg_app_ key)
+  appUserId?: string; // End-user context (resolved from externalUserId)
   requestSummary: Prisma.InputJsonValue;
   responseSummary?: Prisma.InputJsonValue;
   statusCode?: number;
@@ -64,6 +66,8 @@ export async function createRequestLog(input: CreateRequestLogDbInput): Promise<
       integrationId: input.integrationId,
       actionId: input.actionId,
       connectionId: input.connectionId ?? null,
+      appId: input.appId ?? null,
+      appUserId: input.appUserId ?? null,
       requestSummary: input.requestSummary,
       responseSummary: input.responseSummary ?? Prisma.JsonNull,
       statusCode: input.statusCode ?? null,

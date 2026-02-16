@@ -54,6 +54,9 @@ export interface CreateHealthCheckDbInput {
   actionsFailed?: number | null;
   scanResults?: Prisma.InputJsonValue | null;
 
+  // User credential health stats
+  userCredentialHealth?: Prisma.InputJsonValue | null;
+
   // Circuit breaker status
   circuitBreakerStatus?: CircuitBreakerStatus | null;
 
@@ -144,6 +147,9 @@ export async function createHealthCheck(input: CreateHealthCheckDbInput): Promis
       actionsPassed: input.actionsPassed ?? null,
       actionsFailed: input.actionsFailed ?? null,
       scanResults: input.scanResults ?? Prisma.JsonNull,
+
+      // User credential health
+      userCredentialHealth: input.userCredentialHealth ?? Prisma.JsonNull,
 
       // Circuit breaker
       circuitBreakerStatus: input.circuitBreakerStatus ?? null,

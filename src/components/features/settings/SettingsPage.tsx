@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Settings, User, Bell, Key, Palette, Loader2, Variable } from 'lucide-react';
+import { Settings, User, Bell, Key, Palette, Loader2, Variable, Boxes } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -21,6 +21,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ApiKeyDisplay } from './ApiKeyDisplay';
 import { VariablesSection } from './VariablesSection';
+import { AppsSection } from './AppsSection';
 import { toast } from 'sonner';
 import { apiClient } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
@@ -48,11 +49,12 @@ interface SettingsPageProps {
   isLoading?: boolean;
 }
 
-type SettingsSection = 'general' | 'api' | 'variables' | 'notifications' | 'appearance';
+type SettingsSection = 'general' | 'api' | 'apps' | 'variables' | 'notifications' | 'appearance';
 
 const SECTIONS: { id: SettingsSection; label: string; icon: React.ElementType }[] = [
   { id: 'general', label: 'General', icon: User },
   { id: 'api', label: 'API Keys', icon: Key },
+  { id: 'apps', label: 'Apps', icon: Boxes },
   { id: 'variables', label: 'Variables', icon: Variable },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'appearance', label: 'Appearance', icon: Palette },
@@ -264,6 +266,8 @@ export function SettingsPage({ initialSettings, isLoading }: SettingsPageProps) 
               </div>
             </SettingsSection>
           )}
+
+          {activeSection === 'apps' && <AppsSection />}
 
           {activeSection === 'variables' && <VariablesSection />}
 

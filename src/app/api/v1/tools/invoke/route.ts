@@ -63,6 +63,19 @@ const ToolInvokeRequestSchema = z.object({
    * }
    */
   variables: RuntimeVariablesSchema.optional(),
+  /**
+   * Optional invocation options (primarily for wg_app_ key flows).
+   */
+  options: z
+    .object({
+      /**
+       * External user ID for end-user credential resolution.
+       * When provided with a wg_app_ key, uses the user's own credential
+       * (AppUserCredential) instead of the shared connection credential.
+       */
+      externalUserId: z.string().optional(),
+    })
+    .optional(),
 });
 
 // =============================================================================
@@ -140,7 +153,7 @@ async function getDisplayNames(
 // Endpoint Handler
 // =============================================================================
 
-export const POST = withApiAuth(async (request: NextRequest, { tenant }) => {
+export const POST = withApiAuth(async (request: NextRequest, { tenant, app }) => {
   try {
     // Parse request body
     const body = await request.json();
@@ -166,7 +179,14 @@ export const POST = withApiAuth(async (request: NextRequest, { tenant }) => {
       );
     }
 
-    const { tool, params, context, connectionId, variables } = validationResult.data;
+    const {
+      tool,
+      params,
+      context,
+      connectionId,
+      variables,
+      options: invokeOptions,
+    } = validationResult.data;
 
     // Parse tool name
     const parsed = parseToolName(tool);
@@ -213,11 +233,15 @@ export const POST = withApiAuth(async (request: NextRequest, { tenant }) => {
     }
 
     // Invoke the action through the gateway
+    // When authenticated with a wg_app_ key, pass appId so the gateway
+    // resolves the App's connection and uses user-aware credential resolution.
     const startTime = Date.now();
     const result = await invokeAction(tenant.id, integrationSlug, actionSlug, params, {
       context: context as ResolutionContext | undefined,
       connectionId,
       variables: variables as RuntimeVariables | undefined,
+      appId: app?.id,
+      externalUserId: invokeOptions?.externalUserId,
     });
     const latencyMs = Date.now() - startTime;
 

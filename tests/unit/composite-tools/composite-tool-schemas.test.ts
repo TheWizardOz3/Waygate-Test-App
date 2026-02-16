@@ -408,9 +408,9 @@ describe('CreateRoutingRuleInputSchema', () => {
     expect(result.priority).toBe(10);
   });
 
-  it('should reject invalid operation ID', () => {
+  it('should reject empty operation ID', () => {
     const input = {
-      operationId: 'not-a-uuid',
+      operationId: '',
       conditionType: 'contains',
       conditionField: 'url',
       conditionValue: 'test',

@@ -238,6 +238,20 @@ enum StepExecutionStatus {
   skipped
 }
 
+/// Status of a consuming application
+enum AppStatus {
+  active
+  disabled
+}
+
+/// Status of an end-user connect session
+enum ConnectSessionStatus {
+  pending
+  completed
+  expired
+  failed
+}
+
 /// Severity level of a drift report
 enum DriftSeverity {
   info
@@ -259,15 +273,17 @@ enum DriftReportStatus {
 
 /// Multi-tenant accounts - each tenant is an organization/user account
 model Tenant {
-  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name              String   @db.VarChar(255)
-  email             String   @unique @db.VarChar(255)
-  waygateApiKeyHash String   @unique @map("waygate_api_key_hash") @db.VarChar(255)
-  settings          Json     @default("{}")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name               String   @db.VarChar(255)
+  email              String   @unique @db.VarChar(255)
+  waygateApiKeyHash  String   @unique @map("waygate_api_key_hash") @db.VarChar(255)
+  waygateApiKeyIndex String?  @unique @map("waygate_api_key_index") @db.VarChar(64)
+  settings           Json     @default("{}")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
   // Relations
+  apps                   App[]
   integrations           Integration[]
   connections            Connection[]
   integrationCredentials IntegrationCredential[]
@@ -289,6 +305,135 @@ model Tenant {
   maintenanceProposals   MaintenanceProposal[]
 
   @@map("tenants")
+}
+
+/// Consuming application with its own API key and OAuth app registrations
+model App {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  name        String    @db.VarChar(255)
+  slug        String    @db.VarChar(100)
+  description String?   @db.Text
+  apiKeyHash  String    @unique @map("api_key_hash") @db.VarChar(255)
+  apiKeyIndex String    @unique @map("api_key_index") @db.VarChar(64)
+  status      AppStatus @default(active)
+  metadata    Json      @default("{}")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  tenant             Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  integrationConfigs AppIntegrationConfig[]
+  connections        Connection[]           @relation("AppConnections")
+  appUsers           AppUser[]
+  connectSessions    ConnectSession[]
+
+  // Indexes
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@map("apps")
+}
+
+/// Per-app OAuth app registration for each integration (client_id/client_secret)
+model AppIntegrationConfig {
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  appId                 String   @map("app_id") @db.Uuid
+  integrationId         String   @map("integration_id") @db.Uuid
+  encryptedClientId     Bytes?   @map("encrypted_client_id")
+  encryptedClientSecret Bytes?   @map("encrypted_client_secret")
+  scopes                String[] @default([])
+  metadata              Json     @default("{}")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  app         App         @relation(fields: [appId], references: [id], onDelete: Cascade)
+  integration Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@unique([appId, integrationId])
+  @@index([appId])
+  @@map("app_integration_configs")
+}
+
+/// End-user identity within a consuming app (lazy-created, not authenticated by Waygate)
+model AppUser {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  appId       String   @map("app_id") @db.Uuid
+  externalId  String   @map("external_id") @db.VarChar(255)
+  displayName String?  @map("display_name") @db.VarChar(255)
+  email       String?  @db.VarChar(255)
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  app             App                 @relation(fields: [appId], references: [id], onDelete: Cascade)
+  userCredentials AppUserCredential[]
+  connectSessions ConnectSession[]
+
+  // Indexes
+  @@unique([appId, externalId])
+  @@index([appId])
+  @@map("app_users")
+}
+
+/// Per-user OAuth tokens stored under a Connection (children of the app's OAuth registration)
+model AppUserCredential {
+  id                    String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  connectionId          String           @map("connection_id") @db.Uuid
+  appUserId             String           @map("app_user_id") @db.Uuid
+  credentialType        CredentialType   @map("credential_type")
+  encryptedData         Bytes            @map("encrypted_data")
+  expiresAt             DateTime?        @map("expires_at")
+  encryptedRefreshToken Bytes?           @map("encrypted_refresh_token")
+  scopes                String[]         @default([])
+  status                CredentialStatus @default(active)
+  createdAt             DateTime         @default(now()) @map("created_at")
+  updatedAt             DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  connection        Connection         @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  appUser           AppUser            @relation(fields: [appUserId], references: [id], onDelete: Cascade)
+  referenceData     ReferenceData[]
+  referenceSyncJobs ReferenceSyncJob[]
+
+  // Indexes
+  @@unique([connectionId, appUserId])
+  @@index([connectionId])
+  @@index([appUserId])
+  @@index([expiresAt])
+  @@index([status])
+  @@map("app_user_credentials")
+}
+
+/// Short-lived session for the embeddable end-user connect flow
+model ConnectSession {
+  id            String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  appId         String               @map("app_id") @db.Uuid
+  appUserId     String               @map("app_user_id") @db.Uuid
+  integrationId String               @map("integration_id") @db.Uuid
+  connectionId  String?              @map("connection_id") @db.Uuid
+  token         String               @unique @db.VarChar(255)
+  redirectUrl   String?              @map("redirect_url") @db.Text
+  status        ConnectSessionStatus @default(pending)
+  expiresAt     DateTime             @map("expires_at")
+  completedAt   DateTime?            @map("completed_at")
+  errorMessage  String?              @map("error_message") @db.Text
+  metadata      Json                 @default("{}")
+  createdAt     DateTime             @default(now()) @map("created_at")
+
+  // Relations
+  app         App         @relation(fields: [appId], references: [id], onDelete: Cascade)
+  appUser     AppUser     @relation(fields: [appUserId], references: [id], onDelete: Cascade)
+  integration Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  connection  Connection? @relation(fields: [connectionId], references: [id])
+
+  // Indexes
+  @@index([token])
+  @@index([appId])
+  @@index([expiresAt])
+  @@map("connect_sessions")
 }
 
 /// Integration definitions - configured connections to external APIs
@@ -329,6 +474,8 @@ model Integration {
   referenceSyncJobs     ReferenceSyncJob[]
   driftReports          DriftReport[]
   maintenanceProposals  MaintenanceProposal[]
+  appIntegrationConfigs AppIntegrationConfig[]
+  connectSessions       ConnectSession[]
 
   // Indexes
   @@unique([tenantId, slug], name: "integrations_tenant_slug_idx")
@@ -371,6 +518,7 @@ model Connection {
   id                  String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId            String           @map("tenant_id") @db.Uuid
   integrationId       String           @map("integration_id") @db.Uuid
+  appId               String?          @map("app_id") @db.Uuid
   name                String           @db.VarChar(255)
   slug                String           @db.VarChar(100)
   baseUrl             String?          @map("base_url") @db.Text
@@ -395,6 +543,7 @@ model Connection {
   // Relations
   tenant                Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   integration           Integration             @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  app                   App?                    @relation("AppConnections", fields: [appId], references: [id], onDelete: SetNull)
   platformConnector     PlatformConnector?      @relation(fields: [platformConnectorId], references: [id], onDelete: SetNull)
   healthCheckTestAction Action?                 @relation("ConnectionTestAction", fields: [healthCheckTestActionId], references: [id], onDelete: SetNull)
   credentials           IntegrationCredential[]
@@ -404,6 +553,8 @@ model Connection {
   referenceData         ReferenceData[]
   referenceSyncJobs     ReferenceSyncJob[]
   variables             Variable[]
+  userCredentials       AppUserCredential[]
+  connectSessions       ConnectSession[]
 
   // Indexes
   @@unique([tenantId, integrationId, slug], name: "connections_tenant_integration_slug_idx")
@@ -530,6 +681,8 @@ model RequestLog {
   integrationId   String   @map("integration_id") @db.Uuid
   actionId        String   @map("action_id") @db.Uuid
   connectionId    String?  @map("connection_id") @db.Uuid
+  appId           String?  @map("app_id") @db.Uuid
+  appUserId       String?  @map("app_user_id") @db.Uuid
   requestSummary  Json     @map("request_summary")
   responseSummary Json?    @map("response_summary")
   statusCode      Int?     @map("status_code")
@@ -634,6 +787,9 @@ model HealthCheck {
   actionsFailed  Int?  @map("actions_failed")
   scanResults    Json? @map("scan_results") // Detailed per-action results
 
+  // User credential health stats (Tier 1 — end-user credentials under this connection)
+  userCredentialHealth Json? @map("user_credential_health")
+
   // Circuit breaker status
   circuitBreakerStatus CircuitBreakerStatus? @map("circuit_breaker_status")
 
@@ -657,10 +813,11 @@ model HealthCheck {
 
 /// Cached reference data from external APIs (users, channels, teams, etc.)
 model ReferenceData {
-  id            String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId      String  @map("tenant_id") @db.Uuid
-  integrationId String  @map("integration_id") @db.Uuid
-  connectionId  String? @map("connection_id") @db.Uuid
+  id                  String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String  @map("tenant_id") @db.Uuid
+  integrationId       String  @map("integration_id") @db.Uuid
+  connectionId        String? @map("connection_id") @db.Uuid
+  appUserCredentialId String? @map("app_user_credential_id") @db.Uuid
 
   dataType   String @map("data_type") @db.VarChar(100) // 'users', 'channels', 'repos', etc.
   externalId String @map("external_id") @db.VarChar(255) // ID from external system
@@ -675,13 +832,14 @@ model ReferenceData {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  tenant         Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  integration    Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
-  connection     Connection? @relation(fields: [connectionId], references: [id], onDelete: Cascade)
-  syncedByAction Action?     @relation(fields: [syncedByActionId], references: [id], onDelete: SetNull)
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  integration       Integration        @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  connection        Connection?        @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  syncedByAction    Action?            @relation(fields: [syncedByActionId], references: [id], onDelete: SetNull)
+  appUserCredential AppUserCredential? @relation(fields: [appUserCredentialId], references: [id], onDelete: Cascade)
 
   // Indexes
-  @@unique([integrationId, connectionId, dataType, externalId], name: "reference_data_unique_idx")
+  @@unique([integrationId, connectionId, appUserCredentialId, dataType, externalId], name: "reference_data_unique_idx")
   @@index([tenantId, dataType], name: "reference_data_tenant_type_idx")
   @@index([integrationId, dataType], name: "reference_data_integration_type_idx")
   @@index([connectionId, dataType], name: "reference_data_connection_type_idx")
@@ -692,11 +850,12 @@ model ReferenceData {
 
 /// Tracks reference data sync jobs
 model ReferenceSyncJob {
-  id            String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId      String  @map("tenant_id") @db.Uuid
-  integrationId String  @map("integration_id") @db.Uuid
-  connectionId  String? @map("connection_id") @db.Uuid
-  dataType      String  @map("data_type") @db.VarChar(100)
+  id                  String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String  @map("tenant_id") @db.Uuid
+  integrationId       String  @map("integration_id") @db.Uuid
+  connectionId        String? @map("connection_id") @db.Uuid
+  appUserCredentialId String? @map("app_user_credential_id") @db.Uuid
+  dataType            String  @map("data_type") @db.VarChar(100)
 
   status      SyncJobStatus @default(pending)
   startedAt   DateTime?     @map("started_at")
@@ -713,9 +872,10 @@ model ReferenceSyncJob {
   createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  integration Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
-  connection  Connection? @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  integration       Integration        @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  connection        Connection?        @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  appUserCredential AppUserCredential? @relation(fields: [appUserCredentialId], references: [id], onDelete: Cascade)
 
   // Indexes
   @@index([integrationId, status], name: "reference_sync_jobs_integration_status_idx")
@@ -787,18 +947,18 @@ model CompositeTool {
 
 /// Operations within a composite tool - links to actions with parameter mappings
 model CompositeToolOperation {
-  id               String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  compositeToolId  String @map("composite_tool_id") @db.Uuid
-  actionId         String @map("action_id") @db.Uuid
-  operationSlug    String @map("operation_slug") @db.VarChar(100) /// Unique identifier within composite tool
-  displayName      String @map("display_name") @db.VarChar(255) /// Human-readable name (e.g., "LinkedIn Scraper")
-  parameterMapping Json   @default("{}") @map("parameter_mapping") /// Maps unified params → action params
-  priority         Int    @default(0) /// For ordering operations
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  compositeToolId  String   @map("composite_tool_id") @db.Uuid
+  actionId         String   @map("action_id") @db.Uuid
+  operationSlug    String   @map("operation_slug") @db.VarChar(100) /// Unique identifier within composite tool
+  displayName      String   @map("display_name") @db.VarChar(255) /// Human-readable name (e.g., "LinkedIn Scraper")
+  parameterMapping Json     @default("{}") @map("parameter_mapping") /// Maps unified params → action params
+  priority         Int      @default(0) /// For ordering operations
   createdAt        DateTime @default(now()) @map("created_at")
 
   // Relations
-  compositeTool            CompositeTool @relation("CompositeToolOperations", fields: [compositeToolId], references: [id], onDelete: Cascade)
-  action                   Action        @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  compositeTool            CompositeTool   @relation("CompositeToolOperations", fields: [compositeToolId], references: [id], onDelete: Cascade)
+  action                   Action          @relation(fields: [actionId], references: [id], onDelete: Cascade)
   routingRules             RoutingRule[]
   defaultForCompositeTools CompositeTool[] @relation("DefaultOperation")
 
@@ -872,7 +1032,7 @@ model AgenticTool {
   updatedAt DateTime          @updatedAt @map("updated_at")
 
   // Relations
-  tenant     Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant     Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   executions AgenticToolExecution[]
 
   // Indexes
@@ -884,21 +1044,21 @@ model AgenticTool {
 
 /// Execution records for agentic tool invocations
 model AgenticToolExecution {
-  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  agenticToolId String   @map("agentic_tool_id") @db.Uuid
-  tenantId      String   @map("tenant_id") @db.Uuid
-  parentRequest Json     @map("parent_request") // Original user input
-  llmCalls      Json[]   @default([]) @map("llm_calls") // Array of LLM calls with prompts, responses, tokens
-  toolCalls     Json[]   @default([]) @map("tool_calls") // Array of tool invocations (Autonomous mode)
-  result        Json?    // Final output
+  id            String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  agenticToolId String                     @map("agentic_tool_id") @db.Uuid
+  tenantId      String                     @map("tenant_id") @db.Uuid
+  parentRequest Json                       @map("parent_request") // Original user input
+  llmCalls      Json[]                     @default([]) @map("llm_calls") // Array of LLM calls with prompts, responses, tokens
+  toolCalls     Json[]                     @default([]) @map("tool_calls") // Array of tool invocations (Autonomous mode)
+  result        Json? // Final output
   status        AgenticToolExecutionStatus
-  error         Json?    // Error details if failed
-  totalCost     Decimal  @default(0) @map("total_cost") @db.Decimal(10, 6) // Total LLM cost in USD
-  totalTokens   Int      @default(0) @map("total_tokens") // Total tokens used
-  durationMs    Int      @default(0) @map("duration_ms")
-  traceId       String?  @map("trace_id") @db.VarChar(255) // Langsmith/OTel trace ID
-  createdAt     DateTime @default(now()) @map("created_at")
-  completedAt   DateTime? @map("completed_at")
+  error         Json? // Error details if failed
+  totalCost     Decimal                    @default(0) @map("total_cost") @db.Decimal(10, 6) // Total LLM cost in USD
+  totalTokens   Int                        @default(0) @map("total_tokens") // Total tokens used
+  durationMs    Int                        @default(0) @map("duration_ms")
+  traceId       String?                    @map("trace_id") @db.VarChar(255) // Langsmith/OTel trace ID
+  createdAt     DateTime                   @default(now()) @map("created_at")
+  completedAt   DateTime?                  @map("completed_at")
 
   // Relations
   agenticTool AgenticTool @relation(fields: [agenticToolId], references: [id], onDelete: Cascade)
@@ -1047,11 +1207,11 @@ model StepExecution {
 model AsyncJob {
   id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId        String?   @map("tenant_id") @db.Uuid
-  type            String    // e.g., "batch_operation", "schema_drift", "scrape"
+  type            String // e.g., "batch_operation", "schema_drift", "scrape"
   status          String    @default("queued") // queued, running, completed, failed, cancelled
-  input           Json?     // Job-specific input parameters (sanitized)
-  output          Json?     // Job result on completion
-  error           Json?     // Error details on failure
+  input           Json? // Job-specific input parameters (sanitized)
+  output          Json? // Job result on completion
+  error           Json? // Error details on failure
   progress        Int       @default(0) // 0-100
   progressDetails Json?     @map("progress_details") // Stage-specific details
   attempts        Int       @default(0)
@@ -1064,7 +1224,7 @@ model AsyncJob {
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz
 
   // Relations
-  tenant Tenant?      @relation(fields: [tenantId], references: [id])
+  tenant Tenant?        @relation(fields: [tenantId], references: [id])
   items  AsyncJobItem[]
 
   // Indexes
@@ -1079,9 +1239,9 @@ model AsyncJobItem {
   id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   jobId       String    @map("job_id") @db.Uuid
   status      String    @default("pending") // pending, running, completed, failed, skipped
-  input       Json?     // Item-specific input
-  output      Json?     // Item result
-  error       Json?     // Item error details
+  input       Json? // Item-specific input
+  output      Json? // Item result
+  error       Json? // Item error details
   attempts    Int       @default(0)
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
   completedAt DateTime? @map("completed_at") @db.Timestamptz
@@ -1100,26 +1260,26 @@ model AsyncJobItem {
 
 /// Structured drift reports created from aggregated ValidationFailure patterns
 model DriftReport {
-  id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  integrationId  String            @map("integration_id") @db.Uuid
-  tenantId       String            @map("tenant_id") @db.Uuid
-  actionId       String            @map("action_id") @db.Uuid
-  fingerprint    String            @db.VarChar(255) // Dedup key: hash of actionId + issueCode + fieldPath
-  issueCode      String            @map("issue_code") @db.VarChar(50) // From ValidationFailure
-  severity       DriftSeverity     // info, warning, breaking
-  status         DriftReportStatus @default(detected) // detected, acknowledged, resolved, dismissed
-  fieldPath      String            @map("field_path") @db.VarChar(255) // JSON path to affected field
-  expectedType   String?           @map("expected_type") @db.VarChar(50) // What the schema says
-  currentType    String?           @map("current_type") @db.VarChar(50) // What the API actually returns
-  description    String            @db.Text // Human-readable: "Field 'user.email' type changed from string to null"
-  failureCount   Int               @map("failure_count") // Total failures observed for this pattern
-  scanCount      Int               @default(1) @map("scan_count") // How many analysis runs have seen this
-  firstDetectedAt DateTime         @default(now()) @map("first_detected_at")
-  lastDetectedAt  DateTime         @default(now()) @map("last_detected_at")
-  acknowledgedAt  DateTime?        @map("acknowledged_at")
-  resolvedAt      DateTime?        @map("resolved_at")
-  createdAt       DateTime         @default(now()) @map("created_at")
-  updatedAt       DateTime         @updatedAt @map("updated_at")
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  integrationId   String            @map("integration_id") @db.Uuid
+  tenantId        String            @map("tenant_id") @db.Uuid
+  actionId        String            @map("action_id") @db.Uuid
+  fingerprint     String            @db.VarChar(255) // Dedup key: hash of actionId + issueCode + fieldPath
+  issueCode       String            @map("issue_code") @db.VarChar(50) // From ValidationFailure
+  severity        DriftSeverity // info, warning, breaking
+  status          DriftReportStatus @default(detected) // detected, acknowledged, resolved, dismissed
+  fieldPath       String            @map("field_path") @db.VarChar(255) // JSON path to affected field
+  expectedType    String?           @map("expected_type") @db.VarChar(50) // What the schema says
+  currentType     String?           @map("current_type") @db.VarChar(50) // What the API actually returns
+  description     String            @db.Text // Human-readable: "Field 'user.email' type changed from string to null"
+  failureCount    Int               @map("failure_count") // Total failures observed for this pattern
+  scanCount       Int               @default(1) @map("scan_count") // How many analysis runs have seen this
+  firstDetectedAt DateTime          @default(now()) @map("first_detected_at")
+  lastDetectedAt  DateTime          @default(now()) @map("last_detected_at")
+  acknowledgedAt  DateTime?         @map("acknowledged_at")
+  resolvedAt      DateTime?         @map("resolved_at")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
 
   // Relations
   integration Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
@@ -1140,17 +1300,17 @@ model DriftReport {
 
 /// Proposed schema updates generated from drift reports, with approval workflow and revert support
 model MaintenanceProposal {
-  id              String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  integrationId   String  @map("integration_id") @db.Uuid
-  tenantId        String  @map("tenant_id") @db.Uuid
-  actionId        String  @map("action_id") @db.Uuid
+  id            String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  integrationId String @map("integration_id") @db.Uuid
+  tenantId      String @map("tenant_id") @db.Uuid
+  actionId      String @map("action_id") @db.Uuid
 
   // Status lifecycle: pending → approved/rejected/expired/reverted
   status   String @default("pending") @db.VarChar(20) // pending, approved, rejected, expired, reverted
   severity String @db.VarChar(20) // breaking, warning, info — highest severity of included drift reports
 
   // Schema snapshots for revert support
-  currentInputSchema  Json @map("current_input_schema")  // Snapshot of action's inputSchema at proposal time
+  currentInputSchema  Json @map("current_input_schema") // Snapshot of action's inputSchema at proposal time
   currentOutputSchema Json @map("current_output_schema") // Snapshot of action's outputSchema at proposal time
 
   // Proposed schema updates (null if no changes for that direction)
@@ -1158,7 +1318,7 @@ model MaintenanceProposal {
   proposedOutputSchema Json? @map("proposed_output_schema")
 
   // Change details
-  changes   Json   // Array of { direction, fieldPath, changeType, description, driftReportId, beforeValue?, afterValue? }
+  changes   Json // Array of { direction, fieldPath, changeType, description, driftReportId, beforeValue?, afterValue? }
   reasoning String @db.Text // Human-readable explanation of why these changes are proposed
   source    String @db.VarChar(20) // "inference" | "rescrape" — how the proposal was generated
 

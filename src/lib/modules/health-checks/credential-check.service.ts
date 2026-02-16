@@ -23,9 +23,12 @@ import { createHealthCheck, updateConnectionHealthStatus } from './health-check.
 import {
   calculateOverallHealthStatus,
   HealthCheckErrorCodes,
+  USER_CREDENTIAL_DEGRADATION_THRESHOLD,
   type HealthCheckResponse,
+  type UserCredentialHealth,
 } from './health-check.schemas';
 import { toHealthCheckResponse } from './health-check.schemas';
+import { countByStatusForConnection } from '@/lib/modules/app-user-credentials/app-user-credential.repository';
 
 import type { Connection, IntegrationCredential } from '@prisma/client';
 
@@ -104,14 +107,20 @@ export async function runCredentialCheck(
 
   const previousStatus = connection.healthStatus;
 
-  // Get credentials for this connection
+  // Get shared credential for this connection
   const credential = await getActiveCredentialForConnection(connection);
 
-  // Analyze credential status
+  // Analyze shared credential status
   const { credentialStatus, credentialExpiresAt } = analyzeCredentialStatus(credential);
 
-  // Determine overall health status based on credential status
-  const newStatus = calculateOverallHealthStatus({ credentialStatus });
+  // Scan end-user credentials under this connection
+  const userCredentialHealth = await scanUserCredentialHealth(connectionId);
+
+  // Determine overall health status factoring in user credential health
+  const newStatus = calculateOverallHealthStatus({
+    credentialStatus,
+    userCredentialsDegraded: userCredentialHealth?.isDegraded ?? false,
+  });
 
   // Calculate duration
   const durationMs = Date.now() - startTime;
@@ -126,6 +135,7 @@ export async function runCredentialCheck(
     durationMs,
     credentialStatus,
     credentialExpiresAt,
+    userCredentialHealth: userCredentialHealth ?? undefined,
     circuitBreakerStatus: null, // Tier 1 doesn't affect circuit breaker
     error: null,
   });
@@ -314,6 +324,65 @@ function analyzeCredentialStatus(credential: IntegrationCredential | null): {
         credentialExpiresAt: null,
       };
   }
+}
+
+/**
+ * Scans end-user credentials under a connection and returns health stats.
+ * Returns null if the connection has no user credentials.
+ *
+ * Also checks for credentials that are `status = active` but have
+ * `expiresAt <= now` — these are effectively expired but haven't been
+ * updated by the token refresh job yet.
+ *
+ * @param connectionId - The connection to scan
+ * @returns User credential health stats, or null if no user credentials
+ */
+async function scanUserCredentialHealth(
+  connectionId: string
+): Promise<UserCredentialHealth | null> {
+  const stats = await countByStatusForConnection(connectionId);
+
+  const total = stats.active + stats.expired + stats.needs_reauth + stats.revoked;
+
+  if (total === 0) {
+    return null;
+  }
+
+  // Check for active credentials that have actually expired by time
+  // (not yet caught by the token refresh job)
+  const expiredByTime = await prisma.appUserCredential.count({
+    where: {
+      connectionId,
+      status: CredentialStatus.active,
+      expiresAt: {
+        lte: new Date(),
+        not: null,
+      },
+    },
+  });
+
+  // Only count non-revoked credentials for degradation calculation
+  const countableTotal = total - stats.revoked;
+
+  if (countableTotal === 0) {
+    return null;
+  }
+
+  const effectiveActive = stats.active - expiredByTime;
+  const effectiveExpired = stats.expired + expiredByTime;
+  const unhealthyCount = effectiveExpired + stats.needs_reauth;
+  const degradedPercentage = (unhealthyCount / countableTotal) * 100;
+  const isDegraded = degradedPercentage > USER_CREDENTIAL_DEGRADATION_THRESHOLD;
+
+  return {
+    total,
+    active: effectiveActive,
+    expired: effectiveExpired,
+    needsReauth: stats.needs_reauth,
+    revoked: stats.revoked,
+    degradedPercentage: Math.round(degradedPercentage * 100) / 100,
+    isDegraded,
+  };
 }
 
 /**

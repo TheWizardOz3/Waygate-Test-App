@@ -190,6 +190,18 @@ export const GatewayInvokeOptionsSchema = z.object({
   /** Connection ID for multi-app connections (uses default/primary if not specified) */
   connectionId: z.string().uuid().optional(),
   /**
+   * App ID for app-scoped invocations.
+   * When provided (typically from wg_app_ key auth), the gateway resolves the App's
+   * Connection for the integration instead of the default tenant connection.
+   */
+  appId: z.string().uuid().optional(),
+  /**
+   * External user ID for end-user credential resolution.
+   * When provided, the gateway resolves AppUserCredential for this user under the
+   * Connection, falling back to the Connection's shared IntegrationCredential.
+   */
+  externalUserId: z.string().optional(),
+  /**
    * Context for name-to-ID resolution.
    * When provided, Waygate will resolve human-friendly names (like "#general" or "@sarah")
    * to their corresponding IDs using this context data.

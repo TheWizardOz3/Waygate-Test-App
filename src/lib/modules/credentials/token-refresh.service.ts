@@ -28,6 +28,16 @@ import {
   OAuthError,
   type OAuthTokenResponse,
 } from '../auth/oauth-providers';
+import {
+  findExpiringCredentialsWithRelations,
+  type UserCredentialWithRelations,
+} from '../app-user-credentials/app-user-credential.repository';
+import {
+  getDecryptedUserCredentialById,
+  refreshUserCredential,
+  flagUserCredentialForReauth,
+} from '../app-user-credentials/app-user-credential.service';
+import { getDecryptedIntegrationConfig } from '../apps/app.service';
 
 // =============================================================================
 // CONFIGURATION
@@ -54,6 +64,8 @@ export interface RefreshResult {
   integrationId: string;
   tenantId: string;
   connectionId?: string | null; // For multi-app connection tracking
+  appUserId?: string | null; // For end-user credential tracking
+  credentialKind: 'integration' | 'user'; // Distinguishes IntegrationCredential vs AppUserCredential
   success: boolean;
   rotatedRefreshToken: boolean;
   retryCount: number;
@@ -85,6 +97,8 @@ export interface TokenRefreshEvent {
   integrationId: string;
   tenantId: string;
   connectionId?: string | null; // For multi-app connection tracking
+  appUserId?: string | null; // For end-user credential tracking
+  credentialKind: 'integration' | 'user';
   status: 'success' | 'failed' | 'skipped';
   retryCount: number;
   rotatedRefreshToken: boolean;
@@ -146,6 +160,7 @@ function logRefreshEvent(event: TokenRefreshEvent): void {
     credentialId: event.credentialId,
     integrationId: event.integrationId,
     tenantId: event.tenantId,
+    credentialKind: event.credentialKind,
     status: event.status,
     retryCount: event.retryCount,
     rotatedRefreshToken: event.rotatedRefreshToken,
@@ -155,6 +170,11 @@ function logRefreshEvent(event: TokenRefreshEvent): void {
   // Include connectionId if present (for multi-app tracking)
   if (event.connectionId) {
     context.connectionId = event.connectionId;
+  }
+
+  // Include appUserId if present (for end-user tracking)
+  if (event.appUserId) {
+    context.appUserId = event.appUserId;
   }
 
   // Include error details if present (already sanitized)
@@ -167,7 +187,9 @@ function logRefreshEvent(event: TokenRefreshEvent): void {
 
   // Human-readable message for development/debugging
   const connectionSuffix = event.connectionId ? ` connection=${event.connectionId}` : '';
-  const humanMessage = `[TOKEN_REFRESH] ${event.status.toUpperCase()} - credential=${event.credentialId} integration=${event.integrationId}${connectionSuffix} retries=${event.retryCount} duration=${event.durationMs}ms${event.rotatedRefreshToken ? ' (refresh token rotated)' : ''}${event.error ? ` error=${event.error.code}` : ''}`;
+  const userSuffix = event.appUserId ? ` appUser=${event.appUserId}` : '';
+  const kindSuffix = event.credentialKind === 'user' ? ' [user-credential]' : '';
+  const humanMessage = `[TOKEN_REFRESH] ${event.status.toUpperCase()} - credential=${event.credentialId} integration=${event.integrationId}${connectionSuffix}${userSuffix}${kindSuffix} retries=${event.retryCount} duration=${event.durationMs}ms${event.rotatedRefreshToken ? ' (refresh token rotated)' : ''}${event.error ? ` error=${event.error.code}` : ''}`;
 
   // Log based on level
   if (level === 'error') {
@@ -220,7 +242,7 @@ export function logBatchRefreshSummary(result: RefreshBatchResult): void {
 // =============================================================================
 
 /**
- * Refreshes all expiring OAuth2 tokens
+ * Refreshes all expiring OAuth2 tokens (both IntegrationCredentials and AppUserCredentials)
  *
  * This is the main entry point called by the background job.
  * It finds all credentials expiring within the buffer window and
@@ -238,16 +260,35 @@ export async function refreshExpiringTokens(
   let failed = 0;
   let skipped = 0;
 
-  // Find all credentials expiring within the buffer window
+  // Find all integration credentials expiring within the buffer window
   const expiringCredentials = await findExpiringOAuth2Credentials(bufferMinutes);
 
+  // Find all user credentials expiring within the buffer window
+  const expiringUserCredentials = await findExpiringCredentialsWithRelations(bufferMinutes);
+
+  const totalCount = expiringCredentials.length + expiringUserCredentials.length;
+
   console.info(
-    `[TOKEN_REFRESH] Starting batch refresh: ${expiringCredentials.length} credentials expiring within ${bufferMinutes} minutes`
+    `[TOKEN_REFRESH] Starting batch refresh: ${totalCount} credentials expiring within ${bufferMinutes} minutes (${expiringCredentials.length} integration, ${expiringUserCredentials.length} user)`
   );
 
-  // Process each credential
+  // Process integration credentials
   for (const credential of expiringCredentials) {
     const result = await refreshSingleCredentialWithLock(credential);
+    results.push(result);
+
+    if (result.success) {
+      successful++;
+    } else if (result.error?.code === 'LOCK_NOT_ACQUIRED') {
+      skipped++;
+    } else {
+      failed++;
+    }
+  }
+
+  // Process user credentials
+  for (const userCredential of expiringUserCredentials) {
+    const result = await refreshSingleUserCredentialWithLock(userCredential);
     results.push(result);
 
     if (result.success) {
@@ -264,7 +305,7 @@ export async function refreshExpiringTokens(
   const batchResult: RefreshBatchResult = {
     startedAt,
     completedAt,
-    totalProcessed: expiringCredentials.length,
+    totalProcessed: totalCount,
     successful,
     failed,
     skipped,
@@ -298,6 +339,7 @@ async function refreshSingleCredentialWithLock(
       integrationId: credential.integrationId,
       tenantId: credential.tenantId,
       connectionId: credential.connectionId,
+      credentialKind: 'integration',
       status: 'skipped',
       retryCount: 0,
       rotatedRefreshToken: false,
@@ -314,6 +356,7 @@ async function refreshSingleCredentialWithLock(
       integrationId: credential.integrationId,
       tenantId: credential.tenantId,
       connectionId: credential.connectionId,
+      credentialKind: 'integration',
       success: false,
       rotatedRefreshToken: false,
       retryCount: 0,
@@ -353,6 +396,7 @@ export async function refreshSingleCredential(
       integrationId: credential.integrationId,
       tenantId: credential.tenantId,
       connectionId: credential.connectionId,
+      credentialKind: 'integration',
       status: 'failed',
       retryCount: 0,
       rotatedRefreshToken: false,
@@ -369,6 +413,7 @@ export async function refreshSingleCredential(
       integrationId: credential.integrationId,
       tenantId: credential.tenantId,
       connectionId: credential.connectionId,
+      credentialKind: 'integration',
       success: false,
       rotatedRefreshToken: false,
       retryCount: 0,
@@ -385,6 +430,7 @@ export async function refreshSingleCredential(
       integrationId: credential.integrationId,
       tenantId: credential.tenantId,
       connectionId: credential.connectionId,
+      credentialKind: 'integration',
       status: 'failed',
       retryCount: 0,
       rotatedRefreshToken: false,
@@ -401,6 +447,7 @@ export async function refreshSingleCredential(
       integrationId: credential.integrationId,
       tenantId: credential.tenantId,
       connectionId: credential.connectionId,
+      credentialKind: 'integration',
       success: false,
       rotatedRefreshToken: false,
       retryCount: 0,
@@ -427,6 +474,7 @@ export async function refreshSingleCredential(
         integrationId: credential.integrationId,
         tenantId: credential.tenantId,
         connectionId: credential.connectionId,
+        credentialKind: 'integration',
         status: 'success',
         retryCount,
         rotatedRefreshToken,
@@ -439,6 +487,7 @@ export async function refreshSingleCredential(
         integrationId: credential.integrationId,
         tenantId: credential.tenantId,
         connectionId: credential.connectionId,
+        credentialKind: 'integration',
         success: true,
         rotatedRefreshToken,
         retryCount,
@@ -468,6 +517,7 @@ export async function refreshSingleCredential(
     integrationId: credential.integrationId,
     tenantId: credential.tenantId,
     connectionId: credential.connectionId,
+    credentialKind: 'integration',
     status: 'failed',
     retryCount,
     rotatedRefreshToken: false,
@@ -481,6 +531,7 @@ export async function refreshSingleCredential(
     integrationId: credential.integrationId,
     tenantId: credential.tenantId,
     connectionId: credential.connectionId,
+    credentialKind: 'integration',
     success: false,
     rotatedRefreshToken: false,
     retryCount,
@@ -627,6 +678,7 @@ export async function refreshCredentialManually(
       credentialId,
       integrationId: '',
       tenantId,
+      credentialKind: 'integration',
       success: false,
       rotatedRefreshToken: false,
       retryCount: 0,
@@ -646,6 +698,7 @@ export async function refreshCredentialManually(
       credentialId,
       integrationId: decrypted.integrationId,
       tenantId,
+      credentialKind: 'integration',
       success: false,
       rotatedRefreshToken: false,
       retryCount: 0,
@@ -658,6 +711,311 @@ export async function refreshCredentialManually(
 
   // Refresh with lock to prevent concurrent refreshes
   return refreshSingleCredentialWithLock(credential);
+}
+
+// =============================================================================
+// USER CREDENTIAL REFRESH
+// =============================================================================
+
+/**
+ * Refreshes a single user credential with lock acquisition.
+ * Uses the same advisory lock pattern as IntegrationCredential refresh.
+ */
+async function refreshSingleUserCredentialWithLock(
+  credential: UserCredentialWithRelations
+): Promise<RefreshResult> {
+  const startTime = Date.now();
+  const { connection } = credential;
+
+  // Try to acquire lock (reuse same advisory lock mechanism)
+  const lockAcquired = await tryAcquireRefreshLock(credential.id);
+
+  if (!lockAcquired) {
+    const event: TokenRefreshEvent = {
+      event: 'TOKEN_REFRESH',
+      credentialId: credential.id,
+      integrationId: connection.integrationId,
+      tenantId: connection.tenantId,
+      connectionId: connection.id,
+      appUserId: credential.appUserId,
+      credentialKind: 'user',
+      status: 'skipped',
+      retryCount: 0,
+      rotatedRefreshToken: false,
+      durationMs: Date.now() - startTime,
+      error: {
+        code: 'LOCK_NOT_ACQUIRED',
+        message: 'Another process is already refreshing this credential',
+      },
+    };
+    logRefreshEvent(event);
+
+    return {
+      credentialId: credential.id,
+      integrationId: connection.integrationId,
+      tenantId: connection.tenantId,
+      connectionId: connection.id,
+      appUserId: credential.appUserId,
+      credentialKind: 'user',
+      success: false,
+      rotatedRefreshToken: false,
+      retryCount: 0,
+      error: event.error,
+    };
+  }
+
+  try {
+    return await refreshSingleUserCredential(credential);
+  } finally {
+    await releaseRefreshLock(credential.id);
+  }
+}
+
+/**
+ * Refreshes a single user credential with retry logic.
+ *
+ * Resolves the OAuth provider using this priority:
+ * 1. App's own credentials from AppIntegrationConfig (if Connection has appId)
+ * 2. Integration-level authConfig (fallback)
+ */
+async function refreshSingleUserCredential(
+  credential: UserCredentialWithRelations
+): Promise<RefreshResult> {
+  const startTime = Date.now();
+  const { connection } = credential;
+  let lastError: { code: string; message: string } | undefined;
+  let retryCount = 0;
+  let rotatedRefreshToken = false;
+
+  // Get the decrypted refresh token
+  const decrypted = await getDecryptedUserCredentialById(credential.id);
+  if (!decrypted || !decrypted.refreshToken) {
+    const event: TokenRefreshEvent = {
+      event: 'TOKEN_REFRESH',
+      credentialId: credential.id,
+      integrationId: connection.integrationId,
+      tenantId: connection.tenantId,
+      connectionId: connection.id,
+      appUserId: credential.appUserId,
+      credentialKind: 'user',
+      status: 'failed',
+      retryCount: 0,
+      rotatedRefreshToken: false,
+      durationMs: Date.now() - startTime,
+      error: {
+        code: 'NO_REFRESH_TOKEN',
+        message: 'User credential does not have a refresh token',
+      },
+    };
+    logRefreshEvent(event);
+
+    return {
+      credentialId: credential.id,
+      integrationId: connection.integrationId,
+      tenantId: connection.tenantId,
+      connectionId: connection.id,
+      appUserId: credential.appUserId,
+      credentialKind: 'user',
+      success: false,
+      rotatedRefreshToken: false,
+      retryCount: 0,
+      error: event.error,
+    };
+  }
+
+  // Resolve the OAuth provider — prefer app credentials, fall back to integration config
+  const provider = await resolveOAuthProviderForUserCredential(credential);
+  if (!provider) {
+    const event: TokenRefreshEvent = {
+      event: 'TOKEN_REFRESH',
+      credentialId: credential.id,
+      integrationId: connection.integrationId,
+      tenantId: connection.tenantId,
+      connectionId: connection.id,
+      appUserId: credential.appUserId,
+      credentialKind: 'user',
+      status: 'failed',
+      retryCount: 0,
+      rotatedRefreshToken: false,
+      durationMs: Date.now() - startTime,
+      error: {
+        code: 'INVALID_AUTH_CONFIG',
+        message: 'Could not create OAuth provider for user credential refresh',
+      },
+    };
+    logRefreshEvent(event);
+
+    return {
+      credentialId: credential.id,
+      integrationId: connection.integrationId,
+      tenantId: connection.tenantId,
+      connectionId: connection.id,
+      appUserId: credential.appUserId,
+      credentialKind: 'user',
+      success: false,
+      rotatedRefreshToken: false,
+      retryCount: 0,
+      error: event.error,
+    };
+  }
+
+  // Retry loop
+  for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
+    retryCount = attempt;
+
+    try {
+      const tokenResponse = await provider.refreshToken(decrypted.refreshToken);
+
+      // Store new tokens via user credential service
+      const handleResult = await handleUserCredentialRefreshResult(credential.id, tokenResponse);
+      rotatedRefreshToken = handleResult.rotatedRefreshToken;
+
+      const event: TokenRefreshEvent = {
+        event: 'TOKEN_REFRESH',
+        credentialId: credential.id,
+        integrationId: connection.integrationId,
+        tenantId: connection.tenantId,
+        connectionId: connection.id,
+        appUserId: credential.appUserId,
+        credentialKind: 'user',
+        status: 'success',
+        retryCount,
+        rotatedRefreshToken,
+        durationMs: Date.now() - startTime,
+      };
+      logRefreshEvent(event);
+
+      return {
+        credentialId: credential.id,
+        integrationId: connection.integrationId,
+        tenantId: connection.tenantId,
+        connectionId: connection.id,
+        appUserId: credential.appUserId,
+        credentialKind: 'user',
+        success: true,
+        rotatedRefreshToken,
+        retryCount,
+      };
+    } catch (error) {
+      lastError = extractErrorInfo(error);
+
+      if (!isRetryableError(error)) {
+        break;
+      }
+
+      if (attempt < MAX_RETRY_ATTEMPTS - 1) {
+        const backoffMs = BASE_BACKOFF_MS * Math.pow(2, attempt);
+        await sleep(backoffMs);
+      }
+    }
+  }
+
+  // All retries exhausted — mark user credential as needs_reauth
+  await flagUserCredentialForReauth(credential.id);
+
+  const event: TokenRefreshEvent = {
+    event: 'TOKEN_REFRESH',
+    credentialId: credential.id,
+    integrationId: connection.integrationId,
+    tenantId: connection.tenantId,
+    connectionId: connection.id,
+    appUserId: credential.appUserId,
+    credentialKind: 'user',
+    status: 'failed',
+    retryCount,
+    rotatedRefreshToken: false,
+    durationMs: Date.now() - startTime,
+    error: lastError,
+  };
+  logRefreshEvent(event);
+
+  return {
+    credentialId: credential.id,
+    integrationId: connection.integrationId,
+    tenantId: connection.tenantId,
+    connectionId: connection.id,
+    appUserId: credential.appUserId,
+    credentialKind: 'user',
+    success: false,
+    rotatedRefreshToken: false,
+    retryCount,
+    error: lastError,
+  };
+}
+
+/**
+ * Resolves the OAuth provider for refreshing a user credential.
+ *
+ * Priority:
+ * 1. App's own credentials from AppIntegrationConfig (using the app's registered client_id/client_secret)
+ * 2. Integration-level authConfig (fallback for non-app connections)
+ */
+async function resolveOAuthProviderForUserCredential(
+  credential: UserCredentialWithRelations
+): Promise<ReturnType<typeof createGenericProvider> | null> {
+  const { connection } = credential;
+  const integration = connection.integration;
+
+  // If the connection belongs to an app, try the app's OAuth credentials first
+  if (connection.appId) {
+    const appConfig = await getDecryptedIntegrationConfig(
+      connection.appId,
+      connection.integrationId
+    );
+
+    if (appConfig) {
+      // Build provider using the app's client credentials + integration's OAuth URLs
+      const authConfig = integration.authConfig as unknown as StoredOAuthConfig;
+
+      if (authConfig.tokenUrl) {
+        const redirectUri = process.env.NEXT_PUBLIC_APP_URL
+          ? `${process.env.NEXT_PUBLIC_APP_URL}/api/v1/auth/callback/oauth`
+          : 'http://localhost:3000/api/v1/auth/callback/oauth';
+
+        return createGenericProvider(
+          {
+            authorizationUrl: authConfig.authorizationUrl ?? authConfig.tokenUrl,
+            tokenUrl: authConfig.tokenUrl,
+            scopes: appConfig.scopes.length > 0 ? appConfig.scopes : authConfig.scopes,
+            usePkce: authConfig.usePkce,
+            introspectionUrl: authConfig.introspectionUrl,
+            revocationUrl: authConfig.revocationUrl,
+            userInfoUrl: authConfig.userInfoUrl,
+            additionalAuthParams: authConfig.additionalAuthParams,
+            additionalTokenParams: authConfig.additionalTokenParams,
+          },
+          appConfig.clientId,
+          appConfig.clientSecret,
+          redirectUri
+        );
+      }
+    }
+  }
+
+  // Fall back to integration-level authConfig
+  return getOAuthProviderForIntegration(integration);
+}
+
+/**
+ * Stores new tokens after a successful user credential refresh.
+ */
+async function handleUserCredentialRefreshResult(
+  credentialId: string,
+  tokenResponse: OAuthTokenResponse
+): Promise<HandleRefreshResultOutput> {
+  const rotatedRefreshToken = !!tokenResponse.refreshToken;
+
+  await refreshUserCredential(credentialId, {
+    accessToken: tokenResponse.accessToken,
+    refreshToken: tokenResponse.refreshToken,
+    expiresIn: tokenResponse.expiresIn,
+  });
+
+  if (rotatedRefreshToken) {
+    console.info(`[TOKEN_REFRESH] Refresh token was rotated for user credential ${credentialId}`);
+  }
+
+  return { rotatedRefreshToken };
 }
 
 // =============================================================================

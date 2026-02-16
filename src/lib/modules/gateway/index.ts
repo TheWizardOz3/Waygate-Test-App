@@ -118,3 +118,17 @@ export {
 } from './gateway.service';
 
 export type { InvocationContext } from './gateway.service';
+
+// =============================================================================
+// Rate Limiter
+// =============================================================================
+
+export {
+  checkRateLimit,
+  recordRequest,
+  resolveRateLimitConfig,
+  cleanupExpiredEntries,
+  resetAllCounters,
+} from './rate-limiter';
+
+export type { RateLimitConfig, RateLimitResult } from './rate-limiter';

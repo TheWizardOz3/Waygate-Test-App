@@ -49,6 +49,7 @@ export interface TriggerSyncInput {
   tenantId: string;
   integrationId: string;
   connectionId?: string;
+  appUserCredentialId?: string;
   dataType?: string;
   force?: boolean;
 }
@@ -77,6 +78,7 @@ interface SyncContext {
   connection: Connection;
   action: Action;
   referenceConfig: ActionReferenceDataConfig;
+  appUserCredentialId?: string;
   jobId: string;
 }
 
@@ -120,7 +122,14 @@ export class SyncJobError extends Error {
  * @returns Result with job statuses
  */
 export async function triggerSync(input: TriggerSyncInput): Promise<TriggerSyncResult> {
-  const { tenantId, integrationId, connectionId, dataType, force = false } = input;
+  const {
+    tenantId,
+    integrationId,
+    connectionId,
+    appUserCredentialId,
+    dataType,
+    force = false,
+  } = input;
 
   const jobs: TriggerSyncResult['jobs'] = [];
   const errors: string[] = [];
@@ -163,6 +172,7 @@ export async function triggerSync(input: TriggerSyncInput): Promise<TriggerSyncR
             const hasActive = await hasActiveSyncJob({
               integrationId,
               connectionId: connection.id,
+              appUserCredentialId: appUserCredentialId ?? null,
               dataType: referenceConfig.dataType,
             });
 
@@ -185,6 +195,7 @@ export async function triggerSync(input: TriggerSyncInput): Promise<TriggerSyncR
             connection,
             action,
             referenceConfig,
+            appUserCredentialId,
           });
 
           jobs.push({
@@ -232,13 +243,15 @@ export async function triggerSync(input: TriggerSyncInput): Promise<TriggerSyncR
 async function executeSyncJob(
   context: Omit<SyncContext, 'jobId'>
 ): Promise<{ success: boolean; jobId: string; error?: string; result?: SyncResult }> {
-  const { tenantId, integration, connection, action, referenceConfig } = context;
+  const { tenantId, integration, connection, action, referenceConfig, appUserCredentialId } =
+    context;
 
   // Create the sync job
   const job = await createSyncJob({
     tenantId,
     integrationId: integration.id,
     connectionId: connection.id,
+    appUserCredentialId: appUserCredentialId ?? null,
     dataType: referenceConfig.dataType,
   });
 
@@ -375,7 +388,8 @@ async function upsertAndDetectDeletions(
   context: SyncContext,
   items: ExtractedReferenceItem[]
 ): Promise<SyncResult> {
-  const { tenantId, integration, connection, action, referenceConfig } = context;
+  const { tenantId, integration, connection, action, referenceConfig, appUserCredentialId } =
+    context;
   const syncStartTime = new Date();
 
   // Build upsert inputs
@@ -383,6 +397,7 @@ async function upsertAndDetectDeletions(
     tenantId,
     integrationId: integration.id,
     connectionId: connection.id,
+    appUserCredentialId: appUserCredentialId ?? null,
     dataType: referenceConfig.dataType,
     externalId: item.externalId,
     name: item.name,
@@ -398,6 +413,7 @@ async function upsertAndDetectDeletions(
   const deletedCount = await markStaleAsInactive({
     integrationId: integration.id,
     connectionId: connection.id,
+    appUserCredentialId: appUserCredentialId ?? null,
     dataType: referenceConfig.dataType,
     excludeExternalIds: syncedExternalIds,
     syncedBefore: syncStartTime,
@@ -489,11 +505,13 @@ export async function needsSync(
   integrationId: string,
   connectionId: string | undefined,
   dataType: string,
-  ttlSeconds: number
+  ttlSeconds: number,
+  appUserCredentialId?: string | null
 ): Promise<boolean> {
   const latestJob = await getLatestSyncJob({
     integrationId,
     connectionId,
+    appUserCredentialId,
     dataType,
   });
 
@@ -527,6 +545,7 @@ export interface SyncCandidate {
   integrationId: string;
   integrationSlug: string;
   connectionId: string;
+  appUserCredentialId?: string;
   actionId: string;
   actionSlug: string;
   dataType: string;
@@ -582,6 +601,16 @@ export async function findSyncCandidates(
             where: {
               status: 'active',
             },
+            include: {
+              userCredentials: {
+                where: {
+                  status: 'active',
+                },
+                select: {
+                  id: true,
+                },
+              },
+            },
           },
         },
       },
@@ -603,12 +632,13 @@ export async function findSyncCandidates(
 
     // Check each connection for this integration
     for (const connection of action.integration.connections) {
-      // Check if this connection/dataType needs syncing
+      // Check if this connection's shared credential data needs syncing
       const needs = await needsSync(
         action.integrationId,
         connection.id,
         config.dataType,
-        ttlSeconds
+        ttlSeconds,
+        null // null = shared credential scope
       );
 
       if (needs) {
@@ -623,9 +653,40 @@ export async function findSyncCandidates(
           referenceConfig: config,
         });
 
-        // Check if we've hit the limit
         if (candidates.length >= limit) {
           return candidates;
+        }
+      }
+
+      // Check per-user-credential sync candidates
+      const userCredentials = (
+        connection as typeof connection & { userCredentials: Array<{ id: string }> }
+      ).userCredentials;
+      for (const userCred of userCredentials) {
+        const userNeedsSync = await needsSync(
+          action.integrationId,
+          connection.id,
+          config.dataType,
+          ttlSeconds,
+          userCred.id
+        );
+
+        if (userNeedsSync) {
+          candidates.push({
+            tenantId: action.integration.tenantId,
+            integrationId: action.integrationId,
+            integrationSlug: action.integration.slug,
+            connectionId: connection.id,
+            appUserCredentialId: userCred.id,
+            actionId: action.id,
+            actionSlug: action.slug,
+            dataType: config.dataType,
+            referenceConfig: config,
+          });
+
+          if (candidates.length >= limit) {
+            return candidates;
+          }
         }
       }
     }
@@ -670,7 +731,8 @@ export async function runBatchSync(
         candidate.integrationId,
         candidate.connectionId,
         candidate.dataType,
-        candidate.referenceConfig.defaultTtlSeconds ?? 3600
+        candidate.referenceConfig.defaultTtlSeconds ?? 3600,
+        candidate.appUserCredentialId ?? null
       );
 
       if (!stillNeeds) {
@@ -685,6 +747,7 @@ export async function runBatchSync(
         tenantId: candidate.tenantId,
         integrationId: candidate.integrationId,
         connectionId: candidate.connectionId,
+        appUserCredentialId: candidate.appUserCredentialId,
         dataType: candidate.dataType,
         force: false, // Don't force to respect in-progress syncs
       });
@@ -707,9 +770,13 @@ export async function runBatchSync(
         }
       }
 
-      // Rate limiting delay between syncs
-      if (delayBetweenSyncsMs > 0) {
-        await new Promise((resolve) => setTimeout(resolve, delayBetweenSyncsMs));
+      // Rate limiting delay between syncs — longer delay for per-user-credential syncs
+      // to avoid overwhelming external API rate limits shared across the connection
+      const effectiveDelay = candidate.appUserCredentialId
+        ? Math.max(delayBetweenSyncsMs, 1000)
+        : delayBetweenSyncsMs;
+      if (effectiveDelay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, effectiveDelay));
       }
     } catch (err) {
       result.syncsFailed++;

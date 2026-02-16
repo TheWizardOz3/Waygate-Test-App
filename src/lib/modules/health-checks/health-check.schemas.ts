@@ -45,6 +45,33 @@ export const CircuitBreakerStatusSchema = z.enum(['closed', 'open', 'half_open']
 export type CircuitBreakerStatus = z.infer<typeof CircuitBreakerStatusSchema>;
 
 // =============================================================================
+// User Credential Health (End-User Credentials)
+// =============================================================================
+
+/**
+ * Health stats for end-user credentials under a connection.
+ * Used by Tier 1 credential checks to detect degraded connections
+ * where >10% of user credentials are expired or need re-auth.
+ */
+export const UserCredentialHealthSchema = z.object({
+  total: z.number().int().nonnegative(),
+  active: z.number().int().nonnegative(),
+  expired: z.number().int().nonnegative(),
+  needsReauth: z.number().int().nonnegative(),
+  revoked: z.number().int().nonnegative(),
+  degradedPercentage: z.number().nonnegative(),
+  isDegraded: z.boolean(),
+});
+
+export type UserCredentialHealth = z.infer<typeof UserCredentialHealthSchema>;
+
+/**
+ * Degradation threshold: if more than 10% of non-revoked user credentials
+ * are expired or need re-auth, the connection is considered degraded.
+ */
+export const USER_CREDENTIAL_DEGRADATION_THRESHOLD = 10;
+
+// =============================================================================
 // Base Result Schemas
 // =============================================================================
 
@@ -245,6 +272,9 @@ export const HealthCheckResponseSchema = z.object({
   actionsFailed: z.number().int().nullable(),
   scanResults: ScanResultsSchema.nullable(),
 
+  // User credential health (end-user credentials under this connection)
+  userCredentialHealth: UserCredentialHealthSchema.nullable(),
+
   // Circuit breaker
   circuitBreakerStatus: CircuitBreakerStatusSchema.nullable(),
 
@@ -349,6 +379,7 @@ export function toHealthCheckResponse(healthCheck: {
   actionsPassed: number | null;
   actionsFailed: number | null;
   scanResults: unknown;
+  userCredentialHealth: unknown;
   circuitBreakerStatus: string | null;
   durationMs: number;
   error: unknown;
@@ -372,6 +403,7 @@ export function toHealthCheckResponse(healthCheck: {
     actionsPassed: healthCheck.actionsPassed,
     actionsFailed: healthCheck.actionsFailed,
     scanResults: healthCheck.scanResults as ScanResults | null,
+    userCredentialHealth: healthCheck.userCredentialHealth as UserCredentialHealth | null,
     circuitBreakerStatus: healthCheck.circuitBreakerStatus as CircuitBreakerStatus | null,
     durationMs: healthCheck.durationMs,
     error: healthCheck.error as Record<string, unknown> | null,
@@ -423,8 +455,9 @@ export function calculateOverallHealthStatus(params: {
   credentialStatus?: CredentialHealthStatus | null;
   testActionSuccess?: boolean | null;
   actionsFailed?: number | null;
+  userCredentialsDegraded?: boolean;
 }): HealthCheckStatus {
-  const { credentialStatus, testActionSuccess, actionsFailed } = params;
+  const { credentialStatus, testActionSuccess, actionsFailed, userCredentialsDegraded } = params;
 
   // Credential issues take priority
   if (credentialStatus === 'expired' || credentialStatus === 'missing') {
@@ -443,6 +476,11 @@ export function calculateOverallHealthStatus(params: {
 
   // Expiring credentials are degraded
   if (credentialStatus === 'expiring') {
+    return 'degraded';
+  }
+
+  // User credentials degraded (>10% expired/needs_reauth)
+  if (userCredentialsDegraded) {
     return 'degraded';
   }
 

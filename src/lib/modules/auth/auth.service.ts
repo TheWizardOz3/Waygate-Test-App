@@ -4,13 +4,17 @@
  * Orchestrates authentication flows including OAuth.
  * Manages OAuth state and coordinates between providers and credential storage.
  *
- * Supports two credential sources:
+ * Supports three credential source patterns:
  * - platform: Uses Waygate's registered OAuth apps (one-click connect)
  * - user_owned: User provides their own OAuth app credentials (custom)
+ * - app_scoped: App-level OAuth credentials from AppIntegrationConfig (end-user auth delegation)
+ *
+ * For end-user connect flows, OAuth state is persisted in the ConnectSession
+ * metadata for multi-instance resilience.
  */
 
 import { prisma } from '@/lib/db/client';
-import { AuthType, CredentialSource, ConnectorType } from '@prisma/client';
+import { AuthType, CredentialSource, CredentialType, ConnectorType } from '@prisma/client';
 import { getPlatformConnectorWithSecretsById } from '../platform-connectors';
 import {
   createGenericProvider,
@@ -29,10 +33,14 @@ import {
   revokeCredential as revokeCredentialService,
 } from '../credentials/credential.service';
 import { findActiveCredentialForIntegration } from '../credentials/credential.repository';
+import { getDecryptedIntegrationConfig } from '../apps/app.service';
+import { storeUserCredential } from '../app-user-credentials/app-user-credential.service';
+import { completeSession, failSession } from '../connect-sessions/connect-session.service';
 
 /**
- * In-memory OAuth state storage
- * For production, consider using Redis or database storage
+ * In-memory OAuth state storage.
+ * For connect flows, state is also persisted in ConnectSession.metadata
+ * for multi-instance resilience.
  */
 const oauthStateStore = new Map<string, OAuthState>();
 
@@ -85,20 +93,38 @@ interface OAuthIntegrationConfig {
   additionalTokenParams?: Record<string, string>;
 }
 
+import type { OAuthCallbackResult } from './auth.schemas';
+
 /**
- * Initiates an OAuth connection for an integration
+ * Optional app context for initiating OAuth with app-scoped credentials
+ */
+interface AppOAuthContext {
+  appId: string;
+  appUserId?: string;
+  connectSessionToken?: string;
+}
+
+/**
+ * Initiates an OAuth connection for an integration.
+ *
+ * Credential resolution priority:
+ * 1. Platform connector credentials (if connection uses a platform connector)
+ * 2. App-scoped credentials (from AppIntegrationConfig, if appContext provided)
+ * 3. Integration-level authConfig credentials (fallback)
  *
  * @param integrationId - The integration to connect
  * @param tenantId - The tenant initiating the connection
  * @param redirectAfterAuth - Optional URL to redirect to after auth completes
  * @param connectionId - Optional connection ID for multi-app connections
+ * @param appContext - Optional app context for app-scoped OAuth flows
  * @returns The authorization URL to redirect the user to
  */
 export async function initiateOAuthConnection(
   integrationId: string,
   tenantId: string,
   redirectAfterAuth?: string,
-  connectionId?: string
+  connectionId?: string,
+  appContext?: AppOAuthContext
 ): Promise<{ authorizationUrl: string; state: string }> {
   // Get the integration
   const integration = await prisma.integration.findFirst({
@@ -160,16 +186,36 @@ export async function initiateOAuthConnection(
     );
   }
 
-  // Determine which credentials to use
+  // Determine which credentials to use (priority: platform > app > integration)
   let clientId: string;
   let clientSecret: string;
+  let credentialSourceLabel: 'platform' | 'user_owned' = 'user_owned';
 
   if (isPlatformConnection && platformCredentials) {
-    // Use platform connector credentials
+    // Priority 1: Platform connector credentials
     clientId = platformCredentials.clientId;
     clientSecret = platformCredentials.clientSecret;
+    credentialSourceLabel = 'platform';
+  } else if (appContext?.appId) {
+    // Priority 2: App-scoped credentials from AppIntegrationConfig
+    const appConfig = await getDecryptedIntegrationConfig(appContext.appId, integrationId);
+
+    if (appConfig) {
+      clientId = appConfig.clientId;
+      clientSecret = appConfig.clientSecret;
+    } else {
+      // Fall back to integration-level credentials
+      if (!authConfig.clientId || !authConfig.clientSecret) {
+        throw new AuthServiceError(
+          'MISSING_CREDENTIALS',
+          'No OAuth credentials configured: neither app integration config nor integration-level credentials found'
+        );
+      }
+      clientId = authConfig.clientId;
+      clientSecret = authConfig.clientSecret;
+    }
   } else {
-    // Use integration's custom credentials
+    // Priority 3: Integration's own credentials
     if (!authConfig.clientId || !authConfig.clientSecret) {
       throw new AuthServiceError(
         'MISSING_CREDENTIALS',
@@ -195,14 +241,27 @@ export async function initiateOAuthConnection(
     connectionId
   );
 
-  // Add platform connector info to state
-  state.credentialSource = isPlatformConnection ? 'platform' : 'user_owned';
+  // Add context to state
+  state.credentialSource = credentialSourceLabel;
   if (platformConnectorId) {
     state.platformConnectorId = platformConnectorId;
   }
 
-  // Store the state for callback validation
+  // Add app context to state for callback resolution
+  if (appContext) {
+    state.appId = appContext.appId;
+    state.appUserId = appContext.appUserId;
+    state.connectSessionToken = appContext.connectSessionToken;
+  }
+
+  // Store the state for callback validation (in-memory)
   oauthStateStore.set(state.state, state);
+
+  // For connect flows, also persist state in ConnectSession.metadata
+  // so it survives multi-instance deployments
+  if (appContext?.connectSessionToken) {
+    await persistOAuthStateToConnectSession(appContext.connectSessionToken, state);
+  }
 
   return {
     authorizationUrl: url,
@@ -211,19 +270,27 @@ export async function initiateOAuthConnection(
 }
 
 /**
- * Handles the OAuth callback after user authorization
+ * Handles the OAuth callback after user authorization.
+ *
+ * For app-scoped flows:
+ * - Uses the app's OAuth credentials for token exchange
+ * - Stores credential as AppUserCredential (if appUserId present) or IntegrationCredential
+ * - Completes the ConnectSession if connectSessionToken present
  */
 export async function handleOAuthCallback(
   code: string,
   stateParam: string
-): Promise<{
-  integrationId: string;
-  tenantId: string;
-  connectionId?: string;
-  redirectUrl?: string;
-}> {
-  // Retrieve and validate the stored state
-  const storedState = oauthStateStore.get(stateParam);
+): Promise<OAuthCallbackResult> {
+  // Try in-memory state first, then fall back to DB for connect flows
+  let storedState: OAuthState | undefined = oauthStateStore.get(stateParam);
+
+  if (storedState) {
+    // Remove from in-memory (single use)
+    oauthStateStore.delete(stateParam);
+  } else {
+    // Fall back to DB lookup via ConnectSession metadata
+    storedState = (await retrieveOAuthStateFromConnectSession(stateParam)) ?? undefined;
+  }
 
   if (!storedState) {
     throw new AuthServiceError(
@@ -235,12 +302,16 @@ export async function handleOAuthCallback(
 
   // Check if state is expired
   if (isStateExpired(storedState)) {
-    oauthStateStore.delete(stateParam);
+    // If this was a connect flow, mark the session as failed
+    if (storedState.connectSessionToken) {
+      try {
+        await failSession(storedState.connectSessionToken, 'OAuth session expired');
+      } catch {
+        // Best-effort: session may already be expired/failed
+      }
+    }
     throw new AuthServiceError('STATE_EXPIRED', 'OAuth session expired. Please try again.', 400);
   }
-
-  // Remove the state (single use)
-  oauthStateStore.delete(stateParam);
 
   // Get the integration
   const integration = await prisma.integration.findFirst({
@@ -251,6 +322,13 @@ export async function handleOAuthCallback(
   });
 
   if (!integration) {
+    if (storedState.connectSessionToken) {
+      try {
+        await failSession(storedState.connectSessionToken, 'Integration not found');
+      } catch {
+        // Best-effort
+      }
+    }
     throw new AuthServiceError('INTEGRATION_NOT_FOUND', 'Integration not found', 404);
   }
 
@@ -261,11 +339,12 @@ export async function handleOAuthCallback(
   const redirectUri = `${appUrl}/api/v1/auth/callback/oauth2`;
 
   // Determine which credentials to use for token exchange
+  // Same priority as initiation: platform > app > integration
   let clientId: string;
   let clientSecret: string;
 
   if (storedState.credentialSource === 'platform' && storedState.platformConnectorId) {
-    // Use platform connector credentials for token exchange
+    // Platform connector credentials
     const platformConnector = await getPlatformConnectorWithSecretsById(
       storedState.platformConnectorId
     );
@@ -278,8 +357,22 @@ export async function handleOAuthCallback(
     }
     clientId = platformConnector.clientId;
     clientSecret = platformConnector.clientSecret;
+  } else if (storedState.appId) {
+    // App-scoped credentials
+    const appConfig = await getDecryptedIntegrationConfig(
+      storedState.appId,
+      storedState.integrationId
+    );
+    if (appConfig) {
+      clientId = appConfig.clientId;
+      clientSecret = appConfig.clientSecret;
+    } else {
+      // Fall back to integration-level credentials
+      clientId = authConfig.clientId;
+      clientSecret = authConfig.clientSecret;
+    }
   } else {
-    // Use integration's custom credentials
+    // Integration-level credentials
     clientId = authConfig.clientId;
     clientSecret = authConfig.clientSecret;
   }
@@ -292,6 +385,14 @@ export async function handleOAuthCallback(
   try {
     tokens = await provider.exchangeCode(code, storedState);
   } catch (error) {
+    if (storedState.connectSessionToken) {
+      try {
+        const msg = error instanceof OAuthError ? error.message : 'Token exchange failed';
+        await failSession(storedState.connectSessionToken, msg);
+      } catch {
+        // Best-effort
+      }
+    }
     if (error instanceof OAuthError) {
       throw new AuthServiceError(
         'TOKEN_EXCHANGE_FAILED',
@@ -302,26 +403,38 @@ export async function handleOAuthCallback(
     throw error;
   }
 
-  // Determine credential source for storage
-  const credentialSource =
-    storedState.credentialSource === 'platform'
-      ? CredentialSource.platform
-      : CredentialSource.user_owned;
-
-  // Store the credentials (with optional connectionId for multi-app support)
-  await storeOAuth2Credential(
-    storedState.tenantId,
-    storedState.integrationId,
-    {
+  // Route credential storage based on whether this is an end-user or shared flow
+  if (storedState.appUserId && storedState.connectionId) {
+    // End-user flow: store as AppUserCredential under the Connection
+    await storeUserCredential(storedState.connectionId, storedState.appUserId, {
+      credentialType: CredentialType.oauth2_tokens,
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       tokenType: tokens.tokenType,
       expiresIn: tokens.expiresIn,
       scopes: tokens.scope?.split(' '),
-    },
-    storedState.connectionId,
-    credentialSource
-  );
+    });
+  } else {
+    // Shared/org flow: store as IntegrationCredential on the Connection (existing behavior)
+    const credentialSource =
+      storedState.credentialSource === 'platform'
+        ? CredentialSource.platform
+        : CredentialSource.user_owned;
+
+    await storeOAuth2Credential(
+      storedState.tenantId,
+      storedState.integrationId,
+      {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        tokenType: tokens.tokenType,
+        expiresIn: tokens.expiresIn,
+        scopes: tokens.scope?.split(' '),
+      },
+      storedState.connectionId,
+      credentialSource
+    );
+  }
 
   // Update integration status to active
   await prisma.integration.update({
@@ -337,12 +450,116 @@ export async function handleOAuthCallback(
     });
   }
 
+  // Complete the connect session if this was a connect flow
+  if (storedState.connectSessionToken && storedState.connectionId) {
+    try {
+      await completeSession(storedState.connectSessionToken, storedState.connectionId);
+    } catch (error) {
+      // Log but don't fail the OAuth flow if session completion fails
+      console.warn('Failed to complete connect session:', error);
+    }
+  }
+
+  // Build redirect URL — for connect flows, use the session's redirectUrl
+  let redirectUrl = storedState.redirectAfterAuth;
+  if (storedState.connectSessionToken && !redirectUrl) {
+    // Look up the connect session's redirectUrl
+    const session = await prisma.connectSession.findFirst({
+      where: { token: storedState.connectSessionToken },
+      select: { redirectUrl: true },
+    });
+    redirectUrl = session?.redirectUrl ?? undefined;
+  }
+
   return {
     integrationId: storedState.integrationId,
     tenantId: storedState.tenantId,
     connectionId: storedState.connectionId,
-    redirectUrl: storedState.redirectAfterAuth,
+    redirectUrl,
+    connectSessionToken: storedState.connectSessionToken,
+    appUserId: storedState.appUserId,
   };
+}
+
+// =============================================================================
+// OAUTH STATE PERSISTENCE (Connect Flow DB Backup)
+// =============================================================================
+
+/**
+ * Persists OAuth state into the ConnectSession's metadata for multi-instance resilience.
+ * The connect session token maps to the OAuth state param, allowing retrieval on callback.
+ */
+async function persistOAuthStateToConnectSession(
+  connectSessionToken: string,
+  state: OAuthState
+): Promise<void> {
+  try {
+    await prisma.connectSession.update({
+      where: { token: connectSessionToken },
+      data: {
+        metadata: {
+          oauthStateParam: state.state,
+          oauthCodeVerifier: state.codeVerifier,
+          oauthCreatedAt: state.createdAt.toISOString(),
+        },
+      },
+    });
+  } catch (error) {
+    // Non-fatal: in-memory store is the primary mechanism
+    console.warn('Failed to persist OAuth state to ConnectSession:', error);
+  }
+}
+
+/**
+ * Retrieves OAuth state from ConnectSession metadata when in-memory lookup fails.
+ * Used for multi-instance deployments where the callback hits a different server.
+ */
+async function retrieveOAuthStateFromConnectSession(
+  stateParam: string
+): Promise<OAuthState | null> {
+  try {
+    // Query ConnectSession where metadata contains this OAuth state param
+    const session = await prisma.connectSession.findFirst({
+      where: {
+        status: 'pending',
+        metadata: {
+          path: ['oauthStateParam'],
+          equals: stateParam,
+        },
+      },
+      include: {
+        app: { select: { id: true } },
+        appUser: { select: { id: true } },
+      },
+    });
+
+    if (!session) {
+      return null;
+    }
+
+    const metadata = session.metadata as Record<string, unknown>;
+
+    return {
+      state: stateParam,
+      codeVerifier: metadata.oauthCodeVerifier as string | undefined,
+      integrationId: session.integrationId,
+      tenantId: session.appId
+        ? ((
+            await prisma.app.findUnique({
+              where: { id: session.appId },
+              select: { tenantId: true },
+            })
+          )?.tenantId ?? '')
+        : '',
+      connectionId: session.connectionId ?? undefined,
+      appId: session.appId,
+      appUserId: session.appUser?.id,
+      connectSessionToken: session.token,
+      createdAt: new Date((metadata.oauthCreatedAt as string) || session.createdAt.toISOString()),
+    };
+  } catch {
+    return null;
+  }
 }
 
 /**

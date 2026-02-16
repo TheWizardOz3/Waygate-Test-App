@@ -184,12 +184,16 @@ export const OAuthConnectResponseSchema = z.object({
 export type OAuthConnectResponse = z.infer<typeof OAuthConnectResponseSchema>;
 
 /**
- * OAuth callback success result (internal)
+ * OAuth callback success result (internal).
+ * Extended with connect session context for end-user auth delegation flows.
  */
 export const OAuthCallbackResultSchema = z.object({
   integrationId: z.string().uuid(),
   tenantId: z.string().uuid(),
+  connectionId: z.string().uuid().optional(),
   redirectUrl: z.string().url().optional(),
+  connectSessionToken: z.string().optional(),
+  appUserId: z.string().uuid().optional(),
 });
 
 export type OAuthCallbackResult = z.infer<typeof OAuthCallbackResultSchema>;

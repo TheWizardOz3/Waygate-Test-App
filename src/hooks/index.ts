@@ -180,3 +180,18 @@ export {
   schemaDriftKeys,
   type DriftReportsFilters,
 } from './useSchemaDrift';
+
+// App hooks
+export {
+  useApps,
+  useApp,
+  useCreateApp,
+  useUpdateApp,
+  useDeleteApp,
+  useRegenerateAppKey,
+  useIntegrationConfig,
+  useSetIntegrationConfig,
+  useDeleteIntegrationConfig,
+  appKeys,
+  type AppListParams,
+} from './useApps';

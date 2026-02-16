@@ -36,6 +36,9 @@ export interface OAuthState {
   connectionId?: string; // For multi-app connections
   credentialSource?: 'platform' | 'user_owned'; // Source of OAuth credentials
   platformConnectorId?: string; // For platform connector OAuth flows
+  appId?: string; // For app-scoped OAuth flows (end-user auth delegation)
+  appUserId?: string; // End-user whose credential this is
+  connectSessionToken?: string; // Connect session token (wg_cs_) to complete on callback
   redirectAfterAuth?: string;
   createdAt: Date;
 }

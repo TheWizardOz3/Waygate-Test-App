@@ -79,12 +79,22 @@ import {
 } from '../execution/mapping/server';
 import { driftRepository } from '../execution/validation/drift/drift.repository';
 import { applyPreamble, type PreambleResult } from '../execution/preamble';
-import { resolveConnection } from '../connections';
+import { resolveConnection, resolveAppConnection } from '../connections';
 import {
   findByTypes as findReferenceDataByTypes,
   getDataTypes as getReferenceDataTypes,
 } from '../reference-data';
 import type { ReferenceDataContext } from './gateway.schemas';
+
+// End-user auth delegation imports (V2)
+import { resolveAppUser } from '../app-users/app-user.service';
+import {
+  getDecryptedUserCredential,
+  type DecryptedAppUserCredential,
+} from '../app-user-credentials/app-user-credential.service';
+
+// Per-user rate limiting (V2 Phase D)
+import { checkRateLimit, recordRequest, resolveRateLimitConfig } from './rate-limiter';
 
 // Variable resolution imports (Phase 3: Gateway Integration)
 import {
@@ -112,6 +122,10 @@ export interface InvocationContext {
   startTime: number;
   /** Connection ID for multi-app connections */
   connectionId?: string;
+  /** App ID when invoked with a wg_app_ key */
+  appId?: string;
+  /** Resolved AppUser ID for end-user credential scoping */
+  appUserId?: string;
 }
 
 /**
@@ -200,15 +214,40 @@ export async function invokeAction(
     actionSlug,
     startTime,
     connectionId: options.connectionId,
+    appId: options.appId,
   };
 
   try {
     // 1. Resolve integration and action
     const { integration, action } = await resolveAction(tenantId, integrationSlug, actionSlug);
 
-    // 1b. Resolve connection (defaults to primary/first active if not specified)
-    const connection = await resolveConnection(tenantId, integration.id, options.connectionId);
+    // 1b. Resolve connection
+    // When appId is provided (wg_app_ key), scope to the App's connection for this integration.
+    // When connectionId is explicitly provided, it takes priority.
+    // Otherwise, fall back to the tenant's default connection.
+    let connection;
+    if (options.connectionId) {
+      connection = await resolveConnection(tenantId, integration.id, options.connectionId);
+    } else if (options.appId) {
+      connection = await resolveAppConnection(tenantId, integration.id, options.appId);
+    } else {
+      connection = await resolveConnection(tenantId, integration.id);
+    }
     context.connectionId = connection.id;
+
+    // 1c. Resolve end-user identity (if externalUserId provided)
+    // Lazily creates an AppUser record on first reference.
+    let resolvedAppUserId: string | undefined;
+    if (options.externalUserId && options.appId) {
+      try {
+        const appUser = await resolveAppUser(options.appId, options.externalUserId);
+        resolvedAppUserId = appUser.id;
+        context.appUserId = resolvedAppUserId;
+      } catch (error) {
+        console.warn('[GATEWAY] Failed to resolve app user:', error);
+        // Non-fatal: continue without user context, will fall back to shared credential
+      }
+    }
 
     // 1.5. Resolve variables in action configuration
     // This resolves ${var.*}, ${current_user.*}, ${connection.*}, ${request.*} references
@@ -281,11 +320,38 @@ export async function invokeAction(
     }
 
     // 4. Get and validate credentials (skip for 'none' auth type)
-    // Use the resolved connection's credentials
+    // User-aware resolution: if externalUserId was provided, try AppUserCredential first,
+    // then fall back to the Connection's shared IntegrationCredential.
     let credential: DecryptedCredential | null = null;
+    let resolvedAppUserCredentialId: string | undefined;
     if (integration.authType !== 'none') {
-      credential = await getCredential(tenantId, integration.id, connection.id);
+      const credentialResult = await resolveCredentialForInvocation(
+        tenantId,
+        integration.id,
+        connection.id,
+        resolvedAppUserId
+      );
+      credential = credentialResult.credential;
+      resolvedAppUserCredentialId = credentialResult.appUserCredentialId;
       validateCredential(credential);
+    }
+
+    // 4b. Per-user rate limiting
+    // Check against the Connection's rate budget before executing the request.
+    // Fair-share enforcement activates when total usage approaches the budget threshold.
+    const rateLimitConfig = resolveRateLimitConfig(connection.metadata);
+    if (rateLimitConfig) {
+      const rateLimitResult = checkRateLimit(connection.id, resolvedAppUserId, rateLimitConfig);
+      if (!rateLimitResult.allowed) {
+        throw new GatewayError('RATE_LIMITED', 'Per-user rate limit exceeded for this connection', {
+          retryAfterMs: rateLimitResult.retryAfterMs,
+          userCount: rateLimitResult.userCount,
+          totalCount: rateLimitResult.totalCount,
+          fairShare: rateLimitResult.fairShare,
+          activeUsers: rateLimitResult.activeUsers,
+          connectionId: connection.id,
+        });
+      }
     }
 
     // 5. Build the HTTP request with MAPPED input
@@ -294,6 +360,11 @@ export async function invokeAction(
 
     // 6. Execute the request
     const executionResult = await executeRequest(request, integration.id, options);
+
+    // 6b. Record the request for rate limiting (after successful execution start)
+    if (rateLimitConfig) {
+      recordRequest(connection.id, resolvedAppUserId);
+    }
 
     // 7. Validate RAW response (if execution succeeded)
     // Validation runs BEFORE output mapping per feature spec
@@ -352,9 +423,14 @@ export async function invokeAction(
     }
 
     // 10. Fetch reference data for AI context (if synced for this integration)
+    // When invoking as a specific end-user, scope to that user's credential data
     let referenceDataContext: ReferenceDataContext | undefined;
     if (executionResult.success) {
-      referenceDataContext = await buildReferenceDataContext(integration.id, connection.id);
+      referenceDataContext = await buildReferenceDataContext(
+        integration.id,
+        connection.id,
+        resolvedAppUserCredentialId
+      );
     }
 
     // 12. Log the request/response (with connection ID for multi-app tracking)
@@ -729,14 +805,73 @@ function formatValidationError(error: ValidationError): ValidationErrorDetail {
 }
 
 /**
- * Step 3: Get credentials for the integration
+ * Step 3: Resolve credentials with user-aware priority chain.
+ *
+ * Priority:
+ * 1. If appUserId provided → look for AppUserCredential under the Connection
+ * 2. If no user credential found (or no user context) → Connection's shared IntegrationCredential
+ *
+ * AppUserCredential data is adapted to DecryptedCredential for compatibility
+ * with the existing applyCredentials pipeline.
  */
-async function getCredential(
+async function resolveCredentialForInvocation(
   tenantId: string,
   integrationId: string,
-  connectionId?: string
-): Promise<DecryptedCredential | null> {
-  return getDecryptedCredential(integrationId, tenantId, connectionId);
+  connectionId: string,
+  appUserId?: string
+): Promise<{ credential: DecryptedCredential | null; appUserCredentialId?: string }> {
+  // Try user-specific credential first
+  if (appUserId) {
+    try {
+      const userCredential = await getDecryptedUserCredential(connectionId, appUserId);
+
+      if (userCredential && userCredential.status === 'active') {
+        // Adapt DecryptedAppUserCredential → DecryptedCredential for the gateway pipeline
+        return {
+          credential: adaptUserCredential(userCredential, integrationId, tenantId),
+          appUserCredentialId: userCredential.id,
+        };
+      }
+
+      // If user credential exists but is not active, log it
+      if (userCredential) {
+        console.log('[GATEWAY] User credential found but not active:', {
+          connectionId,
+          appUserId,
+          status: userCredential.status,
+        });
+      }
+    } catch (error) {
+      console.warn('[GATEWAY] Failed to resolve user credential, falling back to shared:', error);
+    }
+  }
+
+  // Fall back to Connection's shared IntegrationCredential (existing behavior)
+  const credential = await getDecryptedCredential(integrationId, tenantId, connectionId);
+  return { credential };
+}
+
+/**
+ * Adapts a DecryptedAppUserCredential to the DecryptedCredential interface
+ * used by the gateway's applyCredentials pipeline. This allows user credentials
+ * to flow through the same auth header/query/body application logic.
+ */
+function adaptUserCredential(
+  userCred: DecryptedAppUserCredential,
+  integrationId: string,
+  tenantId: string
+): DecryptedCredential {
+  return {
+    id: userCred.id,
+    integrationId,
+    tenantId,
+    credentialType: userCred.credentialType,
+    data: userCred.data,
+    refreshToken: userCred.refreshToken,
+    expiresAt: userCred.expiresAt,
+    scopes: userCred.scopes,
+    status: userCred.status,
+  };
 }
 
 /**
@@ -1107,6 +1242,8 @@ async function logInvocation(
       integrationId, // Must be UUID for database FK constraint
       actionId,
       connectionId, // For multi-app connection tracking
+      appId: context.appId,
+      appUserId: context.appUserId,
       request: {
         method: request.method,
         url,
@@ -1368,6 +1505,10 @@ function formatGatewayErrorResponse(requestId: string, error: GatewayError): Gat
             : never,
         description: getGatewayErrorDescription(error.code, error.message),
         retryable: error.retryable,
+        retryAfterMs:
+          error.code === 'RATE_LIMITED' && error.details?.retryAfterMs
+            ? (error.details.retryAfterMs as number)
+            : undefined,
       },
     },
   };
@@ -1384,6 +1525,8 @@ function getGatewayErrorDescription(code: string, message: string): string {
       return 'No credentials are configured for this integration. Set up authentication first.';
     case 'CREDENTIALS_EXPIRED':
       return 'Credentials have expired. Re-authenticate to continue using this integration.';
+    case 'RATE_LIMITED':
+      return 'Per-user rate limit exceeded for this connection. Wait before retrying.';
     default:
       return message;
   }
@@ -1497,26 +1640,47 @@ export function getHttpStatusForError(response: GatewayErrorResponse): number {
  * and formats it for inclusion in gateway responses. This provides AI agents
  * with contextual information to resolve names to IDs without additional API calls.
  *
+ * When appUserCredentialId is provided, returns data scoped to that user's credential.
+ * When null/undefined, returns data from the Connection's shared credential scope.
+ *
  * @param integrationId - The integration to fetch reference data for
  * @param connectionId - The connection (for connection-specific data)
+ * @param appUserCredentialId - Optional user credential ID for per-user scoping
  * @returns Reference data grouped by type, or undefined if none exists
  */
 async function buildReferenceDataContext(
   integrationId: string,
-  connectionId: string
+  connectionId: string,
+  appUserCredentialId?: string
 ): Promise<ReferenceDataContext | undefined> {
   try {
-    // Get all available data types for this integration/connection
-    const dataTypes = await getReferenceDataTypes(integrationId, connectionId);
+    // Scope to user credential if provided, otherwise null for shared credential data
+    const credentialScope = appUserCredentialId ?? null;
+
+    // Get all available data types for this integration/connection/credential scope
+    const dataTypes = await getReferenceDataTypes(integrationId, connectionId, credentialScope);
 
     if (dataTypes.length === 0) {
+      // If no user-scoped data exists, fall back to shared credential data
+      if (appUserCredentialId) {
+        return buildReferenceDataContext(integrationId, connectionId);
+      }
       return undefined;
     }
 
-    // Fetch all reference data for these types
-    const referenceData = await findReferenceDataByTypes(integrationId, connectionId, dataTypes);
+    // Fetch all reference data for these types, scoped to the credential
+    const referenceData = await findReferenceDataByTypes(
+      integrationId,
+      connectionId,
+      dataTypes,
+      credentialScope
+    );
 
     if (referenceData.length === 0) {
+      // If no user-scoped data exists, fall back to shared credential data
+      if (appUserCredentialId) {
+        return buildReferenceDataContext(integrationId, connectionId);
+      }
       return undefined;
     }
 

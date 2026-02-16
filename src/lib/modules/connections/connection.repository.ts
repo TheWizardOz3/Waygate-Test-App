@@ -238,6 +238,27 @@ export async function findFirstActiveConnection(
 }
 
 /**
+ * Finds the first active connection scoped to a specific App.
+ * Used when a wg_app_ key invokes an action — the connection is resolved
+ * from the App's set of connections rather than the tenant's defaults.
+ */
+export async function findActiveConnectionForApp(
+  tenantId: string,
+  integrationId: string,
+  appId: string
+): Promise<Connection | null> {
+  return prisma.connection.findFirst({
+    where: {
+      tenantId,
+      integrationId,
+      appId,
+      status: ConnectionStatus.active,
+    },
+    orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+  });
+}
+
+/**
  * Queries connections for an integration with filters and pagination
  */
 export async function findConnectionsPaginated(

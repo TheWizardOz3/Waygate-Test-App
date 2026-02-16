@@ -1,6 +1,6 @@
 # End-User Auth Delegation
 
-**Status:** Not Started
+**Status:** Complete
 **Milestone:** V2
 **Dependencies:** Multi-App Connections (V0.75, complete), Hybrid Auth Model (V0.75, complete)
 

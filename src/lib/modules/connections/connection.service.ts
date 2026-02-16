@@ -20,6 +20,7 @@ import {
   findConnectionBySlug,
   findPrimaryConnection,
   findFirstActiveConnection,
+  findActiveConnectionForApp,
   findConnectionsPaginated,
   findAllConnectionsForIntegration,
   findConnectionsWithCounts,
@@ -325,6 +326,31 @@ export async function resolveConnection(
   }
 
   // Use default resolution
+  return getDefaultConnection(tenantId, integrationId);
+}
+
+/**
+ * Resolves the connection to use for an App-scoped invocation.
+ * Looks for a connection belonging to the App for the given integration.
+ * Falls back to the tenant default connection if no app-scoped connection exists.
+ *
+ * @param tenantId - The tenant ID
+ * @param integrationId - The integration ID
+ * @param appId - The App ID (from wg_app_ key auth)
+ * @returns The resolved connection
+ */
+export async function resolveAppConnection(
+  tenantId: string,
+  integrationId: string,
+  appId: string
+): Promise<Connection> {
+  // Try to find a connection scoped to this App
+  const appConnection = await findActiveConnectionForApp(tenantId, integrationId, appId);
+  if (appConnection) {
+    return appConnection;
+  }
+
+  // Fall back to tenant default connection (backward compatible)
   return getDefaultConnection(tenantId, integrationId);
 }
 

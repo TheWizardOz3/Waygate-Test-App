@@ -21,6 +21,7 @@ export interface CreateReferenceDataDbInput {
   tenantId: string;
   integrationId: string;
   connectionId?: string | null;
+  appUserCredentialId?: string | null;
   dataType: string;
   externalId: string;
   name: string;
@@ -47,6 +48,7 @@ export interface UpsertReferenceDataDbInput {
   tenantId: string;
   integrationId: string;
   connectionId?: string | null;
+  appUserCredentialId?: string | null;
   dataType: string;
   externalId: string;
   name: string;
@@ -61,6 +63,7 @@ export interface CreateSyncJobDbInput {
   tenantId: string;
   integrationId: string;
   connectionId?: string | null;
+  appUserCredentialId?: string | null;
   dataType: string;
 }
 
@@ -95,6 +98,7 @@ export interface ReferenceDataFilters {
   status?: ReferenceDataStatus;
   search?: string;
   connectionId?: string;
+  appUserCredentialId?: string | null;
 }
 
 /**
@@ -104,6 +108,7 @@ export interface SyncJobFilters {
   status?: SyncJobStatus;
   dataType?: string;
   connectionId?: string;
+  appUserCredentialId?: string | null;
   startDate?: Date;
   endDate?: Date;
 }
@@ -151,6 +156,7 @@ export async function createReferenceData(
       tenantId: input.tenantId,
       integrationId: input.integrationId,
       connectionId: input.connectionId ?? null,
+      appUserCredentialId: input.appUserCredentialId ?? null,
       dataType: input.dataType,
       externalId: input.externalId,
       name: input.name,
@@ -175,6 +181,7 @@ export async function createManyReferenceData(
       tenantId: input.tenantId,
       integrationId: input.integrationId,
       connectionId: input.connectionId ?? null,
+      appUserCredentialId: input.appUserCredentialId ?? null,
       dataType: input.dataType,
       externalId: input.externalId,
       name: input.name,
@@ -195,12 +202,14 @@ export async function upsertReferenceData(
 ): Promise<ReferenceData> {
   const now = new Date();
   const connectionId = input.connectionId ?? null;
+  const appUserCredentialId = input.appUserCredentialId ?? null;
 
-  // Find existing record using individual conditions (handles null connectionId)
+  // Find existing record using individual conditions (handles null connectionId/appUserCredentialId)
   const existing = await prisma.referenceData.findFirst({
     where: {
       integrationId: input.integrationId,
       connectionId,
+      appUserCredentialId,
       dataType: input.dataType,
       externalId: input.externalId,
     },
@@ -225,6 +234,7 @@ export async function upsertReferenceData(
       tenantId: input.tenantId,
       integrationId: input.integrationId,
       connectionId,
+      appUserCredentialId,
       dataType: input.dataType,
       externalId: input.externalId,
       name: input.name,
@@ -259,12 +269,14 @@ export async function bulkUpsertReferenceData(
     await prisma.$transaction(async (tx) => {
       for (const input of batch) {
         const connectionId = input.connectionId ?? null;
+        const appUserCredentialId = input.appUserCredentialId ?? null;
 
-        // Use findFirst with individual conditions to handle null connectionId
+        // Use findFirst with individual conditions to handle null connectionId/appUserCredentialId
         const existing = await tx.referenceData.findFirst({
           where: {
             integrationId: input.integrationId,
             connectionId,
+            appUserCredentialId,
             dataType: input.dataType,
             externalId: input.externalId,
           },
@@ -289,6 +301,7 @@ export async function bulkUpsertReferenceData(
               tenantId: input.tenantId,
               integrationId: input.integrationId,
               connectionId,
+              appUserCredentialId,
               dataType: input.dataType,
               externalId: input.externalId,
               name: input.name,
@@ -338,14 +351,16 @@ export async function findReferenceDataByIdAndTenant(
 export async function findReferenceDataByKey(params: {
   integrationId: string;
   connectionId: string | null;
+  appUserCredentialId?: string | null;
   dataType: string;
   externalId: string;
 }): Promise<ReferenceData | null> {
-  // Use findFirst with individual conditions to handle null connectionId
+  // Use findFirst with individual conditions to handle null connectionId/appUserCredentialId
   return prisma.referenceData.findFirst({
     where: {
       integrationId: params.integrationId,
       connectionId: params.connectionId,
+      appUserCredentialId: params.appUserCredentialId ?? null,
       dataType: params.dataType,
       externalId: params.externalId,
     },
@@ -375,6 +390,10 @@ export async function findByIntegrationId(
 
   if (filters.connectionId) {
     where.connectionId = filters.connectionId;
+  }
+
+  if (filters.appUserCredentialId !== undefined) {
+    where.appUserCredentialId = filters.appUserCredentialId;
   }
 
   if (filters.search) {
@@ -429,6 +448,10 @@ export async function findByConnectionId(
     where.status = filters.status;
   }
 
+  if (filters.appUserCredentialId !== undefined) {
+    where.appUserCredentialId = filters.appUserCredentialId;
+  }
+
   if (filters.search) {
     where.OR = [
       { name: { contains: filters.search, mode: 'insensitive' } },
@@ -465,12 +488,14 @@ export async function findByConnectionId(
 export async function findByTypes(
   integrationId: string,
   connectionId: string | null,
-  dataTypes: string[]
+  dataTypes: string[],
+  appUserCredentialId?: string | null
 ): Promise<ReferenceData[]> {
   return prisma.referenceData.findMany({
     where: {
       integrationId,
       connectionId: connectionId ?? null,
+      appUserCredentialId: appUserCredentialId ?? null,
       dataType: { in: dataTypes },
       status: ReferenceDataStatus.active,
     },
@@ -483,12 +508,17 @@ export async function findByTypes(
  */
 export async function getDataTypes(
   integrationId: string,
-  connectionId?: string | null
+  connectionId?: string | null,
+  appUserCredentialId?: string | null
 ): Promise<string[]> {
   const where: Prisma.ReferenceDataWhereInput = { integrationId };
 
   if (connectionId !== undefined) {
     where.connectionId = connectionId;
+  }
+
+  if (appUserCredentialId !== undefined) {
+    where.appUserCredentialId = appUserCredentialId;
   }
 
   const result = await prisma.referenceData.findMany({
@@ -610,6 +640,7 @@ export async function updateReferenceData(
 export async function markStaleAsInactive(params: {
   integrationId: string;
   connectionId: string | null;
+  appUserCredentialId?: string | null;
   dataType: string;
   excludeExternalIds: string[];
   syncedBefore: Date;
@@ -618,6 +649,7 @@ export async function markStaleAsInactive(params: {
     where: {
       integrationId: params.integrationId,
       connectionId: params.connectionId,
+      appUserCredentialId: params.appUserCredentialId ?? null,
       dataType: params.dataType,
       externalId: { notIn: params.excludeExternalIds },
       lastSyncedAt: { lt: params.syncedBefore },
@@ -690,6 +722,7 @@ export async function createSyncJob(input: CreateSyncJobDbInput): Promise<Refere
       tenantId: input.tenantId,
       integrationId: input.integrationId,
       connectionId: input.connectionId ?? null,
+      appUserCredentialId: input.appUserCredentialId ?? null,
       dataType: input.dataType,
       status: SyncJobStatus.pending,
     },
@@ -727,6 +760,7 @@ export async function findSyncJobByIdAndTenant(
 export async function getLatestSyncJob(params: {
   integrationId: string;
   connectionId?: string | null;
+  appUserCredentialId?: string | null;
   dataType: string;
 }): Promise<ReferenceSyncJob | null> {
   const where: Prisma.ReferenceSyncJobWhereInput = {
@@ -736,6 +770,10 @@ export async function getLatestSyncJob(params: {
 
   if (params.connectionId !== undefined) {
     where.connectionId = params.connectionId;
+  }
+
+  if (params.appUserCredentialId !== undefined) {
+    where.appUserCredentialId = params.appUserCredentialId;
   }
 
   return prisma.referenceSyncJob.findFirst({
@@ -766,6 +804,10 @@ export async function findSyncJobsByIntegrationId(
 
   if (filters.connectionId) {
     where.connectionId = filters.connectionId;
+  }
+
+  if (filters.appUserCredentialId !== undefined) {
+    where.appUserCredentialId = filters.appUserCredentialId;
   }
 
   if (filters.startDate || filters.endDate) {
@@ -806,6 +848,7 @@ export async function findSyncJobsByIntegrationId(
 export async function hasActiveSyncJob(params: {
   integrationId: string;
   connectionId?: string | null;
+  appUserCredentialId?: string | null;
   dataType: string;
 }): Promise<boolean> {
   const where: Prisma.ReferenceSyncJobWhereInput = {
@@ -816,6 +859,10 @@ export async function hasActiveSyncJob(params: {
 
   if (params.connectionId !== undefined) {
     where.connectionId = params.connectionId;
+  }
+
+  if (params.appUserCredentialId !== undefined) {
+    where.appUserCredentialId = params.appUserCredentialId;
   }
 
   const count = await prisma.referenceSyncJob.count({ where });

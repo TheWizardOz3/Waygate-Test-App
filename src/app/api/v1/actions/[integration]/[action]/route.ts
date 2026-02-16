@@ -69,7 +69,7 @@ import {
  * @param request - The incoming request with action input as JSON body
  * @returns GatewaySuccessResponse or GatewayErrorResponse
  */
-export const POST = withApiAuth(async (request: NextRequest, { tenant }) => {
+export const POST = withApiAuth(async (request: NextRequest, { tenant, app }) => {
   // Extract integration and action slugs from URL
   const { integrationSlug, actionSlug } = extractSlugsFromUrl(request.url);
 
@@ -138,6 +138,12 @@ export const POST = withApiAuth(async (request: NextRequest, { tenant }) => {
 
   // Parse optional invocation options from headers
   const options = parseInvocationOptions(request);
+
+  // When authenticated with a wg_app_ key, inject app context for
+  // app-scoped connection resolution and user-aware credential resolution.
+  if (app) {
+    options.appId = app.id;
+  }
 
   // Invoke the action through the Gateway service
   const response = await invokeAction(tenant.id, integrationSlug, actionSlug, input, options);
@@ -239,6 +245,12 @@ function parseInvocationOptions(request: NextRequest): GatewayInvokeOptions {
   const connectionId = request.headers.get('X-Waygate-Connection-Id');
   if (connectionId) {
     options.connectionId = connectionId;
+  }
+
+  // External user ID for end-user credential resolution (wg_app_ key flows)
+  const externalUserId = request.headers.get('X-Waygate-External-User-Id');
+  if (externalUserId) {
+    options.externalUserId = externalUserId;
   }
 
   // Context for name-to-ID resolution

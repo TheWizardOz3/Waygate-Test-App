@@ -74,6 +74,7 @@ export const CreateReferenceDataInputSchema = z.object({
   tenantId: z.string().uuid(),
   integrationId: z.string().uuid(),
   connectionId: z.string().uuid().optional().nullable(),
+  appUserCredentialId: z.string().uuid().optional().nullable(),
   dataType: z.string().min(1).max(100),
   externalId: z.string().min(1).max(255),
   name: z.string().min(1).max(500),
@@ -102,6 +103,7 @@ export const UpsertReferenceDataInputSchema = z.object({
   tenantId: z.string().uuid(),
   integrationId: z.string().uuid(),
   connectionId: z.string().uuid().optional().nullable(),
+  appUserCredentialId: z.string().uuid().optional().nullable(),
   dataType: z.string().min(1).max(100),
   externalId: z.string().min(1).max(255),
   name: z.string().min(1).max(500),
@@ -122,6 +124,7 @@ export const CreateSyncJobInputSchema = z.object({
   tenantId: z.string().uuid(),
   integrationId: z.string().uuid(),
   connectionId: z.string().uuid().optional().nullable(),
+  appUserCredentialId: z.string().uuid().optional().nullable(),
   dataType: z.string().min(1).max(100),
 });
 
@@ -156,6 +159,7 @@ export const ReferenceDataFiltersSchema = z.object({
   status: ReferenceDataStatusSchema.optional(),
   search: z.string().optional(),
   connectionId: z.string().uuid().optional(),
+  appUserCredentialId: z.string().uuid().optional().nullable(),
 });
 
 export type ReferenceDataFilters = z.infer<typeof ReferenceDataFiltersSchema>;
@@ -170,6 +174,7 @@ export const ListReferenceDataQuerySchema = z.object({
   status: ReferenceDataStatusSchema.optional(),
   search: z.string().optional(),
   connectionId: z.string().uuid().optional(),
+  appUserCredentialId: z.string().uuid().optional().nullable(),
 });
 
 export type ListReferenceDataQuery = z.infer<typeof ListReferenceDataQuerySchema>;
@@ -181,6 +186,7 @@ export const SyncJobFiltersSchema = z.object({
   status: SyncJobStatusSchema.optional(),
   dataType: z.string().optional(),
   connectionId: z.string().uuid().optional(),
+  appUserCredentialId: z.string().uuid().optional().nullable(),
   startDate: z.coerce.date().optional(),
   endDate: z.coerce.date().optional(),
 });
@@ -196,6 +202,7 @@ export const ListSyncJobsQuerySchema = z.object({
   status: SyncJobStatusSchema.optional(),
   dataType: z.string().optional(),
   connectionId: z.string().uuid().optional(),
+  appUserCredentialId: z.string().uuid().optional().nullable(),
   startDate: z.coerce.date().optional(),
   endDate: z.coerce.date().optional(),
 });
@@ -225,6 +232,7 @@ export const ReferenceDataResponseSchema = z.object({
   tenantId: z.string().uuid(),
   integrationId: z.string().uuid(),
   connectionId: z.string().uuid().nullable(),
+  appUserCredentialId: z.string().uuid().nullable(),
   dataType: z.string(),
   externalId: z.string(),
   name: z.string(),
@@ -260,6 +268,7 @@ export const SyncJobResponseSchema = z.object({
   tenantId: z.string().uuid(),
   integrationId: z.string().uuid(),
   connectionId: z.string().uuid().nullable(),
+  appUserCredentialId: z.string().uuid().nullable(),
   dataType: z.string(),
   status: SyncJobStatusSchema,
   startedAt: z.string().datetime().nullable(),
@@ -313,6 +322,7 @@ export function toReferenceDataResponse(data: {
   tenantId: string;
   integrationId: string;
   connectionId: string | null;
+  appUserCredentialId: string | null;
   dataType: string;
   externalId: string;
   name: string;
@@ -328,6 +338,7 @@ export function toReferenceDataResponse(data: {
     tenantId: data.tenantId,
     integrationId: data.integrationId,
     connectionId: data.connectionId,
+    appUserCredentialId: data.appUserCredentialId,
     dataType: data.dataType,
     externalId: data.externalId,
     name: data.name,
@@ -348,6 +359,7 @@ export function toSyncJobResponse(job: {
   tenantId: string;
   integrationId: string;
   connectionId: string | null;
+  appUserCredentialId: string | null;
   dataType: string;
   status: string;
   startedAt: Date | null;
@@ -365,6 +377,7 @@ export function toSyncJobResponse(job: {
     tenantId: job.tenantId,
     integrationId: job.integrationId,
     connectionId: job.connectionId,
+    appUserCredentialId: job.appUserCredentialId,
     dataType: job.dataType,
     status: job.status as SyncJobStatus,
     startedAt: job.startedAt?.toISOString() ?? null,

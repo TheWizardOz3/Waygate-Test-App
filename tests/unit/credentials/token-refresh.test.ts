@@ -15,8 +15,23 @@ vi.mock('@/lib/db/client', () => ({
       update: vi.fn(),
       updateMany: vi.fn(),
     },
+    appUserCredential: {
+      findMany: vi.fn().mockResolvedValue([]),
+      update: vi.fn(),
+    },
     $queryRaw: vi.fn(),
   },
+}));
+
+// Mock app-user-credential modules to prevent actual DB calls
+vi.mock('@/lib/modules/app-user-credentials/app-user-credential.repository', () => ({
+  findExpiringCredentialsWithRelations: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock('@/lib/modules/app-user-credentials/app-user-credential.service', () => ({
+  getDecryptedUserCredentialById: vi.fn(),
+  refreshUserCredential: vi.fn(),
+  flagUserCredentialForReauth: vi.fn(),
 }));
 
 // Mock encryption module
@@ -69,6 +84,7 @@ import {
   flagCredentialForReauth,
 } from '@/lib/modules/credentials/credential.service';
 import { createGenericProvider } from '@/lib/modules/auth/oauth-providers';
+import { findExpiringCredentialsWithRelations } from '@/lib/modules/app-user-credentials/app-user-credential.repository';
 import {
   refreshExpiringTokens,
   refreshSingleCredential,
@@ -131,6 +147,7 @@ describe('Token Refresh Service', () => {
     vi.clearAllMocks();
 
     // Default mock implementations
+    vi.mocked(findExpiringCredentialsWithRelations).mockResolvedValue([]);
     vi.mocked(tryAcquireRefreshLock).mockResolvedValue(true);
     vi.mocked(releaseRefreshLock).mockResolvedValue(true);
     vi.mocked(createGenericProvider).mockReturnValue(

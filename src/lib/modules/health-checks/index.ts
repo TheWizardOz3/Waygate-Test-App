@@ -27,6 +27,9 @@ export {
   TestActionErrorSchema,
   ActionScanResultSchema,
   ScanResultsSchema,
+  // User credential health
+  UserCredentialHealthSchema,
+  USER_CREDENTIAL_DEGRADATION_THRESHOLD,
   // Create schemas (tier-aware)
   CreateCredentialCheckInputSchema,
   CreateConnectivityCheckInputSchema,
@@ -60,6 +63,7 @@ export type {
   TestActionError,
   ActionScanResult,
   ScanResults,
+  UserCredentialHealth,
   CreateCredentialCheckInput,
   CreateConnectivityCheckInput,
   CreateFullScanCheckInput,

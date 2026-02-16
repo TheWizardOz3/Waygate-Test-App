@@ -15,10 +15,13 @@ import {
   Loader2,
   Plug,
   Zap,
+  Users,
+  Download,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient } from '@/lib/api/client';
 import { useConnectConnection, useDisconnectConnection } from '@/hooks';
+import { useConnectionCredentialStats } from '@/hooks/useApps';
 import { CredentialSourceBadge } from './ConnectorTypeBadge';
 import type { ConnectionResponse } from '@/lib/modules/connections/connection.schemas';
 import type { IntegrationResponse } from '@/lib/modules/integrations/integration.schemas';
@@ -67,6 +70,7 @@ export function ConnectionCredentialPanel({
 
   const connectMutation = useConnectConnection(integration.id);
   const disconnectMutation = useDisconnectConnection(integration.id);
+  const { data: userCredentialStats } = useConnectionCredentialStats(connection.id);
 
   // Fetch credential status on mount
   useEffect(() => {
@@ -332,6 +336,68 @@ export function ConnectionCredentialPanel({
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* End-User Credential Stats */}
+        {userCredentialStats && userCredentialStats.total > 0 && (
+          <div className="space-y-2 rounded-lg border p-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">End-User Credentials</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => {
+                  const csv = [
+                    'Status,Count',
+                    `Active,${userCredentialStats.byStatus.active ?? 0}`,
+                    `Expired,${userCredentialStats.byStatus.expired ?? 0}`,
+                    `Needs Re-auth,${userCredentialStats.byStatus.needs_reauth ?? 0}`,
+                    `Revoked,${userCredentialStats.byStatus.revoked ?? 0}`,
+                    `Total,${userCredentialStats.total}`,
+                  ].join('\n');
+                  const blob = new Blob([csv], { type: 'text/csv' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `${connection.name}-user-credentials.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                  toast.success('Stats exported');
+                }}
+              >
+                <Download className="mr-1 h-3 w-3" />
+                Export
+              </Button>
+            </div>
+            <div className="grid grid-cols-4 gap-2 text-center">
+              <div>
+                <p className="text-lg font-semibold">{userCredentialStats.total}</p>
+                <p className="text-[10px] text-muted-foreground">Total</p>
+              </div>
+              <div>
+                <p className="text-lg font-semibold text-emerald-600">
+                  {userCredentialStats.byStatus.active ?? 0}
+                </p>
+                <p className="text-[10px] text-muted-foreground">Active</p>
+              </div>
+              <div>
+                <p className="text-lg font-semibold text-amber-600">
+                  {userCredentialStats.byStatus.expired ?? 0}
+                </p>
+                <p className="text-[10px] text-muted-foreground">Expired</p>
+              </div>
+              <div>
+                <p className="text-lg font-semibold text-orange-600">
+                  {userCredentialStats.byStatus.needs_reauth ?? 0}
+                </p>
+                <p className="text-[10px] text-muted-foreground">Re-auth</p>
+              </div>
+            </div>
           </div>
         )}
 
