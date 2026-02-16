@@ -528,6 +528,11 @@ export const PARAMETER_SCHEMA: LLMResponseSchema = {
 
 /**
  * Schema for request body
+ *
+ * Note: The nested schema.properties field uses type:'string' (JSON-encoded)
+ * because Gemini requires all OBJECT types to have non-empty properties defined,
+ * but request body properties are arbitrary/dynamic per-endpoint.
+ * The LLM will return a JSON string that we parse downstream.
  */
 export const REQUEST_BODY_SCHEMA: LLMResponseSchema = {
   type: 'object',
@@ -540,9 +545,16 @@ export const REQUEST_BODY_SCHEMA: LLMResponseSchema = {
       type: 'object',
       description: 'JSON Schema for the request body',
       properties: {
-        type: { type: 'string' },
-        properties: { type: 'object', description: 'Property definitions' },
-        required: { type: 'array', items: { type: 'string' }, description: 'Required fields' },
+        type: { type: 'string', description: 'Schema type (usually "object")' },
+        properties: {
+          type: 'string',
+          description:
+            'JSON-encoded object mapping property names to their schema definitions. Example: {"channel":{"type":"string","description":"Channel ID"},"text":{"type":"string","description":"Message text"}}',
+        },
+        required: {
+          type: 'string',
+          description: 'JSON-encoded array of required field names. Example: ["channel","text"]',
+        },
       },
     },
     required: { type: 'boolean', description: 'Whether request body is required' },

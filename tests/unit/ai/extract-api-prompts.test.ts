@@ -1,7 +1,7 @@
 /**
  * Extract API Prompts Unit Tests
  *
- * Tests for the simplified endpoint extraction prompts.
+ * Tests for the endpoint extraction prompts with parameters.
  * Verifies prompt structure matches schema requirements.
  */
 
@@ -20,27 +20,18 @@ import {
 // =============================================================================
 
 describe('ENDPOINT_EXTRACTION_SYSTEM_PROMPT', () => {
-  it('should only mention the 5 flat fields', () => {
+  it('should mention all extraction fields', () => {
     const prompt = ENDPOINT_EXTRACTION_SYSTEM_PROMPT;
 
-    // Should mention the 5 required flat fields
+    // Should mention all 8 fields
     expect(prompt).toContain('name');
     expect(prompt).toContain('slug');
     expect(prompt).toContain('method');
     expect(prompt).toContain('path');
     expect(prompt).toContain('description');
-  });
-
-  it('should NOT mention complex nested fields that would conflict with schema', () => {
-    const prompt = ENDPOINT_EXTRACTION_SYSTEM_PROMPT;
-
-    // These complex fields should NOT be in the prompt (they're not in the schema)
-    expect(prompt).not.toContain('requestBody');
-    expect(prompt).not.toContain('responses');
-    expect(prompt).not.toContain('pagination');
-    expect(prompt).not.toContain('schemaConfidence');
-    expect(prompt).not.toContain('pathParameters');
-    expect(prompt).not.toContain('queryParameters');
+    expect(prompt).toContain('pathParameters');
+    expect(prompt).toContain('queryParameters');
+    expect(prompt).toContain('requestBody');
   });
 
   it('should emphasize JSON array output', () => {
@@ -49,6 +40,13 @@ describe('ENDPOINT_EXTRACTION_SYSTEM_PROMPT', () => {
     expect(prompt).toContain('JSON array');
     expect(prompt.toLowerCase()).toContain('no markdown');
   });
+
+  it('should emphasize parameter extraction', () => {
+    const prompt = ENDPOINT_EXTRACTION_SYSTEM_PROMPT;
+
+    expect(prompt.toLowerCase()).toContain('parameter');
+    expect(prompt).toContain('PARAMETER FORMAT');
+  });
 });
 
 // =============================================================================
@@ -56,17 +54,20 @@ describe('ENDPOINT_EXTRACTION_SYSTEM_PROMPT', () => {
 // =============================================================================
 
 describe('ENDPOINT_SCHEMA', () => {
-  it('should be a flat object schema with only 5 properties', () => {
+  it('should be an object schema with 8 properties', () => {
     expect(ENDPOINT_SCHEMA.type).toBe('object');
     expect(ENDPOINT_SCHEMA.properties).toBeDefined();
 
     const propertyNames = Object.keys(ENDPOINT_SCHEMA.properties || {});
-    expect(propertyNames).toHaveLength(5);
+    expect(propertyNames).toHaveLength(8);
     expect(propertyNames).toContain('name');
     expect(propertyNames).toContain('slug');
     expect(propertyNames).toContain('method');
     expect(propertyNames).toContain('path');
     expect(propertyNames).toContain('description');
+    expect(propertyNames).toContain('pathParameters');
+    expect(propertyNames).toContain('queryParameters');
+    expect(propertyNames).toContain('requestBody');
   });
 
   it('should have required fields', () => {
@@ -76,15 +77,12 @@ describe('ENDPOINT_SCHEMA', () => {
     expect(ENDPOINT_SCHEMA.required).toContain('path');
   });
 
-  it('should NOT have nested object properties', () => {
+  it('should have string types for basic fields', () => {
     const properties = ENDPOINT_SCHEMA.properties || {};
-
-    for (const value of Object.values(properties)) {
-      // All properties should be strings, not objects or arrays
-      expect(value.type).toBe('string');
-      expect(value.properties).toBeUndefined();
-      expect(value.items).toBeUndefined();
-    }
+    expect(properties.name?.type).toBe('string');
+    expect(properties.slug?.type).toBe('string');
+    expect(properties.path?.type).toBe('string');
+    expect(properties.description?.type).toBe('string');
   });
 
   it('should have method as enum', () => {
@@ -95,6 +93,20 @@ describe('ENDPOINT_SCHEMA', () => {
     expect(methodProp?.enum).toContain('PUT');
     expect(methodProp?.enum).toContain('PATCH');
     expect(methodProp?.enum).toContain('DELETE');
+  });
+
+  it('should have array types for parameter fields', () => {
+    const properties = ENDPOINT_SCHEMA.properties || {};
+    expect(properties.pathParameters?.type).toBe('array');
+    expect(properties.pathParameters?.items).toBeDefined();
+    expect(properties.queryParameters?.type).toBe('array');
+    expect(properties.queryParameters?.items).toBeDefined();
+  });
+
+  it('should have object type for requestBody', () => {
+    const properties = ENDPOINT_SCHEMA.properties || {};
+    expect(properties.requestBody?.type).toBe('object');
+    expect(properties.requestBody?.nullable).toBe(true);
   });
 });
 
@@ -111,41 +123,35 @@ describe('ENDPOINTS_ARRAY_SCHEMA', () => {
 // =============================================================================
 
 describe('ENDPOINT_EXTRACTION_EXAMPLE', () => {
-  it('should have flat output matching schema', () => {
+  it('should have POST endpoint with requestBody', () => {
     const output = ENDPOINT_EXTRACTION_EXAMPLE.output;
 
-    // Should have only the 5 flat fields
     expect(output.name).toBeDefined();
     expect(output.slug).toBeDefined();
-    expect(output.method).toBeDefined();
+    expect(output.method).toBe('POST');
     expect(output.path).toBeDefined();
     expect(output.description).toBeDefined();
-
-    // Should NOT have complex nested fields
-    expect(output).not.toHaveProperty('requestBody');
-    expect(output).not.toHaveProperty('responses');
-    expect(output).not.toHaveProperty('pathParameters');
-    expect(output).not.toHaveProperty('queryParameters');
-    expect(output).not.toHaveProperty('pagination');
-    expect(output).not.toHaveProperty('tags');
+    expect(output.requestBody).toBeDefined();
+    expect(output.requestBody?.contentType).toBe('application/json');
+    expect(output.requestBody?.schema?.properties).toBeDefined();
+    expect(output.requestBody?.required).toBe(true);
   });
 });
 
 describe('PAGINATED_ENDPOINT_EXTRACTION_EXAMPLE', () => {
-  it('should have flat output matching schema (no pagination field)', () => {
+  it('should have GET endpoint with path and query parameters', () => {
     const output = PAGINATED_ENDPOINT_EXTRACTION_EXAMPLE.output;
 
-    // Should have only the 5 flat fields
     expect(output.name).toBeDefined();
     expect(output.slug).toBeDefined();
-    expect(output.method).toBeDefined();
-    expect(output.path).toBeDefined();
+    expect(output.method).toBe('GET');
+    expect(output.path).toContain('{user_id}');
     expect(output.description).toBeDefined();
-
-    // Should NOT have pagination config (schema doesn't support it)
-    expect(output).not.toHaveProperty('pagination');
-    expect(output).not.toHaveProperty('requestBody');
-    expect(output).not.toHaveProperty('responses');
+    expect(output.pathParameters).toBeDefined();
+    expect(output.pathParameters).toHaveLength(1);
+    expect(output.pathParameters?.[0]?.name).toBe('user_id');
+    expect(output.queryParameters).toBeDefined();
+    expect(output.queryParameters?.length).toBeGreaterThan(0);
   });
 });
 
@@ -170,16 +176,15 @@ describe('buildEndpointExtractionPrompt', () => {
     expect(prompt).toContain('JSON array');
   });
 
-  it('should NOT mention complex nested structures in task section', () => {
+  it('should mention parameter extraction in task section', () => {
     const prompt = buildEndpointExtractionPrompt('Sample docs');
     const taskSection = prompt.split('## Task')[1] || '';
 
-    // Task should only mention flat fields
     expect(taskSection).toContain('name');
     expect(taskSection).toContain('method');
     expect(taskSection).toContain('path');
-    expect(taskSection).not.toContain('requestBody');
-    expect(taskSection).not.toContain('responses');
-    expect(taskSection).not.toContain('pagination');
+    expect(taskSection).toContain('pathParameters');
+    expect(taskSection).toContain('queryParameters');
+    expect(taskSection).toContain('requestBody');
   });
 });

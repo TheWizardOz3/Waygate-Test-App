@@ -347,7 +347,7 @@ async function extractEndpoints(
       return true;
     });
 
-    // Ensure slugs are set
+    // Post-process endpoints
     for (const ep of validEndpoints) {
       if (!ep.slug) {
         ep.slug = generateSlug(ep.name);
@@ -356,6 +356,9 @@ async function extractEndpoints(
       if (!ep.responses) {
         ep.responses = { '200': { description: 'Successful response' } };
       }
+      // Normalize requestBody.schema fields that may be JSON strings
+      // (Gemini structured output returns strings for dynamic object schemas)
+      normalizeRequestBodySchema(ep);
     }
 
     // Estimate confidence based on endpoint quality
@@ -480,6 +483,38 @@ async function extractRateLimits(
 // =============================================================================
 // Utilities
 // =============================================================================
+
+/**
+ * Normalize requestBody.schema fields that the LLM may return as JSON strings
+ * (due to Gemini requiring non-empty properties for OBJECT types).
+ * Parses stringified `properties` and `required` back into proper objects/arrays.
+ */
+function normalizeRequestBodySchema(endpoint: ApiEndpoint): void {
+  const schema = endpoint.requestBody?.schema;
+  if (!schema) return;
+
+  // Parse properties if it's a JSON string
+  if (typeof schema.properties === 'string') {
+    try {
+      schema.properties = JSON.parse(schema.properties);
+    } catch {
+      // If it can't be parsed, remove the invalid field
+      console.warn(
+        `[Document Parser] Failed to parse requestBody.schema.properties for ${endpoint.name}`
+      );
+      delete schema.properties;
+    }
+  }
+
+  // Parse required if it's a JSON string
+  if (typeof schema.required === 'string') {
+    try {
+      schema.required = JSON.parse(schema.required);
+    } catch {
+      delete schema.required;
+    }
+  }
+}
 
 /**
  * Generate a URL-safe slug from a name

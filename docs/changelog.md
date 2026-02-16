@@ -32,6 +32,7 @@
 - **Tool Export Parameter Schemas**: Fixed empty parameter schemas in tool exports. Composite tools now build `unifiedInputSchema` from sub-tool parameters and LLM-generated descriptions. Simple tools with empty `inputSchema` are enriched with path parameters extracted from endpoint templates and parameters parsed from `toolDescription`.
 - **AI Description Generation**: Fixed "Generate with AI" button for composite tools not updating UI. Description now persists correctly using `toolDescription` field and syncs on page refresh.
 - **API Scraper Parameter Extraction**: Enhanced AI documentation scraper to extract `pathParameters`, `queryParameters`, and `requestBody` from API docs. Previously only extracted 5 flat fields (name, slug, method, path, description), resulting in non-functional tools. New integrations will now have complete parameter schemas.
+- **Gemini Structured Output Schema Rejection**: Endpoint extraction failed silently because Gemini requires all OBJECT-type schema fields to have non-empty `properties`. The `requestBody.schema.properties` field was declared as `type: 'object'` with no nested properties (since they're dynamic per-endpoint), causing Gemini to reject every extraction request with a 400 error. Fixed by encoding dynamic fields as JSON strings in the schema and parsing them back to objects after extraction.
 
 ### Known Issues
 
