@@ -29,6 +29,8 @@ interface AppIntegrationConfigDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   appId: string;
+  /** If provided, locks the integration selector to this integration */
+  integrationId?: string;
   /** If provided, editing existing config for this integration */
   existingConfig?: IntegrationConfigResponse | null;
   onSuccess?: () => void;
@@ -38,10 +40,12 @@ export function AppIntegrationConfigDialog({
   open,
   onOpenChange,
   appId,
+  integrationId: integrationIdProp,
   existingConfig,
   onSuccess,
 }: AppIntegrationConfigDialogProps) {
   const isEditing = !!existingConfig;
+  const isIntegrationLocked = !!integrationIdProp;
 
   const [integrationId, setIntegrationId] = useState('');
   const [clientId, setClientId] = useState('');
@@ -62,14 +66,14 @@ export function AppIntegrationConfigDialog({
         setClientSecret('');
         setScopes(existingConfig.scopes.join(', '));
       } else {
-        setIntegrationId('');
+        setIntegrationId(integrationIdProp ?? '');
         setClientId('');
         setClientSecret('');
         setScopes('');
       }
       setErrors({});
     }
-  }, [open, existingConfig]);
+  }, [open, existingConfig, integrationIdProp]);
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -125,7 +129,11 @@ export function AppIntegrationConfigDialog({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label>Integration</Label>
-            <Select value={integrationId} onValueChange={setIntegrationId} disabled={isEditing}>
+            <Select
+              value={integrationId}
+              onValueChange={setIntegrationId}
+              disabled={isEditing || isIntegrationLocked}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Select an integration" />
               </SelectTrigger>

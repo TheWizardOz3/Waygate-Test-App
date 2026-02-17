@@ -56,17 +56,17 @@
 
 ## Future Milestones
 
-### V2.1: Environments & Versioning
+### V2.1: Developer Experience & Ease
 
-Sandbox/production environments, versioning & rollbacks.
+Versioning & rollbacks, just-in-time auth, auto-generated typed SDK (`npx waygate generate`), copy-paste code generation per action, intent-based action layer for provider-flexible invocation.
 
-### V2.2: Self-Service & Access
+### V2.2: Self-Service & Governance
 
-Full no-code UI, RBAC & team management, just-in-time auth, platform connector admin UI (manage Waygate's default OAuth apps).
+Sandbox/production environments, full no-code UI (wizards), RBAC & team management.
 
-### V2.3: Developer Experience
+### V2.3: Ecosystem & Extensibility
 
-Webhook ingestion, SDK generation.
+Webhook ingestion, LLM tool wrapping.
 
 ---
 

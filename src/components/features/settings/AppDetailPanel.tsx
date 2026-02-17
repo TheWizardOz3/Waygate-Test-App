@@ -1,11 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import {
   ArrowLeft,
-  Pencil,
   Trash2,
-  Plus,
   Loader2,
   Check,
   Copy,
@@ -13,12 +11,8 @@ import {
   EyeOff,
   RefreshCw,
   AlertTriangle,
-  Shield,
   Key,
-  Users,
-  CheckCircle2,
-  Clock,
-  AlertCircle,
+  Plug,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -27,14 +21,6 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
   AlertDialog,
   AlertDialogContent,
   AlertDialogDescription,
@@ -42,18 +28,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { useApp, useUpdateApp, useRegenerateAppKey, useAppCredentialStats } from '@/hooks/useApps';
-import { useIntegrations } from '@/hooks';
-import { AppIntegrationConfigDialog } from './AppIntegrationConfigDialog';
+import { useApp, useUpdateApp, useRegenerateAppKey, useAppConnections } from '@/hooks/useApps';
 import { toast } from 'sonner';
-import { apiClient } from '@/lib/api/client';
-import type { IntegrationConfigResponse } from '@/lib/modules/apps/app.schemas';
 
 interface AppDetailPanelProps {
   appId: string;
@@ -65,41 +41,12 @@ export function AppDetailPanel({ appId, onBack, onDelete }: AppDetailPanelProps)
   const { data: app, isLoading } = useApp(appId);
   const updateMutation = useUpdateApp();
   const regenerateKeyMutation = useRegenerateAppKey();
-  const { data: credentialStats, isLoading: credentialStatsLoading } = useAppCredentialStats(appId);
+  const { data: connectionsData, isLoading: connectionsLoading } = useAppConnections(appId);
 
   const [showRegenerateDialog, setShowRegenerateDialog] = useState(false);
   const [regeneratedKey, setRegeneratedKey] = useState<string | null>(null);
   const [isKeyCopied, setIsKeyCopied] = useState(false);
   const [isKeyVisible, setIsKeyVisible] = useState(false);
-
-  // Integration configs
-  const [integrationConfigs, setIntegrationConfigs] = useState<IntegrationConfigResponse[]>([]);
-  const [configsLoading, setConfigsLoading] = useState(true);
-  const [addConfigOpen, setAddConfigOpen] = useState(false);
-  const [editConfig, setEditConfig] = useState<IntegrationConfigResponse | null>(null);
-
-  // Integration data for resolving names
-  const { data: integrationsData } = useIntegrations({ limit: 100 });
-  const integrationMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const integration of integrationsData?.integrations ?? []) {
-      map.set(integration.id, integration.name);
-    }
-    return map;
-  }, [integrationsData]);
-
-  // Fetch integration configs for this app
-  useState(() => {
-    if (appId) {
-      setConfigsLoading(true);
-      // Fetch all integration configs for this app
-      // The API doesn't have a list endpoint, so we fetch known integrations
-      fetchIntegrationConfigs(appId).then((configs) => {
-        setIntegrationConfigs(configs);
-        setConfigsLoading(false);
-      });
-    }
-  });
 
   const handleToggleStatus = async () => {
     if (!app) return;
@@ -135,21 +82,6 @@ export function AppDetailPanel({ appId, onBack, onDelete }: AppDetailPanelProps)
     }
   };
 
-  const handleConfigSuccess = () => {
-    // Refresh configs
-    fetchIntegrationConfigs(appId).then(setIntegrationConfigs);
-  };
-
-  const handleDeleteConfig = async (config: IntegrationConfigResponse) => {
-    try {
-      await apiClient.delete(`/apps/${appId}/integrations/${config.integrationId}/config`);
-      setIntegrationConfigs((prev) => prev.filter((c) => c.id !== config.id));
-      toast.success('Integration config removed');
-    } catch {
-      toast.error('Failed to remove integration config');
-    }
-  };
-
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -173,6 +105,7 @@ export function AppDetailPanel({ appId, onBack, onDelete }: AppDetailPanelProps)
   }
 
   const maskedKey = 'wg_app_' + '\u2022'.repeat(24) + '\u2022\u2022\u2022\u2022';
+  const connections = connectionsData?.connections ?? [];
 
   return (
     <div className="space-y-6">
@@ -287,241 +220,59 @@ export function AppDetailPanel({ appId, onBack, onDelete }: AppDetailPanelProps)
 
       <Separator />
 
-      {/* Integration Configs Section */}
+      {/* Connections Section */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Shield className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-sm font-medium">Integration Configs</h3>
-          </div>
-          <Button size="sm" onClick={() => setAddConfigOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Config
-          </Button>
+        <div className="flex items-center gap-2">
+          <Plug className="h-4 w-4 text-muted-foreground" />
+          <h3 className="text-sm font-medium">Connections</h3>
         </div>
         <p className="text-xs text-muted-foreground">
-          Register your OAuth app credentials (client ID / secret) per integration. End-users will
-          authorize through your registered app.
+          Connections associated with this app. Manage credentials and configuration from the
+          integration&apos;s Connections tab.
         </p>
 
-        {configsLoading ? (
+        {connectionsLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 2 }).map((_, i) => (
               <Skeleton key={i} className="h-12 w-full" />
             ))}
           </div>
-        ) : integrationConfigs.length === 0 ? (
+        ) : connections.length === 0 ? (
           <div className="rounded-lg border border-dashed p-6 text-center">
-            <Shield className="mx-auto mb-3 h-8 w-8 text-muted-foreground/50" />
-            <p className="text-sm font-medium">No integration configs</p>
+            <Plug className="mx-auto mb-3 h-8 w-8 text-muted-foreground/50" />
+            <p className="text-sm font-medium">No connections</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Add OAuth app credentials for integrations your app will use.
+              Create a connection from an integration&apos;s Connections tab and associate it with
+              this app.
             </p>
-            <Button size="sm" className="mt-4" onClick={() => setAddConfigOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Config
-            </Button>
           </div>
         ) : (
-          <div className="rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Integration</TableHead>
-                  <TableHead>Client ID</TableHead>
-                  <TableHead>Client Secret</TableHead>
-                  <TableHead>Scopes</TableHead>
-                  <TableHead className="w-[60px]"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {integrationConfigs.map((config) => (
-                  <TableRow key={config.id}>
-                    <TableCell className="font-medium">
-                      {integrationMap.get(config.integrationId) ?? config.integrationId}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={
-                          config.hasClientId
-                            ? 'bg-emerald-500/10 text-emerald-600'
-                            : 'bg-red-500/10 text-red-600'
-                        }
-                      >
-                        {config.hasClientId ? 'Configured' : 'Missing'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={
-                          config.hasClientSecret
-                            ? 'bg-emerald-500/10 text-emerald-600'
-                            : 'bg-red-500/10 text-red-600'
-                        }
-                      >
-                        {config.hasClientSecret ? 'Configured' : 'Missing'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {config.scopes.length > 0 ? (
-                        <span className="font-mono text-xs text-muted-foreground">
-                          {config.scopes.slice(0, 3).join(', ')}
-                          {config.scopes.length > 3 && ` +${config.scopes.length - 3}`}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">None</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => setEditConfig(config)}>
-                            <Pencil className="mr-2 h-4 w-4" />
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-destructive"
-                            onClick={() => handleDeleteConfig(config)}
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Remove
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </div>
-
-      <Separator />
-
-      {/* End-User Credentials Section */}
-      <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <Users className="h-4 w-4 text-muted-foreground" />
-          <h3 className="text-sm font-medium">End-User Credentials</h3>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Aggregate stats for end-user credentials across all connections. Individual user details
-          are managed via API by your consuming app.
-        </p>
-
-        {credentialStatsLoading ? (
           <div className="space-y-2">
-            <Skeleton className="h-16 w-full" />
-            <Skeleton className="h-12 w-full" />
-          </div>
-        ) : !credentialStats || credentialStats.total === 0 ? (
-          <div className="rounded-lg border border-dashed p-6 text-center">
-            <Users className="mx-auto mb-3 h-8 w-8 text-muted-foreground/50" />
-            <p className="text-sm font-medium">No end-user credentials</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              End-users will appear here once they connect via the connect flow.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {/* Summary stats */}
-            <div className="grid grid-cols-4 gap-3">
-              <div className="rounded-lg border p-3 text-center">
-                <p className="text-2xl font-semibold">{credentialStats.total}</p>
-                <p className="text-xs text-muted-foreground">Total</p>
-              </div>
-              <div className="rounded-lg border p-3 text-center">
-                <div className="flex items-center justify-center gap-1">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                  <p className="text-2xl font-semibold text-emerald-600">
-                    {credentialStats.byStatus.active ?? 0}
-                  </p>
+            {connections.map((conn) => (
+              <div
+                key={conn.id}
+                className="flex items-center justify-between rounded-lg border px-4 py-3"
+              >
+                <div className="flex items-center gap-3">
+                  <div>
+                    <p className="text-sm font-medium">{conn.name}</p>
+                    <p className="text-xs text-muted-foreground">{conn.integrationName}</p>
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground">Active</p>
+                <Badge
+                  variant="outline"
+                  className={
+                    conn.status === 'active'
+                      ? 'bg-emerald-500/10 text-emerald-600'
+                      : conn.status === 'error'
+                        ? 'bg-red-500/10 text-red-600'
+                        : 'bg-muted text-muted-foreground'
+                  }
+                >
+                  {conn.status}
+                </Badge>
               </div>
-              <div className="rounded-lg border p-3 text-center">
-                <div className="flex items-center justify-center gap-1">
-                  <Clock className="h-3.5 w-3.5 text-amber-600" />
-                  <p className="text-2xl font-semibold text-amber-600">
-                    {credentialStats.byStatus.expired ?? 0}
-                  </p>
-                </div>
-                <p className="text-xs text-muted-foreground">Expired</p>
-              </div>
-              <div className="rounded-lg border p-3 text-center">
-                <div className="flex items-center justify-center gap-1">
-                  <AlertCircle className="h-3.5 w-3.5 text-orange-600" />
-                  <p className="text-2xl font-semibold text-orange-600">
-                    {credentialStats.byStatus.needs_reauth ?? 0}
-                  </p>
-                </div>
-                <p className="text-xs text-muted-foreground">Needs Re-auth</p>
-              </div>
-            </div>
-
-            {/* Per-connection breakdown */}
-            {credentialStats.byConnection.length > 0 && (
-              <div className="rounded-lg border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Integration</TableHead>
-                      <TableHead>Connection</TableHead>
-                      <TableHead className="text-center">Active</TableHead>
-                      <TableHead className="text-center">Expired</TableHead>
-                      <TableHead className="text-center">Re-auth</TableHead>
-                      <TableHead className="text-center">Total</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {credentialStats.byConnection.map((conn) => (
-                      <TableRow key={conn.connectionId}>
-                        <TableCell className="font-medium">{conn.integrationName}</TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {conn.connectionName}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {conn.byStatus.active ? (
-                            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600">
-                              {conn.byStatus.active}
-                            </Badge>
-                          ) : (
-                            <span className="text-muted-foreground">0</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {conn.byStatus.expired ? (
-                            <Badge variant="outline" className="bg-amber-500/10 text-amber-600">
-                              {conn.byStatus.expired}
-                            </Badge>
-                          ) : (
-                            <span className="text-muted-foreground">0</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {conn.byStatus.needs_reauth ? (
-                            <Badge variant="outline" className="bg-orange-500/10 text-orange-600">
-                              {conn.byStatus.needs_reauth}
-                            </Badge>
-                          ) : (
-                            <span className="text-muted-foreground">0</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-center font-medium">{conn.total}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
+            ))}
           </div>
         )}
       </div>
@@ -587,57 +338,6 @@ export function AppDetailPanel({ appId, onBack, onDelete }: AppDetailPanelProps)
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Add/Edit Integration Config Dialog */}
-      <AppIntegrationConfigDialog
-        open={addConfigOpen || !!editConfig}
-        onOpenChange={(open) => {
-          if (!open) {
-            setAddConfigOpen(false);
-            setEditConfig(null);
-          }
-        }}
-        appId={appId}
-        existingConfig={editConfig}
-        onSuccess={handleConfigSuccess}
-      />
     </div>
   );
-}
-
-/**
- * Fetches all integration configs for an app.
- * Since there's no list endpoint, we fetch configs for all known integrations.
- */
-async function fetchIntegrationConfigs(appId: string): Promise<IntegrationConfigResponse[]> {
-  try {
-    // Fetch integrations list to know which ones to check
-    const integrationsResponse = await apiClient.get<{
-      integrations: Array<{ id: string; name: string }>;
-      pagination: { cursor: string | null; hasMore: boolean; totalCount: number };
-    }>('/integrations', { limit: 100 });
-
-    const integrations = integrationsResponse.integrations;
-    const configs: IntegrationConfigResponse[] = [];
-
-    // Try fetching config for each integration (silently ignore 404s)
-    const results = await Promise.allSettled(
-      integrations.map((integration) =>
-        apiClient
-          .get<IntegrationConfigResponse>(`/apps/${appId}/integrations/${integration.id}/config`)
-          .then((config) => ({ config, found: true }))
-          .catch(() => ({ config: null, found: false }))
-      )
-    );
-
-    for (const result of results) {
-      if (result.status === 'fulfilled' && result.value.found && result.value.config) {
-        configs.push(result.value.config);
-      }
-    }
-
-    return configs;
-  } catch {
-    return [];
-  }
 }

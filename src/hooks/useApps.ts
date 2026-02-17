@@ -26,6 +26,7 @@ export const appKeys = {
   list: (filters?: AppListParams) => [...appKeys.lists(), filters] as const,
   details: () => [...appKeys.all, 'detail'] as const,
   detail: (id: string) => [...appKeys.details(), id] as const,
+  connections: (appId: string) => [...appKeys.detail(appId), 'connections'] as const,
   integrationConfigs: (appId: string) => [...appKeys.detail(appId), 'integration-configs'] as const,
   integrationConfig: (appId: string, integrationId: string) =>
     [...appKeys.integrationConfigs(appId), integrationId] as const,
@@ -242,6 +243,35 @@ export function useDeleteIntegrationConfig() {
         queryKey: appKeys.integrationConfigs(appId),
       });
     },
+  });
+}
+
+// =============================================================================
+// App Connections
+// =============================================================================
+
+import type { ConnectionResponse } from '@/lib/modules/connections/connection.schemas';
+
+export interface AppConnectionResponse extends ConnectionResponse {
+  integrationName: string;
+  integrationSlug: string;
+}
+
+async function fetchAppConnections(
+  appId: string
+): Promise<{ connections: AppConnectionResponse[] }> {
+  return apiClient.get<{ connections: AppConnectionResponse[] }>(`/apps/${appId}/connections`);
+}
+
+/**
+ * Hook to fetch connections associated with an app
+ */
+export function useAppConnections(appId: string | undefined) {
+  return useQuery({
+    queryKey: appKeys.connections(appId!),
+    queryFn: () => fetchAppConnections(appId!),
+    enabled: !!appId,
+    staleTime: 30 * 1000,
   });
 }
 

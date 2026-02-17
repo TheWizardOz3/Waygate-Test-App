@@ -953,20 +953,21 @@ Guard: only `keyType === 'app'` (`wg_app_`) can use these endpoints.
 - Add `'apps'` to `SettingsSection` type and nav
 - `AppsSection`: table/card list of apps with status badges, create button
 - `CreateAppDialog`: form (name, slug, description), shows API key once on success with copy + warning
-- `AppDetailPanel`: app details, key management (regenerate with confirm), integration configs, user credential stats
-- `AppIntegrationConfigForm`: per-integration OAuth client ID, client secret (masked), scopes
+- `AppDetailPanel`: app details, key management (regenerate with confirm), **list of associated connections**
 - `src/hooks/useApps.ts`: query/mutation hooks following existing pattern
 
-#### Task 18: End-User Credential Visibility
+**UX Consolidation (completed):** OAuth app credentials (IntegrationConfig) and end-user credential stats have been moved from the App settings page to the Connection detail view. The App settings page now shows only API key management and a read-only list of associated connections. This follows the principle that Connections are the primary management surface for all credential configuration.
 
-**Files:** `src/components/features/settings/`
+#### Task 18: Connection-Level Credential Management
 
-- In `AppDetailPanel`: tab showing end-user credential stats per integration
-  - Total users connected, active, expired, needs re-auth
-  - Not individual user details (those are managed via API by the consuming app)
-- Connection detail panel: summary of end-user credentials under this connection
-  - Count of active / expired / needs_reauth
-  - "Export" button for consuming app developers to audit
+**Files:** `src/components/features/connections/`
+
+- `ConnectionOAuthConfigSection`: shows OAuth app registration status (client_id/secret) on Connection detail — only for OAuth2 integrations with an associated app
+- `ConnectionCredentialPanel`: existing component already shows end-user credential stats (Total, Active, Expired, Needs Re-auth) and credential connect/disconnect actions
+- `CreateConnectionDialog`: now requires selecting an App during connection creation
+- `AppIntegrationConfigDialog`: adapted to accept an `integrationId` prop for use from Connection context (locks the integration selector)
+
+**New API endpoint:** `GET /api/v1/apps/{appId}/connections` — returns all connections associated with an app, used by the simplified App settings panel
 
 ---
 

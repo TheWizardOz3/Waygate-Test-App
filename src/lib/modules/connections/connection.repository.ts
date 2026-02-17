@@ -30,6 +30,7 @@ import type { ConnectionFilters } from './connection.schemas';
 export interface CreateConnectionDbInput {
   tenantId: string;
   integrationId: string;
+  appId?: string | null;
   name: string;
   slug: string;
   baseUrl?: string | null;
@@ -93,6 +94,7 @@ export async function createConnection(input: CreateConnectionDbInput): Promise<
     data: {
       tenantId: input.tenantId,
       integrationId: input.integrationId,
+      appId: input.appId ?? null,
       name: input.name,
       slug: input.slug,
       baseUrl: input.baseUrl ?? null,

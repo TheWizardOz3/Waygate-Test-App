@@ -176,16 +176,18 @@ Waygate differentiates from existing solutions through:
 | Complex Nested Data Handling          | P1       | V1.1      | MED        | Action Registry       |
 | Batch Operations Support              | P1       | V1.1      | MED        | Async Jobs            |
 | Enhanced Logging & Monitoring         | P1       | V1.1      | MED        | Gateway API           |
-| Sandbox/Production Environments       | P1       | V2        | MED        | V1.1                  |
-| Versioning & Rollbacks                | P0       | V2        | HIGH       | Sandbox/Prod Envs     |
 | Schema Drift Detection                | P1       | V2        | MED        | Versioning            |
 | Auto-Maintenance System               | P0       | V2        | HIGH       | Schema Drift          |
-| Full No-Code UI (Wizards)             | P1       | V2.1      | HIGH       | V2                    |
-| RBAC & Team Management                | P1       | V2.1      | MED        | Auth Framework        |
-| Just-in-Time Auth                     | P2       | V2.1      | HIGH       | RBAC                  |
-| Webhook Ingestion                     | P1       | V2.2      | MED        | V2.1                  |
-| SDK Generation                        | P2       | V2.2      | HIGH       | Action Registry       |
-| LLM Tool Wrapping                     | P1       | V2.2      | MED        | Action Registry       |
+| Versioning & Rollbacks                | P0       | V2.1      | HIGH       | V2                    |
+| Just-in-Time Auth                     | P1       | V2.1      | HIGH       | Auth Framework        |
+| Auto-generated Typed SDK              | P0       | V2.1      | HIGH       | Action Registry       |
+| Copy-paste Code Generation            | P1       | V2.1      | MED        | Action Registry       |
+| Intent-based Action Layer             | P0       | V2.1      | HIGH       | Typed SDK             |
+| Sandbox/Production Environments       | P1       | V2.2      | MED        | V2.1                  |
+| Full No-Code UI (Wizards)             | P1       | V2.2      | HIGH       | V2.1                  |
+| RBAC & Team Management                | P1       | V2.2      | MED        | Auth Framework        |
+| Webhook Ingestion                     | P1       | V2.3      | MED        | V2.2                  |
+| LLM Tool Wrapping                     | P1       | V2.3      | MED        | Action Registry       |
 
 ### 3.2 Detailed Feature Specifications
 
@@ -947,105 +949,141 @@ Integration Config → "Connect" → Redirect to Provider
 
 ### 5.6 V2 (Maintenance & Safety)
 
-**Functionality Summary:** Automatic maintenance, versioning, and environment management. Keep integrations healthy and provide safety nets for production systems.
+**Functionality Summary:** Automatic maintenance and proactive API health monitoring. Keep integrations healthy through schema drift detection and AI-powered auto-maintenance.
 
 **User Goals:**
 
 - Integrations maintain themselves automatically
-- Roll back when updates cause problems
-- Test changes safely before deploying to production
 - Know when APIs change unexpectedly
+- Background jobs handle bulk and scheduled operations
 
 **Features Added/Evolved:**
 | Feature | Change from V1.1 | Rationale |
 |---------|------------------|-----------|
-| Sandbox/Production Environments | NEW - Separate testing and production configurations | Safe testing, confident deployments |
-| Versioning & Rollbacks | NEW - Track integration versions, per-app pinning, instant rollback | Production safety and stability |
 | Schema Drift Detection | NEW - Alert when API responses change from documented schema | Proactive issue detection |
 | Auto-Maintenance System | NEW - Detect API changes, auto-update with approval workflow | Reduce manual maintenance burden |
+| Async Job System | NEW - Background processing for long operations, scheduled tasks | Handle bulk operations, rate limits |
+| Batch Operations | NEW - Queue and batch high-volume write operations | Avoid rate limits on bulk actions |
+| End-User Auth Delegation | NEW - Per-app API keys, per-app OAuth credentials, app-scoped connections | Enable consuming apps to manage their own end-user auth |
 
 **Technical Scope:**
 
-- Environment isolation in database
-- Version history storage and diff computation
 - Scheduled documentation re-scraping
 - Schema comparison and drift alerts
+- Background job queue (Trigger.dev/BullMQ)
+- App entity with dual-key auth resolution
 
 **Definition of Done:**
 
-- Can switch integrations between sandbox and production
-- Can roll back to any previous version
 - Alerts trigger when API schemas change
 - Auto-updates proposed with approval workflow
+- Background job system running scheduled tasks
+- Apps can manage their own credentials and connections
 
 ---
 
-### 5.7 V2.1 (Self-Service & Access)
+### 5.7 V2.1 (Developer Experience & Ease)
 
-**Functionality Summary:** Enable non-technical users and expand access control. Full no-code experience with team collaboration features.
+**Functionality Summary:** Make building on Waygate dramatically easier than calling APIs directly. Auto-generated typed SDKs, provider-flexible intent system, instant code scaffolding, and production safety through versioning. This is the milestone that transforms Waygate from "integration infrastructure" to "integration infrastructure that actively makes consuming code simpler."
+
+**User Goals:**
+
+- Get full autocomplete and type safety for every configured integration
+- Copy-paste working code for any action without reading external API docs
+- Define provider-flexible intents (e.g., "send notification" across Slack, email, Discord)
+- Roll back integration changes when updates cause problems
+- Enable end users to authenticate on-demand
+
+**Features Added/Evolved:**
+| Feature | Change from V2 | Rationale |
+|---------|----------------|-----------|
+| Versioning & Rollbacks | NEW - Track integration versions, per-app pinning, instant rollback | Production safety and stability |
+| Just-in-Time Auth | NEW - On-demand OAuth flows for end users | Enable user-facing integrations |
+| Auto-generated Typed SDK | NEW - `npx waygate generate` produces per-tenant typed client with autocomplete | Eliminate schema lookup, make consumption faster than raw API calls |
+| Copy-paste Code Generation | NEW - Per-action ready-to-use code snippets in multiple languages | Zero-friction action adoption |
+| Intent-based Action Layer | NEW - Semantic grouping of actions by intent across integrations with developer-defined mappings | Provider flexibility without full unified API normalization |
+
+**Technical Scope:**
+
+- Version history storage and diff computation
+- OAuth broker for JIT auth
+- Code generation pipeline from action registry schemas
+- Per-tenant typed client generation (TypeScript, Python)
+- Intent definition and mapping system with runtime provider selection
+- Per-action snippet generation in multiple languages/frameworks
+
+**Definition of Done:**
+
+- Can roll back to any previous version of an integration
+- End users can authenticate via JIT OAuth flow
+- `npx waygate generate` produces a typed client with full autocomplete for all configured integrations
+- Every action in the registry has copy-paste code snippets available
+- Can define an intent (e.g., "send notification") that maps to multiple providers and invoke it with runtime provider selection
+
+---
+
+### 5.8 V2.2 (Self-Service & Governance)
+
+**Functionality Summary:** Enable non-technical users, expand access control, and add environment management. Full no-code experience with team collaboration and safe deployment workflows.
 
 **User Goals:**
 
 - Non-technical team members can configure integrations
 - Control who can access and modify integrations
-- End users can authenticate on-demand
+- Test changes safely before deploying to production
 - Manage teams and permissions effectively
 
 **Features Added/Evolved:**
-| Feature | Change from V2 | Rationale |
-|---------|----------------|-----------|
+| Feature | Change from V2.1 | Rationale |
+|---------|------------------|-----------|
+| Sandbox/Production Environments | NEW - Separate testing and production configurations | Safe testing, confident deployments |
 | Full No-Code UI | ENHANCED - Wizard flows, guided setup, visual configuration | Enable non-technical users |
 | RBAC & Team Management | NEW - Role-based access control, team invitations | Multi-user collaboration |
-| Just-in-Time Auth | NEW - On-demand OAuth flows for end users | Enable user-facing integrations |
 
 **Technical Scope:**
 
+- Environment isolation in database
 - Enhanced wizard flows with visual builders
-- OAuth broker for JIT auth
 - Role and permission system in database
 - Team invitation and management flows
 
 **Definition of Done:**
 
+- Can switch integrations between sandbox and production
 - Complete integration setup possible without touching code
 - Can assign roles (owner, admin, developer, viewer)
-- End users can authenticate via JIT OAuth flow
 - Team management UI fully functional
 
 ---
 
-### 5.8 V2.2 (Developer Experience & AI Integration)
+### 5.9 V2.3 (Ecosystem & Extensibility)
 
-**Functionality Summary:** Expand developer tooling and enable AI agent integration through LLM tool generation and webhooks.
+**Functionality Summary:** Expand platform extensibility through real-time event handling and deeper AI agent integration.
 
 **User Goals:**
 
-- AI agents can use integrations as tools
-- Receive real-time events via webhooks
-- Generate SDKs for faster integration in consuming apps
+- Receive real-time events from external services via webhooks
+- AI agents can use integrations as richly-typed tools
 
 **Features Added/Evolved:**
-| Feature | Change from V2.1 | Rationale |
+| Feature | Change from V2.2 | Rationale |
 |---------|------------------|-----------|
 | Webhook Ingestion | NEW - Receive and route webhooks from external services | Real-time event handling |
-| SDK Generation | NEW - Auto-generate TypeScript/Python client libraries | Better developer experience |
 | LLM Tool Wrapping | NEW - Export actions as LangChain-compatible tools | Power AI agent applications |
 
 **Technical Scope:**
 
-- Webhook endpoint router
-- Code generation pipeline
+- Webhook endpoint router and security (signature verification)
 - LangChain tool factory
 
 **Definition of Done:**
 
-- Webhooks route to consuming apps reliably
-- Can generate TypeScript SDK for any integration
-- Can export action as LangChain tool definition
+- Webhooks route to consuming apps reliably with signature verification
+- Can export any action as a LangChain tool definition
 
 ---
 
-### 5.9 Not In Scope (Explicit Exclusions)
+### 5.10 Not In Scope (Explicit Exclusions)
 
 **Rationale:** Maintaining focus on core integration gateway functionality. These items may be valuable but would dilute focus or are better handled by specialized tools.
 

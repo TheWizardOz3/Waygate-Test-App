@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Settings, User, Bell, Key, Palette, Loader2, Variable, Boxes } from 'lucide-react';
+import { Settings, User, Bell, Palette, Loader2, Variable, Boxes } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ApiKeyDisplay } from './ApiKeyDisplay';
+
 import { VariablesSection } from './VariablesSection';
 import { AppsSection } from './AppsSection';
 import { toast } from 'sonner';
@@ -39,7 +39,6 @@ interface TenantSettings {
   name: string;
   email: string;
   organization?: string;
-  waygateApiKey: string;
   notificationsEnabled: boolean;
   webhookUrl?: string;
 }
@@ -49,11 +48,10 @@ interface SettingsPageProps {
   isLoading?: boolean;
 }
 
-type SettingsSection = 'general' | 'api' | 'apps' | 'variables' | 'notifications' | 'appearance';
+type SettingsSection = 'general' | 'apps' | 'variables' | 'notifications' | 'appearance';
 
 const SECTIONS: { id: SettingsSection; label: string; icon: React.ElementType }[] = [
   { id: 'general', label: 'General', icon: User },
-  { id: 'api', label: 'API Keys', icon: Key },
   { id: 'apps', label: 'Apps', icon: Boxes },
   { id: 'variables', label: 'Variables', icon: Variable },
   { id: 'notifications', label: 'Notifications', icon: Bell },
@@ -87,11 +85,6 @@ export function SettingsPage({ initialSettings, isLoading }: SettingsPageProps) 
     } finally {
       setIsSaving(false);
     }
-  };
-
-  const handleRegenerateApiKey = async (): Promise<string> => {
-    const response = await apiClient.post<{ apiKey: string }>('/settings/api-key/regenerate');
-    return response.apiKey;
   };
 
   const handleToggleNotifications = async (enabled: boolean) => {
@@ -225,45 +218,6 @@ export function SettingsPage({ initialSettings, isLoading }: SettingsPageProps) 
                   </Button>
                 </form>
               </Form>
-            </SettingsSection>
-          )}
-
-          {activeSection === 'api' && (
-            <SettingsSection title="API Keys" description="Manage your API authentication">
-              <div className="space-y-8">
-                <ApiKeyDisplay
-                  apiKey={initialSettings?.waygateApiKey ?? 'wg_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'}
-                  label="Waygate API Key"
-                  description="Use this key to authenticate requests from your applications to the Waygate Gateway API"
-                  onRegenerate={handleRegenerateApiKey}
-                />
-
-                <Separator />
-
-                <div className="space-y-4">
-                  <h3 className="text-sm font-medium">Usage</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <p className="mb-2 text-sm text-muted-foreground">Request Header</p>
-                      <pre className="overflow-x-auto rounded-lg border bg-muted/30 p-3 text-sm">
-                        <code className="text-muted-foreground">
-                          Authorization: Bearer{' '}
-                          <span className="text-foreground">YOUR_API_KEY</span>
-                        </code>
-                      </pre>
-                    </div>
-                    <div>
-                      <p className="mb-2 text-sm text-muted-foreground">Example Request</p>
-                      <pre className="overflow-x-auto rounded-lg border bg-muted/30 p-3 text-sm">
-                        <code className="text-muted-foreground">{`curl -X POST https://api.waygate.dev/v1/gateway/invoke \\
-  -H "Authorization: Bearer YOUR_API_KEY" \\
-  -H "Content-Type: application/json" \\
-  -d '{"integrationSlug": "slack", "actionSlug": "send-message", "input": {...}}'`}</code>
-                      </pre>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </SettingsSection>
           )}
 

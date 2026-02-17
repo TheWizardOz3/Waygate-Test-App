@@ -149,6 +149,7 @@ export async function createConnection(
   const dbInput: CreateConnectionDbInput = {
     tenantId,
     integrationId,
+    appId: data.appId ?? null,
     name: data.name,
     slug: data.slug,
     baseUrl: data.baseUrl,

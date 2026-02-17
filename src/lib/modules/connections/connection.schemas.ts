@@ -46,6 +46,7 @@ export const CreateConnectionInputSchema = z
       .min(1)
       .max(100)
       .regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with hyphens'),
+    appId: z.string().uuid().optional().nullable(),
     baseUrl: z.string().url().optional().nullable(),
     isPrimary: z.boolean().optional().default(false),
     connectorType: ConnectorTypeSchema.optional().default('custom'),
@@ -156,6 +157,7 @@ export const ConnectionResponseSchema = z.object({
   id: z.string().uuid(),
   tenantId: z.string().uuid(),
   integrationId: z.string().uuid(),
+  appId: z.string().uuid().nullable().optional(),
   name: z.string(),
   slug: z.string(),
   baseUrl: z.string().nullable(),
@@ -210,6 +212,7 @@ interface DbConnection {
   id: string;
   tenantId: string;
   integrationId: string;
+  appId?: string | null;
   name: string;
   slug: string;
   baseUrl: string | null;
@@ -250,6 +253,7 @@ export function toConnectionResponse(
     id: connection.id,
     tenantId: connection.tenantId,
     integrationId: connection.integrationId,
+    appId: connection.appId ?? null,
     name: connection.name,
     slug: connection.slug,
     baseUrl: connection.baseUrl,

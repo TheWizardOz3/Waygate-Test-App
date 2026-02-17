@@ -1122,6 +1122,7 @@ pnpm prisma migrate reset
 | PATCH  | `/apps/:id`                                    | Update app                            | Tenant Key | UpdateApp         | App                  |
 | DELETE | `/apps/:id`                                    | Delete app                            | Tenant Key | —                 | —                    |
 | POST   | `/apps/:id/api-key/regenerate`                 | Regenerate app API key                | Tenant Key | —                 | App (with new key)   |
+| GET    | `/apps/:id/connections`                        | List connections for app              | Tenant Key | —                 | Connection[]         |
 | GET    | `/apps/:id/credential-stats`                   | Get end-user credential stats for app | Tenant Key | —                 | CredentialStats      |
 | GET    | `/apps/:id/integrations/:integrationId/config` | Get per-app OAuth config              | Tenant Key | —                 | AppIntegrationConfig |
 | PUT    | `/apps/:id/integrations/:integrationId/config` | Set per-app OAuth config              | Tenant Key | OAuthClientConfig | AppIntegrationConfig |

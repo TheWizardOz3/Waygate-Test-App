@@ -13,7 +13,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useCreateConnection } from '@/hooks';
+import { useApps } from '@/hooks/useApps';
 import { toast } from 'sonner';
 import { Loader2, Zap, Settings, ArrowLeft, ArrowRight } from 'lucide-react';
 import { PlatformConnectorSelect } from './PlatformConnectorSelect';
@@ -36,6 +44,7 @@ export function CreateConnectionDialog({
   onSuccess,
 }: CreateConnectionDialogProps) {
   const createMutation = useCreateConnection(integrationId);
+  const { data: appsData } = useApps();
 
   // Multi-step state
   const [step, setStep] = useState<Step>('type');
@@ -43,11 +52,14 @@ export function CreateConnectionDialog({
   const [platformConnectorSlug, setPlatformConnectorSlug] = useState<string | null>(null);
 
   // Form state
+  const [appId, setAppId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const [isPrimary, setIsPrimary] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const apps = appsData?.apps ?? [];
 
   // Auto-generate slug from name
   const handleNameChange = (value: string) => {
@@ -66,6 +78,10 @@ export function CreateConnectionDialog({
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
+
+    if (!appId) {
+      newErrors.appId = 'An app must be selected';
+    }
 
     if (!name.trim()) {
       newErrors.name = 'Name is required';
@@ -98,6 +114,7 @@ export function CreateConnectionDialog({
       await createMutation.mutateAsync({
         name: name.trim(),
         slug: slug.trim(),
+        appId: appId,
         baseUrl: baseUrl.trim() || null,
         isPrimary,
         connectorType: connectorType ?? 'custom',
@@ -122,6 +139,7 @@ export function CreateConnectionDialog({
     setStep('type');
     setConnectorType(null);
     setPlatformConnectorSlug(null);
+    setAppId(null);
     setName('');
     setSlug('');
     setBaseUrl('');
@@ -260,6 +278,26 @@ export function CreateConnectionDialog({
                   </>
                 )}
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>App</Label>
+              <Select value={appId ?? ''} onValueChange={(value) => setAppId(value || null)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select an app" />
+                </SelectTrigger>
+                <SelectContent>
+                  {apps.map((app) => (
+                    <SelectItem key={app.id} value={app.id}>
+                      {app.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.appId && <p className="text-sm text-destructive">{errors.appId}</p>}
+              <p className="text-xs text-muted-foreground">
+                The consuming app this connection belongs to
+              </p>
             </div>
 
             <div className="space-y-2">

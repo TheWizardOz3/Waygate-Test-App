@@ -28,12 +28,14 @@ import {
 import { useConnection, useDeleteConnection, useLogs, useActions } from '@/hooks';
 import { ConnectionStatusBadge } from './ConnectionStatusBadge';
 import { ConnectionCredentialPanel } from './ConnectionCredentialPanel';
+import { ConnectionOAuthConfigSection } from './ConnectionOAuthConfigSection';
 import { ConnectionHealthSection } from './ConnectionHealthSection';
 import { ConnectionMappingList, PreambleTemplateInput } from './mappings';
 import { ConnectionVariablesSection } from './ConnectionVariablesSection';
 import { ConnectorTypeBadge } from './ConnectorTypeBadge';
 import { EditConnectionDialog } from './EditConnectionDialog';
 import { DeleteConnectionDialog } from './DeleteConnectionDialog';
+import { useApp } from '@/hooks/useApps';
 import { toast } from 'sonner';
 import type { IntegrationResponse } from '@/lib/modules/integrations/integration.schemas';
 import { cn } from '@/lib/utils';
@@ -56,6 +58,9 @@ export function ConnectionDetail({
 
   const { data: connection, isLoading, isError, refetch } = useConnection(connectionId);
   const deleteMutation = useDeleteConnection(integration.id);
+
+  // Fetch associated app name for display
+  const { data: appData } = useApp(connection?.appId ?? undefined);
 
   // Fetch actions for the mappings section
   const { data: actionsData } = useActions(integration.id);
@@ -170,6 +175,15 @@ export function ConnectionDetail({
               </Button>
             </div>
 
+            {/* OAuth App Config (only for OAuth2 integrations with an app) */}
+            {integration.authType === 'oauth2' && connection.appId && (
+              <ConnectionOAuthConfigSection
+                connection={connection}
+                integration={integration}
+                onConfigChange={() => refetch()}
+              />
+            )}
+
             {/* Credentials Panel */}
             <ConnectionCredentialPanel
               connection={connection}
@@ -250,6 +264,19 @@ export function ConnectionDetail({
                     </span>
                   </div>
                 </div>
+
+                {/* Associated App */}
+                {connection.appId && appData && (
+                  <div className="space-y-1.5">
+                    <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      <Settings2 className="h-3 w-3" />
+                      App
+                    </p>
+                    <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                      {appData.name}
+                    </p>
+                  </div>
+                )}
 
                 {/* Connection ID */}
                 <div className="space-y-1.5">
