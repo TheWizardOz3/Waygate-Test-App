@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Shield,
   Key,
@@ -17,6 +19,8 @@ import {
   Zap,
   Users,
   Download,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient } from '@/lib/api/client';
@@ -67,6 +71,10 @@ export function ConnectionCredentialPanel({
   const [credentialData, setCredentialData] = useState<CredentialStatusData>({
     status: 'disconnected',
   });
+  const [showCredentialForm, setShowCredentialForm] = useState(false);
+  const [credentialInput, setCredentialInput] = useState('');
+  const [isSavingCredential, setIsSavingCredential] = useState(false);
+  const [showToken, setShowToken] = useState(false);
 
   const connectMutation = useConnectConnection(integration.id);
   const disconnectMutation = useDisconnectConnection(integration.id);
@@ -165,6 +173,41 @@ export function ConnectionCredentialPanel({
       toast.error('Failed to disconnect', {
         description: err instanceof Error ? err.message : 'Unknown error',
       });
+    }
+  };
+
+  const handleSaveCredential = async () => {
+    if (!credentialInput.trim()) {
+      toast.error('Please enter a valid credential');
+      return;
+    }
+
+    setIsSavingCredential(true);
+    try {
+      const body =
+        integration.authType === 'bearer'
+          ? { type: 'bearer' as const, token: credentialInput.trim() }
+          : {
+              type: 'api_key' as const,
+              apiKey: credentialInput.trim(),
+              headerName: 'Authorization',
+              prefix: 'Bearer',
+            };
+
+      await apiClient.post(`/integrations/${connection.integrationId}/credentials`, body);
+
+      setCredentialData({ status: 'connected', credentialType: integration.authType });
+      setShowCredentialForm(false);
+      setCredentialInput('');
+      setShowToken(false);
+      toast.success('Credentials saved successfully');
+      onCredentialChange?.();
+    } catch (err) {
+      toast.error('Failed to save credentials', {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    } finally {
+      setIsSavingCredential(false);
     }
   };
 
@@ -401,6 +444,66 @@ export function ConnectionCredentialPanel({
           </div>
         )}
 
+        {/* Inline Credential Entry Form (for non-OAuth auth types) */}
+        {showCredentialForm &&
+          credentialStatus === 'disconnected' &&
+          integration.authType !== 'oauth2' && (
+            <div className="space-y-3 rounded-lg border p-3">
+              <div className="space-y-2">
+                <Label htmlFor="credential-input">
+                  {integration.authType === 'bearer' ? 'Bearer Token' : 'API Key'}
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="credential-input"
+                    type={showToken ? 'text' : 'password'}
+                    placeholder={
+                      integration.authType === 'bearer'
+                        ? 'Enter your bearer token'
+                        : 'Enter your API key'
+                    }
+                    value={credentialInput}
+                    onChange={(e) => setCredentialInput(e.target.value)}
+                    className="pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                    onClick={() => setShowToken(!showToken)}
+                  >
+                    {showToken ? (
+                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <Eye className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Your credential will be encrypted and stored securely.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={handleSaveCredential} disabled={isSavingCredential}>
+                  {isSavingCredential && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Save Credentials
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setShowCredentialForm(false);
+                    setCredentialInput('');
+                    setShowToken(false);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+
         {/* Actions */}
         <div className="flex gap-2 pt-2">
           {credentialStatus === 'connected' ? (
@@ -430,28 +533,29 @@ export function ConnectionCredentialPanel({
                 Disconnect
               </Button>
             </>
-          ) : (
-            <Button
-              onClick={handleConnect}
-              disabled={connectMutation.isPending}
-              className={isPlatformConnection ? 'bg-violet-600 hover:bg-violet-700' : undefined}
-            >
-              {connectMutation.isPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : isPlatformConnection ? (
-                <Zap className="mr-2 h-4 w-4" />
-              ) : integration.authType === 'oauth2' ? (
-                <Shield className="mr-2 h-4 w-4" />
-              ) : (
+          ) : !showCredentialForm ? (
+            integration.authType === 'oauth2' || isPlatformConnection ? (
+              <Button
+                onClick={handleConnect}
+                disabled={connectMutation.isPending}
+                className={isPlatformConnection ? 'bg-violet-600 hover:bg-violet-700' : undefined}
+              >
+                {connectMutation.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : isPlatformConnection ? (
+                  <Zap className="mr-2 h-4 w-4" />
+                ) : (
+                  <Shield className="mr-2 h-4 w-4" />
+                )}
+                {isPlatformConnection ? 'Connect with Waygate' : 'Connect with OAuth'}
+              </Button>
+            ) : (
+              <Button onClick={() => setShowCredentialForm(true)}>
                 <Plug className="mr-2 h-4 w-4" />
-              )}
-              {isPlatformConnection
-                ? 'Connect with Waygate'
-                : integration.authType === 'oauth2'
-                  ? 'Connect with OAuth'
-                  : 'Add Credentials'}
-            </Button>
-          )}
+                Add Credentials
+              </Button>
+            )
+          ) : null}
         </div>
       </CardContent>
     </Card>

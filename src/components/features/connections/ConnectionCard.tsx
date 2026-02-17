@@ -1,7 +1,16 @@
 'use client';
 
 import * as React from 'react';
-import { MoreHorizontal, Plug, Unplug, Trash2, Edit2, Star, ArrowRight } from 'lucide-react';
+import {
+  MoreHorizontal,
+  Plug,
+  Unplug,
+  Trash2,
+  Edit2,
+  Star,
+  ArrowRight,
+  Settings,
+} from 'lucide-react';
 
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,6 +25,7 @@ import { Badge } from '@/components/ui/badge';
 import { ConnectionStatusBadge } from './ConnectionStatusBadge';
 import { ConnectorTypeBadge } from './ConnectorTypeBadge';
 import { HealthStatusDot } from '@/components/features/health';
+import { useApp } from '@/hooks/useApps';
 import { cn } from '@/lib/utils';
 import type { ConnectionResponse } from '@/lib/modules/connections/connection.schemas';
 
@@ -44,8 +54,20 @@ export function ConnectionCard({
   isSelected,
   className,
 }: ConnectionCardProps) {
-  const { id, name, slug, status, isPrimary, connectorType, baseUrl, createdAt, healthStatus } =
-    connection;
+  const {
+    id,
+    name,
+    slug,
+    status,
+    isPrimary,
+    connectorType,
+    baseUrl,
+    createdAt,
+    healthStatus,
+    appId,
+  } = connection;
+
+  const { data: appData } = useApp(appId ?? undefined);
 
   const handleCardClick = (e: React.MouseEvent) => {
     // Only select if we didn't click on an interactive element
@@ -127,9 +149,19 @@ export function ConnectionCard({
       </CardHeader>
 
       <CardContent className="pt-0">
-        {/* Connector Type Badge */}
-        <div className="mb-2">
-          <ConnectorTypeBadge type={connectorType} size="sm" />
+        {/* App name and Connector Type */}
+        <div className="mb-2 flex items-center gap-1.5">
+          {appData ? (
+            <Badge
+              variant="outline"
+              className="gap-1 border-zinc-500/30 bg-zinc-500/10 px-1.5 py-0 text-xs text-zinc-600 dark:text-zinc-400"
+            >
+              <Settings className="h-2.5 w-2.5" />
+              {appData.name}
+            </Badge>
+          ) : (
+            <ConnectorTypeBadge type={connectorType} size="sm" />
+          )}
         </div>
 
         {/* Base URL if set */}
