@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -32,7 +33,15 @@ interface IntegrationDetailProps {
 
 export function IntegrationDetail({ integrationId }: IntegrationDetailProps) {
   const [activeTab, setActiveTab] = useState('overview');
-  const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // Read initial connection from URL search params
+  const urlConnectionId = searchParams.get('connection');
+  const [selectedConnectionId, setSelectedConnectionIdState] = useState<string | null>(
+    urlConnectionId
+  );
 
   const { data: integration, isLoading, isError, error } = useIntegration(integrationId);
   const { data: connectionsData, isLoading: connectionsLoading } = useConnections(integrationId);
@@ -42,13 +51,35 @@ export function IntegrationDetail({ integrationId }: IntegrationDetailProps) {
     [connectionsData?.connections]
   );
 
+  // Update URL when connection selection changes
+  const setSelectedConnectionId = useCallback(
+    (connectionId: string | null) => {
+      setSelectedConnectionIdState(connectionId);
+      const params = new URLSearchParams(searchParams.toString());
+      if (connectionId) {
+        params.set('connection', connectionId);
+      } else {
+        params.delete('connection');
+      }
+      const queryString = params.toString();
+      router.replace(`${pathname}${queryString ? `?${queryString}` : ''}`, { scroll: false });
+    },
+    [searchParams, router, pathname]
+  );
+
   // Auto-select primary connection or first connection when connections load
   useEffect(() => {
     if (connections.length > 0 && !selectedConnectionId) {
       const primaryConnection = connections.find((c) => c.isPrimary);
-      setSelectedConnectionId(primaryConnection?.id ?? connections[0].id);
+      const autoId = primaryConnection?.id ?? connections[0].id;
+      setSelectedConnectionIdState(autoId);
+      // Update URL without triggering navigation noise on initial load
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('connection', autoId);
+      const queryString = params.toString();
+      router.replace(`${pathname}?${queryString}`, { scroll: false });
     }
-  }, [connections, selectedConnectionId]);
+  }, [connections, selectedConnectionId, searchParams, router, pathname]);
 
   // Clear selection if selected connection is deleted
   useEffect(() => {
@@ -61,7 +92,7 @@ export function IntegrationDetail({ integrationId }: IntegrationDetailProps) {
     } else if (connections.length === 0) {
       setSelectedConnectionId(null);
     }
-  }, [connections, selectedConnectionId]);
+  }, [connections, selectedConnectionId, setSelectedConnectionId]);
 
   if (isLoading) {
     return <IntegrationDetailSkeleton />;
@@ -88,8 +119,8 @@ export function IntegrationDetail({ integrationId }: IntegrationDetailProps) {
 
       {/* Connection Selector - at integration level */}
       {!connectionsLoading && connections.length > 0 && (
-        <div className="flex items-center gap-3 rounded-lg border bg-muted/30 p-3">
-          <span className="text-sm font-medium text-muted-foreground">Active Connection:</span>
+        <div className="flex items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2">
+          <span className="text-sm font-medium text-muted-foreground">Connection:</span>
           <ConnectionSelector
             connections={connections}
             selectedConnectionId={selectedConnectionId}
@@ -168,7 +199,11 @@ export function IntegrationDetail({ integrationId }: IntegrationDetailProps) {
         </TabsContent>
 
         <TabsContent value="actions" className="mt-6 space-y-4">
-          <IntegrationActionsTab integrationId={integrationId} integration={integration} />
+          <IntegrationActionsTab
+            integrationId={integrationId}
+            integration={integration}
+            selectedConnectionId={selectedConnectionId}
+          />
         </TabsContent>
 
         <TabsContent value="ai-tools" className="mt-6 space-y-4">

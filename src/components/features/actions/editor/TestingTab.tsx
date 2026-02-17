@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Play, Loader2, CheckCircle2, XCircle, Clock, Copy, RotateCcw } from 'lucide-react';
+import { Play, Loader2, CheckCircle2, XCircle, Clock, Copy, RotateCcw, Plug } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,11 +10,14 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { apiClient } from '@/lib/api/client';
+import { useConnections } from '@/hooks';
 
 interface TestingTabProps {
   actionId: string;
+  integrationId: string;
   integrationSlug: string;
   actionSlug: string;
+  connectionId?: string | null;
 }
 
 interface TestResult {
@@ -29,10 +32,19 @@ interface TestResult {
   };
 }
 
-export function TestingTab({ integrationSlug, actionSlug }: TestingTabProps) {
+export function TestingTab({
+  integrationId,
+  integrationSlug,
+  actionSlug,
+  connectionId,
+}: TestingTabProps) {
   const [input, setInput] = useState('{}');
   const [isRunning, setIsRunning] = useState(false);
   const [result, setResult] = useState<TestResult | null>(null);
+
+  const { data: connectionsData } = useConnections(integrationId);
+  const connections = connectionsData?.connections ?? [];
+  const selectedConnection = connectionId ? connections.find((c) => c.id === connectionId) : null;
 
   const handleTest = async () => {
     setIsRunning(true);
@@ -50,10 +62,19 @@ export function TestingTab({ integrationSlug, actionSlug }: TestingTabProps) {
         return;
       }
 
+      const headers: Record<string, string> = {};
+      if (connectionId) {
+        headers['X-Waygate-Connection-Id'] = connectionId;
+      }
+
       const response = await apiClient.post<{
         data: unknown;
         meta?: { statusCode?: number; duration?: number };
-      }>(`/actions/${integrationSlug}/${actionSlug}`, parsedInput);
+      }>(
+        `/actions/${integrationSlug}/${actionSlug}`,
+        parsedInput,
+        Object.keys(headers).length > 0 ? { headers } : undefined
+      );
 
       const duration = Date.now() - startTime;
 
@@ -117,6 +138,19 @@ export function TestingTab({ integrationSlug, actionSlug }: TestingTabProps) {
         <CardDescription>Send a test request to this action and view the response</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Connection indicator */}
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Plug className="h-3.5 w-3.5" />
+          {selectedConnection ? (
+            <span>
+              Testing with connection:{' '}
+              <span className="font-medium text-foreground">{selectedConnection.name}</span>
+            </span>
+          ) : (
+            <span>Testing with default connection</span>
+          )}
+        </div>
+
         {/* Input */}
         <div className="space-y-2">
           <label className="text-sm font-medium">Request Body (JSON)</label>

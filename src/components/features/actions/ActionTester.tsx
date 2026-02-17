@@ -13,12 +13,14 @@ import { DynamicSchemaForm } from './DynamicSchemaForm';
 import { RequestResponseViewer } from './RequestResponseViewer';
 import { TestHistory, addToTestHistory } from './TestHistory';
 import { ValidationResultDisplay, ValidationBadge } from './ValidationResultDisplay';
-import { useAction, useIntegration } from '@/hooks';
+import { useAction, useIntegration, useConnections } from '@/hooks';
+import { ConnectionSelector } from '@/components/features/connections';
 import type { JsonSchema } from '@/lib/modules/actions/action.schemas';
 
 interface ActionTesterProps {
   integrationId: string;
   actionId: string;
+  connectionId?: string | null;
 }
 
 // Validation metadata from gateway response
@@ -64,10 +66,19 @@ interface TestResult {
   };
 }
 
-export function ActionTester({ integrationId, actionId }: ActionTesterProps) {
+export function ActionTester({
+  integrationId,
+  actionId,
+  connectionId: initialConnectionId,
+}: ActionTesterProps) {
   const { data: integration, isLoading: integrationLoading } = useIntegration(integrationId);
   const { data: action, isLoading: actionLoading } = useAction(actionId, integrationId);
+  const { data: connectionsData } = useConnections(integrationId);
+  const connections = connectionsData?.connections ?? [];
 
+  const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(
+    initialConnectionId ?? null
+  );
   const [isExecuting, setIsExecuting] = useState(false);
   const [result, setResult] = useState<TestResult | null>(null);
   const [defaultValues, setDefaultValues] = useState<Record<string, unknown> | undefined>();
@@ -107,6 +118,7 @@ export function ActionTester({ integrationId, actionId }: ActionTesterProps) {
           headers: {
             'Content-Type': 'application/json',
             ...(devApiKey ? { Authorization: `Bearer ${devApiKey}` } : {}),
+            ...(selectedConnectionId ? { 'X-Waygate-Connection-Id': selectedConnectionId } : {}),
           },
           body: JSON.stringify(input),
         });
@@ -163,7 +175,7 @@ export function ActionTester({ integrationId, actionId }: ActionTesterProps) {
         setIsExecuting(false);
       }
     },
-    [action, integration, actionId]
+    [action, integration, actionId, selectedConnectionId]
   );
 
   const handleReplay = useCallback((input: Record<string, unknown>) => {
@@ -191,17 +203,10 @@ export function ActionTester({ integrationId, actionId }: ActionTesterProps) {
         </Link>
         <span>/</span>
         <Link
-          href={`/integrations/${integrationId}`}
+          href={`/integrations/${integrationId}${selectedConnectionId ? `?connection=${selectedConnectionId}` : ''}`}
           className="transition-colors hover:text-foreground"
         >
           {integration?.name ?? 'Integration'}
-        </Link>
-        <span>/</span>
-        <Link
-          href={`/integrations/${integrationId}/actions`}
-          className="transition-colors hover:text-foreground"
-        >
-          Actions
         </Link>
         <span>/</span>
         <span className="text-foreground">Test</span>
@@ -211,7 +216,9 @@ export function ActionTester({ integrationId, actionId }: ActionTesterProps) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" asChild>
-            <Link href={`/integrations/${integrationId}/actions`}>
+            <Link
+              href={`/integrations/${integrationId}${selectedConnectionId ? `?connection=${selectedConnectionId}` : ''}`}
+            >
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
@@ -238,7 +245,9 @@ export function ActionTester({ integrationId, actionId }: ActionTesterProps) {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" asChild>
-            <Link href={`/integrations/${integrationId}/actions/${actionId}`}>
+            <Link
+              href={`/integrations/${integrationId}/actions/${actionId}${selectedConnectionId ? `?connection=${selectedConnectionId}` : ''}`}
+            >
               <Code2 className="mr-2 h-4 w-4" />
               Edit Action
             </Link>
@@ -256,6 +265,19 @@ export function ActionTester({ integrationId, actionId }: ActionTesterProps) {
 
       {/* Description */}
       {action.description && <p className="text-muted-foreground">{action.description}</p>}
+
+      {/* Connection Selector */}
+      {connections.length > 0 && (
+        <div className="flex items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2">
+          <span className="text-sm font-medium text-muted-foreground">Connection:</span>
+          <ConnectionSelector
+            connections={connections}
+            selectedConnectionId={selectedConnectionId}
+            onSelect={setSelectedConnectionId}
+            onAddConnection={() => {}}
+          />
+        </div>
+      )}
 
       {/* Main content - responsive layout */}
       <div className="grid gap-4 lg:grid-cols-[320px_1fr]">

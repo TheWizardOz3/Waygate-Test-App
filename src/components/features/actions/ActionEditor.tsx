@@ -47,9 +47,10 @@ import type {
 interface ActionEditorProps {
   integrationId: string;
   actionId?: string;
+  connectionId?: string | null;
 }
 
-export function ActionEditor({ integrationId, actionId }: ActionEditorProps) {
+export function ActionEditor({ integrationId, actionId, connectionId }: ActionEditorProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isEditing = !!actionId;
@@ -231,7 +232,9 @@ export function ActionEditor({ integrationId, actionId }: ActionEditorProps) {
         await createAction.mutateAsync(createPayload);
         toast.success('Action created successfully');
       }
-      router.push(`/integrations/${integrationId}/actions`);
+      router.push(
+        `/integrations/${integrationId}${connectionId ? `?connection=${connectionId}` : ''}`
+      );
     } catch {
       // Error is handled by mutation
     }
@@ -254,7 +257,7 @@ export function ActionEditor({ integrationId, actionId }: ActionEditorProps) {
         </Link>
         <span>/</span>
         <Link
-          href={`/integrations/${integrationId}`}
+          href={`/integrations/${integrationId}${connectionId ? `?connection=${connectionId}` : ''}`}
           className="transition-colors hover:text-foreground"
         >
           {integration?.name ?? 'Integration'}
@@ -409,8 +412,10 @@ export function ActionEditor({ integrationId, actionId }: ActionEditorProps) {
               <TabsContent value="testing" className="mt-6 space-y-0">
                 <TestingTab
                   actionId={actionId}
+                  integrationId={integrationId}
                   integrationSlug={integration?.slug ?? ''}
                   actionSlug={existingAction?.slug ?? ''}
+                  connectionId={connectionId}
                 />
               </TabsContent>
             )}

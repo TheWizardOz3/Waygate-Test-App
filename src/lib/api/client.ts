@@ -104,10 +104,11 @@ export const apiClient = {
     return request<T>(endpoint, { method: 'GET', params });
   },
 
-  post<T>(endpoint: string, body?: unknown) {
+  post<T>(endpoint: string, body?: unknown, options?: { headers?: Record<string, string> }) {
     return request<T>(endpoint, {
       method: 'POST',
       body: body ? JSON.stringify(body) : undefined,
+      headers: options?.headers,
     });
   },
 

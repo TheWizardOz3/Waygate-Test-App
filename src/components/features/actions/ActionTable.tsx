@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import {
   ColumnDef,
@@ -67,6 +67,8 @@ interface ActionTableProps {
   integrationId: string;
   /** Pass integration to avoid redundant fetch - if not provided, will be fetched */
   integration?: IntegrationResponse;
+  /** Selected connection ID to include in action navigation links */
+  selectedConnectionId?: string | null;
 }
 
 /**
@@ -76,7 +78,11 @@ function buildWaygateEndpoint(integrationSlug: string, actionSlug: string): stri
   return `/api/v1/actions/${integrationSlug}/${actionSlug}`;
 }
 
-export function ActionTable({ integrationId, integration: integrationProp }: ActionTableProps) {
+export function ActionTable({
+  integrationId,
+  integration: integrationProp,
+  selectedConnectionId,
+}: ActionTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
@@ -93,6 +99,15 @@ export function ActionTable({ integrationId, integration: integrationProp }: Act
   const bulkDelete = useBulkDeleteActions();
 
   const integrationSlug = integration?.slug;
+
+  // Build action URLs with optional connection param
+  const actionUrl = useCallback(
+    (actionId: string, suffix?: string) => {
+      const base = `/integrations/${integrationId}/actions/${actionId}${suffix ?? ''}`;
+      return selectedConnectionId ? `${base}?connection=${selectedConnectionId}` : base;
+    },
+    [integrationId, selectedConnectionId]
+  );
 
   const availableTags = tagsData?.tags ?? [];
 
@@ -145,7 +160,7 @@ export function ActionTable({ integrationId, integration: integrationProp }: Act
             asChild
             title="Test action"
           >
-            <Link href={`/integrations/${integrationId}/actions/${row.original.id}/test`}>
+            <Link href={actionUrl(row.original.id, '/test')}>
               <Play className="h-4 w-4" />
               <span className="sr-only">Test</span>
             </Link>
@@ -169,7 +184,7 @@ export function ActionTable({ integrationId, integration: integrationProp }: Act
         ),
         cell: ({ row }) => (
           <Link
-            href={`/integrations/${integrationId}/actions/${row.original.id}`}
+            href={actionUrl(row.original.id)}
             className="font-medium text-foreground hover:text-secondary hover:underline"
           >
             {row.getValue('name')}
@@ -295,13 +310,13 @@ export function ActionTable({ integrationId, integration: integrationProp }: Act
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem asChild>
-                  <Link href={`/integrations/${integrationId}/actions/${row.original.id}`}>
+                  <Link href={actionUrl(row.original.id)}>
                     <Pencil className="mr-2 h-4 w-4" />
                     Edit
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link href={`/integrations/${integrationId}/actions/${row.original.id}/test`}>
+                  <Link href={actionUrl(row.original.id, '/test')}>
                     <Play className="mr-2 h-4 w-4" />
                     Test
                   </Link>
@@ -320,7 +335,7 @@ export function ActionTable({ integrationId, integration: integrationProp }: Act
         size: 80,
       },
     ],
-    [integrationId, integrationSlug]
+    [integrationSlug, actionUrl]
   );
 
   const table = useReactTable({

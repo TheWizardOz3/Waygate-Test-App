@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const ActionEditor = dynamic(
@@ -24,8 +24,12 @@ const ActionEditor = dynamic(
 
 export default function EditActionPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const integrationId = params.id as string;
   const actionId = params.actionId as string;
+  const connectionId = searchParams.get('connection');
 
-  return <ActionEditor integrationId={integrationId} actionId={actionId} />;
+  return (
+    <ActionEditor integrationId={integrationId} actionId={actionId} connectionId={connectionId} />
+  );
 }

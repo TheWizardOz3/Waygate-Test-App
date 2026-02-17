@@ -13,9 +13,14 @@ import type { IntegrationResponse } from '@/lib/modules/integrations/integration
 interface IntegrationActionsTabProps {
   integrationId: string;
   integration?: IntegrationResponse;
+  selectedConnectionId?: string | null;
 }
 
-export function IntegrationActionsTab({ integrationId, integration }: IntegrationActionsTabProps) {
+export function IntegrationActionsTab({
+  integrationId,
+  integration,
+  selectedConnectionId,
+}: IntegrationActionsTabProps) {
   const [activeSubTab, setActiveSubTab] = useState('actions');
 
   return (
@@ -56,7 +61,11 @@ export function IntegrationActionsTab({ integrationId, integration }: Integratio
         </div>
         <Card>
           <CardContent className="pt-6">
-            <ActionTable integrationId={integrationId} integration={integration} />
+            <ActionTable
+              integrationId={integrationId}
+              integration={integration}
+              selectedConnectionId={selectedConnectionId}
+            />
           </CardContent>
         </Card>
       </TabsContent>

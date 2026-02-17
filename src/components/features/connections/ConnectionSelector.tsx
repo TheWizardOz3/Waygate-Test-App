@@ -11,7 +11,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { ConnectorTypeBadge } from './ConnectorTypeBadge';
-import { ConnectionStatusBadge } from './ConnectionStatusBadge';
 import { HealthStatusDot } from '@/components/features/health';
 import type { ConnectionResponse } from '@/lib/modules/connections/connection.schemas';
 import { cn } from '@/lib/utils';
@@ -51,7 +50,7 @@ export function ConnectionSelector({
     <div className={cn('flex items-center gap-2', className)}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="min-w-[240px] justify-between">
+          <Button variant="outline" className="min-w-[200px] justify-between">
             <div className="flex items-center gap-2">
               <Plug className="h-4 w-4 text-muted-foreground" />
               {selectedConnection ? (
@@ -107,9 +106,6 @@ export function ConnectionSelector({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-
-      {/* Quick status indicator for selected connection */}
-      {selectedConnection && <ConnectionStatusBadge status={selectedConnection.status} size="sm" />}
     </div>
   );
 }
