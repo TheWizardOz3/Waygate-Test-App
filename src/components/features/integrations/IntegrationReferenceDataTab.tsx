@@ -293,7 +293,7 @@ export function IntegrationReferenceDataTab({
                           Actions tab
                         </Link>
                         , select an action (like &quot;List Users&quot; or &quot;List
-                        Channels&quot;), and enable &quot;Reference Data Sync&quot; in its Settings
+                        Channels&quot;), and enable &quot;Reference Data Sync&quot; in its AI Tools
                         tab.
                       </p>
                     </div>
