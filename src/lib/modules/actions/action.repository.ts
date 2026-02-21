@@ -52,6 +52,9 @@ export interface UpdateActionDbInput {
   cacheable?: boolean;
   cacheTtlSeconds?: number | null;
   metadata?: Prisma.InputJsonValue;
+  toolDescription?: string | null;
+  toolSuccessTemplate?: string | null;
+  toolErrorTemplate?: string | null;
   /** Set to true to clear paginationConfig */
   clearPaginationConfig?: boolean;
   /** Set to true to clear retryConfig */
@@ -534,6 +537,9 @@ export async function updateAction(id: string, input: UpdateActionDbInput): Prom
   if (input.cacheable !== undefined) data.cacheable = input.cacheable;
   if (input.cacheTtlSeconds !== undefined) data.cacheTtlSeconds = input.cacheTtlSeconds;
   if (input.metadata !== undefined) data.metadata = input.metadata;
+  if (input.toolDescription !== undefined) data.toolDescription = input.toolDescription;
+  if (input.toolSuccessTemplate !== undefined) data.toolSuccessTemplate = input.toolSuccessTemplate;
+  if (input.toolErrorTemplate !== undefined) data.toolErrorTemplate = input.toolErrorTemplate;
 
   // Handle nullable JSON fields
   if (input.clearPaginationConfig) {

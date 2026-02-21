@@ -476,6 +476,10 @@ export async function updateAction(
   if (data.cacheable !== undefined) updateInput.cacheable = data.cacheable;
   if (data.cacheTtlSeconds !== undefined) updateInput.cacheTtlSeconds = data.cacheTtlSeconds;
   if (data.metadata !== undefined) updateInput.metadata = toJsonValue(data.metadata);
+  if (data.toolDescription !== undefined) updateInput.toolDescription = data.toolDescription;
+  if (data.toolSuccessTemplate !== undefined)
+    updateInput.toolSuccessTemplate = data.toolSuccessTemplate;
+  if (data.toolErrorTemplate !== undefined) updateInput.toolErrorTemplate = data.toolErrorTemplate;
 
   // Handle nullable fields
   if (data.paginationConfig !== undefined) {
