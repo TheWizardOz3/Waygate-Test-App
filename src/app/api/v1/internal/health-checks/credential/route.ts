@@ -16,6 +16,7 @@
 
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api/response';
+import { verifyCronSecret } from '@/lib/api/middleware/cron-auth';
 import {
   runCredentialCheckBatch,
   getAllConnectionsForCredentialCheck,
@@ -32,6 +33,8 @@ import { HealthCheckTrigger } from '@prisma/client';
  */
 export const maxDuration = 60;
 
+const LOG_PREFIX = '[CREDENTIAL_CHECK_CRON]';
+
 /**
  * Default interval for credential checks (in minutes)
  */
@@ -41,45 +44,6 @@ const DEFAULT_CHECK_INTERVAL_MINUTES = 15;
  * Maximum connections to check per job run
  */
 const MAX_CONNECTIONS_PER_RUN = 100;
-
-// =============================================================================
-// SECURITY
-// =============================================================================
-
-/**
- * Verifies that the request is from Vercel Cron
- */
-function verifyCronSecret(request: NextRequest): boolean {
-  const cronSecret = process.env.CRON_SECRET;
-
-  // In development without CRON_SECRET, allow requests for testing
-  if (!cronSecret && process.env.NODE_ENV === 'development') {
-    console.warn('[CREDENTIAL_CHECK_CRON] CRON_SECRET not set, allowing request in development');
-    return true;
-  }
-
-  // In production, CRON_SECRET must be set
-  if (!cronSecret) {
-    console.error('[CREDENTIAL_CHECK_CRON] CRON_SECRET environment variable not set');
-    return false;
-  }
-
-  // Check Authorization header
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader) {
-    console.warn('[CREDENTIAL_CHECK_CRON] Missing Authorization header');
-    return false;
-  }
-
-  // Vercel Cron sends: Authorization: Bearer <CRON_SECRET>
-  const expectedHeader = `Bearer ${cronSecret}`;
-  if (authHeader !== expectedHeader) {
-    console.warn('[CREDENTIAL_CHECK_CRON] Invalid Authorization header');
-    return false;
-  }
-
-  return true;
-}
 
 // =============================================================================
 // HANDLER
@@ -95,7 +59,7 @@ function verifyCronSecret(request: NextRequest): boolean {
  */
 export async function POST(request: NextRequest) {
   // Verify request is from Vercel Cron
-  if (!verifyCronSecret(request)) {
+  if (!verifyCronSecret(request, LOG_PREFIX)) {
     return errorResponse('UNAUTHORIZED', 'Invalid or missing cron secret', 401);
   }
 
@@ -178,7 +142,7 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   // Verify request is from Vercel Cron or authorized user
-  if (!verifyCronSecret(request)) {
+  if (!verifyCronSecret(request, LOG_PREFIX)) {
     return errorResponse('UNAUTHORIZED', 'Invalid or missing cron secret', 401);
   }
 

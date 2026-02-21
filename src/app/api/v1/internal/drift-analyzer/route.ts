@@ -15,6 +15,7 @@
 
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api/response';
+import { verifyCronSecret } from '@/lib/api/middleware/cron-auth';
 import { jobQueue } from '@/lib/modules/jobs';
 import prisma from '@/lib/db/client';
 
@@ -22,48 +23,11 @@ import prisma from '@/lib/db/client';
 // CONFIGURATION
 // =============================================================================
 
+const LOG_PREFIX = '[DRIFT_ANALYZER_CRON]';
 const JOB_TYPE = 'schema_drift';
 
 /** Timeout for drift analysis job (1 hour) */
 const JOB_TIMEOUT_SECONDS = 3600;
-
-// =============================================================================
-// SECURITY
-// =============================================================================
-
-/**
- * Verifies that the request is from Vercel Cron.
- *
- * Vercel Cron includes an Authorization header with the CRON_SECRET when configured.
- * In development, we allow requests without the secret for testing.
- */
-function verifyCronSecret(request: NextRequest): boolean {
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (!cronSecret && process.env.NODE_ENV === 'development') {
-    console.warn('[DRIFT_ANALYZER_CRON] CRON_SECRET not set, allowing request in development');
-    return true;
-  }
-
-  if (!cronSecret) {
-    console.error('[DRIFT_ANALYZER_CRON] CRON_SECRET environment variable not set');
-    return false;
-  }
-
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader) {
-    console.warn('[DRIFT_ANALYZER_CRON] Missing Authorization header');
-    return false;
-  }
-
-  const expectedHeader = `Bearer ${cronSecret}`;
-  if (authHeader !== expectedHeader) {
-    console.warn('[DRIFT_ANALYZER_CRON] Invalid Authorization header');
-    return false;
-  }
-
-  return true;
-}
 
 // =============================================================================
 // HANDLER
@@ -76,7 +40,7 @@ function verifyCronSecret(request: NextRequest): boolean {
  * Called by Vercel Cron every 6 hours.
  */
 export async function POST(request: NextRequest) {
-  if (!verifyCronSecret(request)) {
+  if (!verifyCronSecret(request, LOG_PREFIX)) {
     return errorResponse('UNAUTHORIZED', 'Invalid or missing cron secret', 401);
   }
 
@@ -136,7 +100,7 @@ export async function POST(request: NextRequest) {
  * Returns status information about the drift analyzer cron.
  */
 export async function GET(request: NextRequest) {
-  if (!verifyCronSecret(request)) {
+  if (!verifyCronSecret(request, LOG_PREFIX)) {
     return errorResponse('UNAUTHORIZED', 'Invalid or missing cron secret', 401);
   }
 

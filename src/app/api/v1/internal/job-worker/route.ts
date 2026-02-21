@@ -12,6 +12,7 @@
 
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api/response';
+import { verifyCronSecret } from '@/lib/api/middleware/cron-auth';
 import { runWorkerCycle } from '@/lib/modules/jobs';
 
 // Side-effect imports: register job handlers
@@ -28,47 +29,7 @@ import '@/lib/modules/schema-drift';
  */
 export const maxDuration = 60;
 
-// =============================================================================
-// SECURITY
-// =============================================================================
-
-/**
- * Verifies that the request is from Vercel Cron.
- *
- * Vercel Cron includes an Authorization header with the CRON_SECRET when configured.
- * In development, we allow requests without the secret for testing.
- */
-function verifyCronSecret(request: NextRequest): boolean {
-  const cronSecret = process.env.CRON_SECRET;
-
-  // In development without CRON_SECRET, allow requests for testing
-  if (!cronSecret && process.env.NODE_ENV === 'development') {
-    console.warn('[JOB_WORKER_CRON] CRON_SECRET not set, allowing request in development');
-    return true;
-  }
-
-  // In production, CRON_SECRET must be set
-  if (!cronSecret) {
-    console.error('[JOB_WORKER_CRON] CRON_SECRET environment variable not set');
-    return false;
-  }
-
-  // Check Authorization header
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader) {
-    console.warn('[JOB_WORKER_CRON] Missing Authorization header');
-    return false;
-  }
-
-  // Vercel Cron sends: Authorization: Bearer <CRON_SECRET>
-  const expectedHeader = `Bearer ${cronSecret}`;
-  if (authHeader !== expectedHeader) {
-    console.warn('[JOB_WORKER_CRON] Invalid Authorization header');
-    return false;
-  }
-
-  return true;
-}
+const LOG_PREFIX = '[JOB_WORKER_CRON]';
 
 // =============================================================================
 // HANDLER
@@ -81,7 +42,7 @@ function verifyCronSecret(request: NextRequest): boolean {
  * Called by Vercel Cron every 1 minute.
  */
 export async function POST(request: NextRequest) {
-  if (!verifyCronSecret(request)) {
+  if (!verifyCronSecret(request, LOG_PREFIX)) {
     return errorResponse('UNAUTHORIZED', 'Invalid or missing cron secret', 401);
   }
 
@@ -129,7 +90,7 @@ export async function POST(request: NextRequest) {
  * Useful for health checks and debugging.
  */
 export async function GET(request: NextRequest) {
-  if (!verifyCronSecret(request)) {
+  if (!verifyCronSecret(request, LOG_PREFIX)) {
     return errorResponse('UNAUTHORIZED', 'Invalid or missing cron secret', 401);
   }
 
